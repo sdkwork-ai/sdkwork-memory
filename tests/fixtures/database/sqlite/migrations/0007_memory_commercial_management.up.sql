@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS ai_subject (
   id BIGINT NOT NULL PRIMARY KEY,
   uuid TEXT NOT NULL,
   tenant_id INTEGER NOT NULL,
-  organization_id INTEGER,
+  organization_id INTEGER NOT NULL DEFAULT 0,
   subject_type TEXT NOT NULL,
   subject_ref TEXT NOT NULL,
   display_name TEXT NOT NULL,
