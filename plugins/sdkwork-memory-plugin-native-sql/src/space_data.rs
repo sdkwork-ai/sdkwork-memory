@@ -55,7 +55,7 @@ impl NativeSqlMemoryStore {
         .bind(command.space_id)
         .bind(&uuid)
         .bind(command.tenant_id)
-        .bind(command.organization_id)
+        .bind(command.organization_id.unwrap_or(0))
         .bind(&command.owner_subject_type)
         .bind(&command.owner_subject_id)
         .bind(&command.space_type)
