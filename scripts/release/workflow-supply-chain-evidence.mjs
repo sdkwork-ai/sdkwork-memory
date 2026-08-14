@@ -115,12 +115,12 @@ export async function createSbomProvenanceAndEvidence({
         },
         internalParameters: { sourceCommit },
         resolvedDependencies: [{
-          uri: "git+https://github.com/Sdkwork-Cloud/sdkwork-memory",
+          uri: "git+https://github.com/sdkwork-ai/sdkwork-memory",
           digest: { gitCommit: sourceCommit },
         }],
       },
       runDetails: {
-        builder: { id: "https://github.com/Sdkwork-Cloud/sdkwork-github-workflow" },
+        builder: { id: "https://github.com/sdkwork-ai/sdkwork-github-workflow" },
         metadata: { invocationId: String(env.GITHUB_RUN_ID ?? "local-validation") },
       },
     },

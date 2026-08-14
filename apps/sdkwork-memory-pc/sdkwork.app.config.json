@@ -146,7 +146,7 @@
           "runtimeTarget": "browser",
           "targetPlatform": "web",
           "clientArchitecture": "pc-web",
-          "url": "https://github.com/Sdkwork-Cloud/sdkwork-memory/releases/download/v0.1.0/sdkwork-memory-pc-0.1.0-web-universal-cloud-browser.zip",
+          "url": "https://github.com/sdkwork-ai/sdkwork-memory/releases/download/v0.1.0/sdkwork-memory-pc-0.1.0-web-universal-cloud-browser.zip",
           "enabled": true,
           "metadata": {
             "signatureState": "pending-ci-attestation",

@@ -37,7 +37,7 @@ FROM debian:bookworm-slim
 ARG SDKWORK_SOURCE_REVISION=unknown
 ARG SDKWORK_RELEASE_VERSION=0.0.0-development
 LABEL org.opencontainers.image.title="SDKWork Memory" \
-      org.opencontainers.image.source="https://github.com/Sdkwork-Cloud/sdkwork-memory" \
+      org.opencontainers.image.source="https://github.com/sdkwork-ai/sdkwork-memory" \
       org.opencontainers.image.revision="${SDKWORK_SOURCE_REVISION}" \
       org.opencontainers.image.version="${SDKWORK_RELEASE_VERSION}"
 RUN apt-get update \
