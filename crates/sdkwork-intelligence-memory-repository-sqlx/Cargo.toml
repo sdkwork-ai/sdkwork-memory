@@ -25,5 +25,5 @@ sdkwork-memory-contract.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
-sdkwork-memory-contract = { path = "../../crates/sdkwork-memory-contract" }
-sdkwork-memory-plugin-native-sql = { path = "../../plugins/sdkwork-memory-plugin-native-sql" }
+sdkwork-memory-contract = { workspace = true }
+sdkwork-memory-plugin-native-sql = { workspace = true }

@@ -12,9 +12,15 @@ path = "src/lib.rs"
 [dependencies]
 axum.workspace = true
 tokio.workspace = true
+tracing.workspace = true
 sdkwork-web-bootstrap.workspace = true
+sdkwork-web-core.workspace = true
 sdkwork-intelligence-memory-service.workspace = true
+sdkwork-intelligence-memory-repository-sqlx.workspace = true
+sdkwork-memory-database-host.workspace = true
+sdkwork-memory-drive.workspace = true
 sdkwork-routes-memory-support.workspace = true
 sdkwork-routes-memory-app-api.workspace = true
 sdkwork-routes-memory-backend-api.workspace = true
 sdkwork-routes-memory-open-api.workspace = true
+tower = { workspace = true, features = ["limit"] }

@@ -1,4 +1,7 @@
-use sdkwork_api_memory_standalone_gateway::{build_router, init_tracing, run_database_migrate_only};
+use sdkwork_api_memory_assembly::{
+    assemble_api_router_from_env, run_database_migrate_only,
+};
+use sdkwork_api_memory_standalone_gateway::init_tracing;
 use std::process;
 use tokio::signal;
 use tokio::time::Duration;
@@ -23,7 +26,10 @@ async fn main() {
     let bind_address = std::env::var("SDKWORK_MEMORY_APPLICATION_PUBLIC_INGRESS_BIND")
         .unwrap_or_else(|_| "127.0.0.1:8080".to_owned());
 
-    let app = match build_router().await {
+    // The assembly owns service construction, route composition, readiness,
+    // and background workers; the listener projects `.router` and keeps the
+    // worker shutdown handle for graceful drain (API_ASSEMBLY_SPEC §6.1).
+    let app = match assemble_api_router_from_env().await {
         Ok(app) => app,
         Err(error) => exit_with_error("bootstrap", error),
     };

@@ -22,14 +22,7 @@ axum.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter", "json", "registry"] }
-sdkwork-routes-memory-support.workspace = true
-sdkwork-intelligence-memory-repository-sqlx.workspace = true
-sdkwork-intelligence-memory-service.workspace = true
-sdkwork-memory-database-host.workspace = true
-sdkwork-memory-drive.workspace = true
 sdkwork-utils-rust.workspace = true
-sdkwork-web-bootstrap.workspace = true
-tower.workspace = true
 tracing-opentelemetry = { version = "0.28", optional = true }
 opentelemetry = { version = "0.27", optional = true }
 opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"], optional = true }
