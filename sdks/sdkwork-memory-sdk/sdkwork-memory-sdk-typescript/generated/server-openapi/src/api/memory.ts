@@ -1,5 +1,5 @@
 import { customApiPath } from './paths';
-import type { HttpClient } from '../http/client';
+import type { ApiRequestOptions, HttpClient } from '../http/client';
 
 import type { MemoryCandidate, MemoryCapabilities, MemoryContextPack, MemoryContextPackRequest, MemoryEdge, MemoryEdgePatch, MemoryEdgeRequest, MemoryEntity, MemoryEntityPatch, MemoryEntityRequest, MemoryEvent, MemoryEventRequest, MemoryExtractionRequest, MemoryFeedback, MemoryFeedbackRequest, MemoryLearningJob, MemoryProviderHealth, MemoryRecord, MemoryRecordRequest, MemoryRetrievalRequest, MemoryRetrievalResult, PageInfo } from '../types';
 
@@ -25,7 +25,7 @@ export class MemoryEdgesApi {
   }
 
 
-async list(params?: MemoryEdgesListParams): Promise<Record<string, unknown>> {
+async list(params?: MemoryEdgesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryEdge[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
       { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
@@ -34,29 +34,29 @@ async list(params?: MemoryEdgesListParams): Promise<Record<string, unknown>> {
       { name: 'sourceEntityId', value: params?.sourceEntityId, style: 'form', explode: true, allowReserved: false },
       { name: 'relationType', value: params?.relationType, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.get<Record<string, unknown>>(appendQueryString(customApiPath(`/memory/edges`), query));
+    return this.client.request<{ items: MemoryEdge[]; pageInfo: PageInfo; }>(appendQueryString(customApiPath(`/memory/edges`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryEdgeRequest, params?: MemoryEdgesCreateParams): Promise<MemoryEdge> {
+async create(body: MemoryEdgeRequest, params?: MemoryEdgesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryEdge> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
-    return this.client.post<MemoryEdge>(customApiPath(`/memory/edges`), body, undefined, requestHeaders, 'application/json');
+    return this.client.request<MemoryEdge>(customApiPath(`/memory/edges`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
-async retrieve(edgeId: string): Promise<MemoryEdge> {
-    return this.client.get<MemoryEdge>(customApiPath(`/memory/edges/${serializePathParameter(edgeId, { name: 'edgeId', style: 'simple', explode: false })}`));
+async retrieve(edgeId: string, requestOptions?: ApiRequestOptions): Promise<MemoryEdge> {
+    return this.client.request<MemoryEdge>(customApiPath(`/memory/edges/${serializePathParameter(edgeId, { name: 'edgeId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 
-async update(edgeId: string, body: MemoryEdgePatch): Promise<MemoryEdge> {
-    return this.client.patch<MemoryEdge>(customApiPath(`/memory/edges/${serializePathParameter(edgeId, { name: 'edgeId', style: 'simple', explode: false })}`), body, undefined, undefined, 'application/json');
+async update(edgeId: string, body: MemoryEdgePatch, requestOptions?: ApiRequestOptions): Promise<MemoryEdge> {
+    return this.client.request<MemoryEdge>(customApiPath(`/memory/edges/${serializePathParameter(edgeId, { name: 'edgeId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
   }
 
-async delete(edgeId: string): Promise<void> {
-    return this.client.delete<void>(customApiPath(`/memory/edges/${serializePathParameter(edgeId, { name: 'edgeId', style: 'simple', explode: false })}`));
+async delete(edgeId: string, requestOptions?: ApiRequestOptions): Promise<void> {
+    return this.client.request<void>(customApiPath(`/memory/edges/${serializePathParameter(edgeId, { name: 'edgeId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
   }
 }
 
@@ -81,7 +81,7 @@ export class MemoryEntitiesApi {
   }
 
 
-async list(params?: MemoryEntitiesListParams): Promise<Record<string, unknown>> {
+async list(params?: MemoryEntitiesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryEntity[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
       { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
@@ -90,25 +90,25 @@ async list(params?: MemoryEntitiesListParams): Promise<Record<string, unknown>> 
       { name: 'entityType', value: params?.entityType, style: 'form', explode: true, allowReserved: false },
       { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.get<Record<string, unknown>>(appendQueryString(customApiPath(`/memory/entities`), query));
+    return this.client.request<{ items: MemoryEntity[]; pageInfo: PageInfo; }>(appendQueryString(customApiPath(`/memory/entities`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryEntityRequest, params?: MemoryEntitiesCreateParams): Promise<MemoryEntity> {
+async create(body: MemoryEntityRequest, params?: MemoryEntitiesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryEntity> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
-    return this.client.post<MemoryEntity>(customApiPath(`/memory/entities`), body, undefined, requestHeaders, 'application/json');
+    return this.client.request<MemoryEntity>(customApiPath(`/memory/entities`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
-async retrieve(entityId: string): Promise<MemoryEntity> {
-    return this.client.get<MemoryEntity>(customApiPath(`/memory/entities/${serializePathParameter(entityId, { name: 'entityId', style: 'simple', explode: false })}`));
+async retrieve(entityId: string, requestOptions?: ApiRequestOptions): Promise<MemoryEntity> {
+    return this.client.request<MemoryEntity>(customApiPath(`/memory/entities/${serializePathParameter(entityId, { name: 'entityId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 
-async update(entityId: string, body: MemoryEntityPatch): Promise<MemoryEntity> {
-    return this.client.patch<MemoryEntity>(customApiPath(`/memory/entities/${serializePathParameter(entityId, { name: 'entityId', style: 'simple', explode: false })}`), body, undefined, undefined, 'application/json');
+async update(entityId: string, body: MemoryEntityPatch, requestOptions?: ApiRequestOptions): Promise<MemoryEntity> {
+    return this.client.request<MemoryEntity>(customApiPath(`/memory/entities/${serializePathParameter(entityId, { name: 'entityId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -120,8 +120,8 @@ export class MemoryProviderHealthApi {
   }
 
 
-async retrieve(): Promise<MemoryProviderHealth> {
-    return this.client.get<MemoryProviderHealth>(customApiPath(`/memory/provider_health`));
+async retrieve(requestOptions?: ApiRequestOptions): Promise<MemoryProviderHealth> {
+    return this.client.request<MemoryProviderHealth>(customApiPath(`/memory/provider_health`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -140,18 +140,18 @@ export class MemoryCandidatesApi {
   }
 
 
-async list(params?: MemoryCandidatesListParams): Promise<Record<string, unknown>> {
+async list(params?: MemoryCandidatesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryCandidate[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
       { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
       { name: 'decision_state', value: params?.decisionState, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.get<Record<string, unknown>>(appendQueryString(customApiPath(`/memory/candidates`), query));
+    return this.client.request<{ items: MemoryCandidate[]; pageInfo: PageInfo; }>(appendQueryString(customApiPath(`/memory/candidates`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async retrieve(candidateId: string): Promise<MemoryCandidate> {
-    return this.client.get<MemoryCandidate>(customApiPath(`/memory/candidates/${serializePathParameter(candidateId, { name: 'candidateId', style: 'simple', explode: false })}`));
+async retrieve(candidateId: string, requestOptions?: ApiRequestOptions): Promise<MemoryCandidate> {
+    return this.client.request<MemoryCandidate>(customApiPath(`/memory/candidates/${serializePathParameter(candidateId, { name: 'candidateId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -167,14 +167,14 @@ export class MemoryExtractionsApi {
   }
 
 
-async create(body: MemoryExtractionRequest, params?: MemoryExtractionsCreateParams): Promise<MemoryLearningJob> {
+async create(body: MemoryExtractionRequest, params?: MemoryExtractionsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryLearningJob> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
-    return this.client.post<MemoryLearningJob>(customApiPath(`/memory/extractions`), body, undefined, requestHeaders, 'application/json');
+    return this.client.request<MemoryLearningJob>(customApiPath(`/memory/extractions`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -190,14 +190,14 @@ export class MemoryFeedbackApi {
   }
 
 
-async create(body: MemoryFeedbackRequest, params?: MemoryFeedbackCreateParams): Promise<MemoryFeedback> {
+async create(body: MemoryFeedbackRequest, params?: MemoryFeedbackCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryFeedback> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
-    return this.client.post<MemoryFeedback>(customApiPath(`/memory/feedback`), body, undefined, requestHeaders, 'application/json');
+    return this.client.request<MemoryFeedback>(customApiPath(`/memory/feedback`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -213,18 +213,18 @@ export class MemoryContextPacksApi {
   }
 
 
-async create(body: MemoryContextPackRequest, params?: MemoryContextPacksCreateParams): Promise<MemoryContextPack> {
+async create(body: MemoryContextPackRequest, params?: MemoryContextPacksCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryContextPack> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
-    return this.client.post<MemoryContextPack>(customApiPath(`/memory/context_packs`), body, undefined, requestHeaders, 'application/json');
+    return this.client.request<MemoryContextPack>(customApiPath(`/memory/context_packs`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
-async retrieve(contextPackId: string): Promise<MemoryContextPack> {
-    return this.client.get<MemoryContextPack>(customApiPath(`/memory/context_packs/${serializePathParameter(contextPackId, { name: 'contextPackId', style: 'simple', explode: false })}`));
+async retrieve(contextPackId: string, requestOptions?: ApiRequestOptions): Promise<MemoryContextPack> {
+    return this.client.request<MemoryContextPack>(customApiPath(`/memory/context_packs/${serializePathParameter(contextPackId, { name: 'contextPackId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -240,18 +240,18 @@ export class MemoryRetrievalsApi {
   }
 
 
-async create(body: MemoryRetrievalRequest, params?: MemoryRetrievalsCreateParams): Promise<MemoryRetrievalResult> {
+async create(body: MemoryRetrievalRequest, params?: MemoryRetrievalsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryRetrievalResult> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
-    return this.client.post<MemoryRetrievalResult>(customApiPath(`/memory/retrievals`), body, undefined, requestHeaders, 'application/json');
+    return this.client.request<MemoryRetrievalResult>(customApiPath(`/memory/retrievals`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
-async retrieve(retrievalId: string): Promise<MemoryRetrievalResult> {
-    return this.client.get<MemoryRetrievalResult>(customApiPath(`/memory/retrievals/${serializePathParameter(retrievalId, { name: 'retrievalId', style: 'simple', explode: false })}`));
+async retrieve(retrievalId: string, requestOptions?: ApiRequestOptions): Promise<MemoryRetrievalResult> {
+    return this.client.request<MemoryRetrievalResult>(customApiPath(`/memory/retrievals/${serializePathParameter(retrievalId, { name: 'retrievalId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -271,21 +271,21 @@ export class MemoryEventsApi {
   }
 
 
-async create(body: MemoryEventRequest, params?: MemoryEventsCreateParams): Promise<MemoryEvent> {
+async create(body: MemoryEventRequest, params?: MemoryEventsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryEvent> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
-    return this.client.post<MemoryEvent>(customApiPath(`/memory/events`), body, undefined, requestHeaders, 'application/json');
+    return this.client.request<MemoryEvent>(customApiPath(`/memory/events`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
-async retrieve(eventId: string, params: MemoryEventsRetrieveParams): Promise<MemoryEvent> {
+async retrieve(eventId: string, params: MemoryEventsRetrieveParams, requestOptions?: ApiRequestOptions): Promise<MemoryEvent> {
     const query = buildQueryString([
       { name: 'space_id', value: params.spaceId, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.get<MemoryEvent>(appendQueryString(customApiPath(`/memory/events/${serializePathParameter(eventId, { name: 'eventId', style: 'simple', explode: false })}`), query));
+    return this.client.request<MemoryEvent>(appendQueryString(customApiPath(`/memory/events/${serializePathParameter(eventId, { name: 'eventId', style: 'simple', explode: false })}`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -297,8 +297,8 @@ export class MemoryCapabilitiesApi {
   }
 
 
-async retrieve(): Promise<MemoryCapabilities> {
-    return this.client.get<MemoryCapabilities>(customApiPath(`/memory/capabilities`));
+async retrieve(requestOptions?: ApiRequestOptions): Promise<MemoryCapabilities> {
+    return this.client.request<MemoryCapabilities>(customApiPath(`/memory/capabilities`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -355,7 +355,7 @@ export class MemoryApi {
   }
 
 
-async list(params: MemoryListParams): Promise<Record<string, unknown>> {
+async list(params: MemoryListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryRecord[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
       { name: 'q', value: params.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params.cursor, style: 'form', explode: true, allowReserved: false },
@@ -364,38 +364,38 @@ async list(params: MemoryListParams): Promise<Record<string, unknown>> {
       { name: 'memory_type', value: params.memoryType, style: 'form', explode: true, allowReserved: false },
       { name: 'external_subject_ref', value: params.externalSubjectRef, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.get<Record<string, unknown>>(appendQueryString(customApiPath(`/memory/memories`), query));
+    return this.client.request<{ items: MemoryRecord[]; pageInfo: PageInfo; }>(appendQueryString(customApiPath(`/memory/memories`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryRecordRequest, params?: MemoryCreateParams): Promise<MemoryRecord> {
+async create(body: MemoryRecordRequest, params?: MemoryCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryRecord> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
-    return this.client.post<MemoryRecord>(customApiPath(`/memory/memories`), body, undefined, requestHeaders, 'application/json');
+    return this.client.request<MemoryRecord>(customApiPath(`/memory/memories`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
-async retrieve(memoryId: string, params: MemoryRetrieveParams): Promise<MemoryRecord> {
+async retrieve(memoryId: string, params: MemoryRetrieveParams, requestOptions?: ApiRequestOptions): Promise<MemoryRecord> {
     const query = buildQueryString([
       { name: 'space_id', value: params.spaceId, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.get<MemoryRecord>(appendQueryString(customApiPath(`/memory/memories/${serializePathParameter(memoryId, { name: 'memoryId', style: 'simple', explode: false })}`), query));
+    return this.client.request<MemoryRecord>(appendQueryString(customApiPath(`/memory/memories/${serializePathParameter(memoryId, { name: 'memoryId', style: 'simple', explode: false })}`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 
-async update(memoryId: string, body: MemoryRecordRequest, params: MemoryUpdateParams): Promise<MemoryRecord> {
+async update(memoryId: string, body: MemoryRecordRequest, params: MemoryUpdateParams, requestOptions?: ApiRequestOptions): Promise<MemoryRecord> {
     const query = buildQueryString([
       { name: 'space_id', value: params.spaceId, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.patch<MemoryRecord>(appendQueryString(customApiPath(`/memory/memories/${serializePathParameter(memoryId, { name: 'memoryId', style: 'simple', explode: false })}`), query), body, undefined, undefined, 'application/json');
+    return this.client.request<MemoryRecord>(appendQueryString(customApiPath(`/memory/memories/${serializePathParameter(memoryId, { name: 'memoryId', style: 'simple', explode: false })}`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
   }
 
-async delete(memoryId: string, params: MemoryDeleteParams): Promise<void> {
+async delete(memoryId: string, params: MemoryDeleteParams, requestOptions?: ApiRequestOptions): Promise<void> {
     const query = buildQueryString([
       { name: 'space_id', value: params.spaceId, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.delete<void>(appendQueryString(customApiPath(`/memory/memories/${serializePathParameter(memoryId, { name: 'memoryId', style: 'simple', explode: false })}`), query));
+    return this.client.request<void>(appendQueryString(customApiPath(`/memory/memories/${serializePathParameter(memoryId, { name: 'memoryId', style: 'simple', explode: false })}`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
   }
 }
 

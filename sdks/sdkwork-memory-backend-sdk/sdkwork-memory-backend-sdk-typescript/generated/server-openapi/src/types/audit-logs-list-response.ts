@@ -3,7 +3,7 @@ import type { PageInfo } from './page-info';
 
 export interface AuditLogsListResponse {
   code: 0;
-  data: unknown & Record<string, unknown>;
+  data: unknown & { items: MemoryAuditLog[]; pageInfo: PageInfo; };
   /** Server-owned request correlation id. */
   traceId: string;
 }

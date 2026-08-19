@@ -12,7 +12,7 @@
   "generatedFiles": [
     {
       "path": "bin/publish-core.mjs",
-      "sha256": "98ad0918a78bfbe22bf8f12fec709b0bed545b9e01edd40f5e4abf31a23378a5"
+      "sha256": "a47e95119bf3eafcbcb2102f7024c147f967924e4e3f343d1a29effb4b6765df"
     },
     {
       "path": "bin/publish.ps1",
@@ -40,11 +40,11 @@
     },
     {
       "path": "package.json",
-      "sha256": "a628c6dc555a2c978ecb9283e1c46e21df91e87e858d3e40dd4a725dd0264d0e"
+      "sha256": "509918b13a5dbff3103e14324af0cbc471eae1ff7a5b098cade71e4d9bec03c3"
     },
     {
       "path": "README.md",
-      "sha256": "f54ab1527b790643be0def212af20b79247ea5298ee2ba953ed2995e45750aa0"
+      "sha256": "6fb2705020fd69475480ba6b27ef526278a3011b74696d4f55e85ef04c8b7c3f"
     },
     {
       "path": "sdkwork-sdk.json",
@@ -52,7 +52,7 @@
     },
     {
       "path": "src/api/base.ts",
-      "sha256": "02ad25e6bf331ff241ba387c2947ddf1900dd849038e08c2757416a3aa788a04"
+      "sha256": "94d136c54a008dfe7602e373a0b2c79176bbf2fc6e7c899fc23b1f12f750380f"
     },
     {
       "path": "src/api/index.ts",
@@ -60,7 +60,7 @@
     },
     {
       "path": "src/api/memory.ts",
-      "sha256": "df5b0d28f68450145cee60c1f0ff6c5749c877aca70fe5152ab7a1de65a34873"
+      "sha256": "2c06b7c7a98c3bb2115999e3621ad5514bbff013c227da24c77e900cadb71c5e"
     },
     {
       "path": "src/api/paths.ts",
@@ -72,7 +72,7 @@
     },
     {
       "path": "src/http/client.ts",
-      "sha256": "8ae2b11449c875fba293e3e5a93c18c788cbbd92e402c1f64cd788b38a3f793c"
+      "sha256": "b8676ea00512ec8e38fe35ea5df9c3783cd7232d0b207ad75e7c12872702e14f"
     },
     {
       "path": "src/http/index.ts",
@@ -80,23 +80,23 @@
     },
     {
       "path": "src/index.ts",
-      "sha256": "be1ba971d7c153f90af599aff97d71c8047fbb6b97a0adb57c2fceaaca4a4749"
+      "sha256": "0af7368dc136e38086c809a7b4641b7f41a916a6916cf8e3697d4811b81bcd8d"
     },
     {
       "path": "src/sdk.ts",
-      "sha256": "9d3823fb7b0c7f8b1966f964abc64b1ecaaab0c18e9724a6637c687c8ee0e438"
+      "sha256": "70991a7d0512ea0da87277872f881096d034379fcaa0bbe7152e45ae94bf5964"
     },
     {
       "path": "src/types/candidates-list-response.ts",
-      "sha256": "ff3632319e0a288758cb08993e56eff3366bea98677ec22d113ae620f4de6e91"
+      "sha256": "9586a93d066d4373e2798f339b54828ea2f07cb4a49898cb04e5117df4f87207"
     },
     {
       "path": "src/types/candidates-retrieve-response.ts",
-      "sha256": "e1f55c5199eecdac0bf8ccaf34f4ecf41afa9bd085c672142eb29b74ac9c2f80"
+      "sha256": "61876d997fba1b6519e983bae8f859974b495158ea328ed305ac6b992afd03fd"
     },
     {
       "path": "src/types/capabilities-retrieve-response.ts",
-      "sha256": "501a1c584847310df7e24b23399e5bf8a733043342d3a971f237d04596eb1e9b"
+      "sha256": "d26e7902fabc6295b5836b9de56563573e70eec14c181a22407f91bc791f9940"
     },
     {
       "path": "src/types/common.ts",
@@ -104,59 +104,59 @@
     },
     {
       "path": "src/types/context-packs-create-response201.ts",
-      "sha256": "6df36eb0d2a8feb5a2bbac0deb886f29f71ccb3d51f179ff6559e98160a9266b"
+      "sha256": "11394a34498dc4176ffe98d664cd5c355e4e16abb8a1c97d8723bb02c019f9da"
     },
     {
       "path": "src/types/context-packs-retrieve-response.ts",
-      "sha256": "95853f5816d24a519554a07e60fba4b3c6c0c512c1e0cc7f9196021cfeb84148"
+      "sha256": "45486c88acdaa3c550fa70f690f5618c247c54f0b64c19b8207e1ca3c5ef857f"
     },
     {
       "path": "src/types/edges-create-response201.ts",
-      "sha256": "4729ebd600a13fe6eacd4e215c6401fc1edfff19225f4fc55d8a2ca46fec0a97"
+      "sha256": "0e4d822fe74316c709bc18ed37e0831140ce0425f08f4af353aa8ac20c8659fd"
     },
     {
       "path": "src/types/edges-list-response.ts",
-      "sha256": "b8976ca03658c43c079701df70bb9d2be3b92f6dcc196b9ec5d500dec887e598"
+      "sha256": "8f99beaf8ed176482336c3a4fc4d6d0d3b2c3efee3f4c00a8c1c2395500cfd4c"
     },
     {
       "path": "src/types/edges-retrieve-response.ts",
-      "sha256": "99244064306ecd0a491f0ef35cfa9e3a1a32fb1adb09fbc3cc00d98790cec06a"
+      "sha256": "6d65dd114df8d11f6493cac79a7bb23cfd9dda53eb3c4023f2627ff46ef4ba7a"
     },
     {
       "path": "src/types/edges-update-response.ts",
-      "sha256": "181c41701ccd47bb617479282f3483753f52794164654511eafdefd5594adbaa"
+      "sha256": "fcafc35a6356b9fbc80357e1ce3c6b22ef7de4040ecbb36b234af4f1e52a4c76"
     },
     {
       "path": "src/types/entities-create-response201.ts",
-      "sha256": "19be5e04c0dcbe98ac91b4c277f1092f531f8dc0a659322d169ae849c28a5521"
+      "sha256": "ebeb059e9b988d7bd8b4ae1e520d75bc4c8728de6ac2d807210cc53830195aff"
     },
     {
       "path": "src/types/entities-list-response.ts",
-      "sha256": "34040b068f4f1c1559aad9a6ce631deaf52fdeec0ab410244a8650190e8592ee"
+      "sha256": "156a26779dd15ee12fd4d41b67d404ab7d65b8ed815a793d88197ad3c2e6d177"
     },
     {
       "path": "src/types/entities-retrieve-response.ts",
-      "sha256": "1131d0aa1428ce1e898e75c875784bfc0ccd1f74ed9ea6ce5b88927dbeda23e3"
+      "sha256": "9f604ccccc4286522dff82cd6984f7638da535c4dca2d8ea7e3413fbe4aa6998"
     },
     {
       "path": "src/types/entities-update-response.ts",
-      "sha256": "0fbfcd38c52a76ce95a92f633fbfd2d72082f7911dcb7a6e6467080b0ebb4600"
+      "sha256": "ba310ed1be1eccc99d7ff8589f52eabc52d77876c88be539cf49687b9383caff"
     },
     {
       "path": "src/types/events-create-response201.ts",
-      "sha256": "0659eff41fa81dc0a1c89414cd2cdfe744562b0490b0fc38099199bc7b2bd98a"
+      "sha256": "c8fcb31b389b6cb59362dfec55c3a2079527e6ff8b136d131ec69b2267de6bb6"
     },
     {
       "path": "src/types/events-retrieve-response.ts",
-      "sha256": "94662e1339bfc39791e9c14afd8ad6298efe773ef76b562fcd5dfdb400a10c32"
+      "sha256": "69e55a9cbed4c3aeaacd6366e025c55906e9e4f2ce860130b2e69076d627bfbd"
     },
     {
       "path": "src/types/extractions-create-response201.ts",
-      "sha256": "f9bebd9c2b5fdd841dcb47336f8a78444b5a7dfe5190a43f9d6f8660849680b6"
+      "sha256": "f8bd6f4324921f84400d5d6776c18015af93bea131cf6880ab99f92d8916eef4"
     },
     {
       "path": "src/types/feedback-create-response201.ts",
-      "sha256": "d0d86e9cda87242786c2d4bf41fa5542b0a2d13e4591abda34e8c7b6f6a47d96"
+      "sha256": "a49f8ed98901d4c441dc7b935380849c1ed65cc4ecd68d03abae19e9688dc785"
     },
     {
       "path": "src/types/field-error.ts",
@@ -168,19 +168,19 @@
     },
     {
       "path": "src/types/memories-create-response201.ts",
-      "sha256": "2eb160baa7e0d3dbc57194db7726bc277a9c0d0e29df83e59fd2e1ee75dab2d4"
+      "sha256": "8fb99c3e85b2fd642de738bc529205a5bfc1467deea73ed93c86d678320e651a"
     },
     {
       "path": "src/types/memories-list-response.ts",
-      "sha256": "1364962a6798a703a9ec813d4fb9e3fe0ebed48326379e0eb65c983ac959f1cb"
+      "sha256": "4b187f19a9b22a8575fa2f3861b27d6eda2b80ccaf40d96b1b08b98faab28e05"
     },
     {
       "path": "src/types/memories-retrieve-response.ts",
-      "sha256": "f7de5cb413c78c2d07e1ca2c36557a29ca2cb4c665a7d04025631b25998e9072"
+      "sha256": "d227bee345d951248819df8f3f2649dbc0246891651f877db2e3544d464f3e47"
     },
     {
       "path": "src/types/memories-update-response.ts",
-      "sha256": "14ddd46572f77d32b9c3dcd5200796d27f329de45525d88c2dfd3e1bd9fdf06f"
+      "sha256": "31eae19ef8bc19d515311e34e4f878a4fa139fc923004006ae97b85900495bdc"
     },
     {
       "path": "src/types/memory-audit-log-list.ts",
@@ -552,15 +552,15 @@
     },
     {
       "path": "src/types/provider-health-retrieve-response.ts",
-      "sha256": "375f5bcadb04051b7bd6867139ba6dcb509451cbed9d896bba1f69c4e53b66a5"
+      "sha256": "fa7d74790d4f621ce22c305ae11162614049adfac80b594edf8bd66df822e939"
     },
     {
       "path": "src/types/retrievals-create-response201.ts",
-      "sha256": "73c687a7dd25506d8c8ceb92397d17e0fc2994211fbc84ee60d22c0637c31763"
+      "sha256": "bcd9df58c85b5fda57f74c49c5de9524a487262a328cefc6cce55ca2e00b3604"
     },
     {
       "path": "src/types/retrievals-retrieve-response.ts",
-      "sha256": "2a6fba58e7892d22aaf11af2ef8e0df2613b26d9f93f07593997a59875d5441c"
+      "sha256": "9a888f50bb4aaa5bf4c4b1d1410aa5f0f01b77132141db0568da983f7b085e58"
     },
     {
       "path": "src/types/sdk-work-api-response.ts",

@@ -2,7 +2,7 @@ import type { MemoryImplementationProfile } from './memory-implementation-profil
 
 export interface ImplementationProfilesRetrieveResponse {
   code: 0;
-  data: unknown & Record<string, unknown>;
+  data: unknown & { item: MemoryImplementationProfile; };
   /** Server-owned request correlation id. */
   traceId: string;
 }

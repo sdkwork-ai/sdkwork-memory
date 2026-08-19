@@ -2,7 +2,7 @@ import type { MemoryRetrievalProfile } from './memory-retrieval-profile';
 
 export interface RetrievalProfilesCreateResponse201 {
   code: 0;
-  data: unknown & Record<string, unknown>;
+  data: unknown & { item: MemoryRetrievalProfile; };
   /** Server-owned request correlation id. */
   traceId: string;
 }

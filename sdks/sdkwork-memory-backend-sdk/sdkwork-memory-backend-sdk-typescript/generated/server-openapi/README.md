@@ -18,7 +18,7 @@ pnpm add @sdkwork/memory-backend-sdk
 import { SdkworkMemoryBackendClient } from '@sdkwork/memory-backend-sdk';
 
 const client = new SdkworkMemoryBackendClient({
-  baseUrl: 'http://localhost:8080',
+  baseUrl: 'https://api.sdkwork.com',
   timeout: 30000,
 });
 
@@ -44,7 +44,7 @@ Access-Token: <accessToken>
 import { SdkworkMemoryBackendClient } from '@sdkwork/memory-backend-sdk';
 
 const client = new SdkworkMemoryBackendClient({
-  baseUrl: 'http://localhost:8080',
+  baseUrl: 'https://api.sdkwork.com',
   timeout: 30000, // Request timeout in ms
   headers: {      // Custom headers
     'X-Custom-Header': 'value',
@@ -91,6 +91,8 @@ This SDK includes cross-platform publish scripts in `bin/`:
 - `bin/publish-core.mjs`
 - `bin/publish.sh`
 - `bin/publish.ps1`
+
+TypeScript check and publish commands use pnpm to materialize workspace dependency versions in a temporary tarball. They reject local-only dependency protocols before npm publication and do not rewrite the source `package.json`.
 
 ### Check
 

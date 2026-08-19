@@ -10,37 +10,233 @@
   },
   "status": "ok",
   "mode": "apply",
-  "hasChanges": false,
+  "hasChanges": true,
   "hasDestructiveChanges": false,
-  "changeFingerprint": "aa301fe4fcc8968a1c66a8be370b1b04fb80921276c7279901ee2bdc3f05a53d",
+  "changeFingerprint": "515713055d4fdea91207b0ac2c41689d28e2c2c28445a8fdbfc9b1d36a16e5da",
   "changeImpact": {
     "schemaVersion": 1,
-    "areas": [],
-    "details": [],
-    "requiresVerification": false,
-    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped."
+    "areas": [
+      "api-surface",
+      "models",
+      "runtime",
+      "build-metadata",
+      "publish-workflow",
+      "documentation"
+    ],
+    "details": [
+      {
+        "area": "api-surface",
+        "paths": [
+          "src/api/base.ts",
+          "src/api/memory.ts",
+          "src/http/client.ts"
+        ]
+      },
+      {
+        "area": "models",
+        "paths": [
+          "src/types/audit-logs-list-response.ts",
+          "src/types/bindings-create-response201.ts",
+          "src/types/bindings-list-response.ts",
+          "src/types/bindings-retrieve-response.ts",
+          "src/types/candidates-approve-response.ts",
+          "src/types/candidates-list-response.ts",
+          "src/types/candidates-reject-response.ts",
+          "src/types/capability-bindings-create-response201.ts",
+          "src/types/capability-bindings-list-response.ts",
+          "src/types/capability-bindings-retrieve-response.ts",
+          "src/types/commercial-readiness-rebuild-response.ts",
+          "src/types/commercial-readiness-retrieve-response.ts",
+          "src/types/consolidation-jobs-create-response201.ts",
+          "src/types/consolidation-jobs-list-response.ts",
+          "src/types/consolidation-jobs-retrieve-response.ts",
+          "src/types/edges-create-response201.ts",
+          "src/types/edges-list-response.ts",
+          "src/types/edges-retrieve-response.ts",
+          "src/types/edges-update-response.ts",
+          "src/types/entities-create-response201.ts",
+          "src/types/entities-list-response.ts",
+          "src/types/entities-retrieve-response.ts",
+          "src/types/entities-update-response.ts",
+          "src/types/eval-runs-create-response201.ts",
+          "src/types/eval-runs-list-response.ts",
+          "src/types/eval-runs-retrieve-response.ts",
+          "src/types/events-list-response.ts",
+          "src/types/events-retrieve-response.ts",
+          "src/types/extraction-jobs-create-response201.ts",
+          "src/types/extraction-jobs-list-response.ts",
+          "src/types/extraction-jobs-retrieve-response.ts",
+          "src/types/implementation-profiles-create-response201.ts",
+          "src/types/implementation-profiles-list-response.ts",
+          "src/types/implementation-profiles-retrieve-response.ts",
+          "src/types/implementation-profiles-update-response.ts",
+          "src/types/indexes-create-response201.ts",
+          "src/types/indexes-list-response.ts",
+          "src/types/indexes-rebuild-response.ts",
+          "src/types/indexes-retrieve-response.ts",
+          "src/types/indexes-update-response.ts",
+          "src/types/memories-list-response.ts",
+          "src/types/memories-retrieve-response.ts",
+          "src/types/memories-supersede-response.ts",
+          "src/types/memories-update-response.ts",
+          "src/types/migration-jobs-create-response201.ts",
+          "src/types/migration-jobs-list-response.ts",
+          "src/types/migration-jobs-retrieve-response.ts",
+          "src/types/policies-create-response201.ts",
+          "src/types/policies-list-response.ts",
+          "src/types/policies-retrieve-response.ts",
+          "src/types/policies-update-response.ts",
+          "src/types/policy-assignments-create-response201.ts",
+          "src/types/policy-assignments-list-response.ts",
+          "src/types/policy-assignments-retrieve-response.ts",
+          "src/types/policy-assignments-update-response.ts",
+          "src/types/provider-bindings-create-response201.ts",
+          "src/types/provider-bindings-list-response.ts",
+          "src/types/provider-bindings-update-response.ts",
+          "src/types/provider-health-retrieve-response.ts",
+          "src/types/retention-jobs-create-response201.ts",
+          "src/types/retention-jobs-list-response.ts",
+          "src/types/retention-jobs-retrieve-response.ts",
+          "src/types/retrieval-profiles-create-response201.ts",
+          "src/types/retrieval-profiles-list-response.ts",
+          "src/types/retrieval-profiles-retrieve-response.ts",
+          "src/types/retrieval-profiles-update-response.ts",
+          "src/types/retrieval-traces-list-response.ts",
+          "src/types/retrieval-traces-retrieve-response.ts",
+          "src/types/spaces-list-response.ts",
+          "src/types/spaces-retrieve-response.ts",
+          "src/types/spaces-update-response.ts",
+          "src/types/subjects-create-response201.ts",
+          "src/types/subjects-list-response.ts",
+          "src/types/subjects-retrieve-response.ts",
+          "src/types/subjects-update-response.ts"
+        ]
+      },
+      {
+        "area": "runtime",
+        "paths": [
+          "src/http/client.ts"
+        ]
+      },
+      {
+        "area": "build-metadata",
+        "paths": [
+          "package.json"
+        ]
+      },
+      {
+        "area": "publish-workflow",
+        "paths": [
+          "bin/publish-core.mjs"
+        ]
+      },
+      {
+        "area": "documentation",
+        "paths": [
+          "README.md"
+        ]
+      }
+    ],
+    "requiresVerification": true,
+    "summary": "Detected impact areas: api-surface, models, runtime, build-metadata, publish-workflow, documentation. Verification is required."
   },
   "executionDecision": {
     "schemaVersion": 1,
-    "riskLevel": "low",
-    "nextAction": "skip",
+    "riskLevel": "high",
+    "nextAction": "verify",
     "requiresManualReview": false,
     "applyRequiresExpectedFingerprint": false,
-    "summary": "No actionable changes were detected. No apply or verification step is required.",
+    "summary": "Changes have been applied. Run the required verification plan now.",
     "reasons": [
-      "no-actionable-changes"
+      "backed-up-generated-files",
+      "manual-review-required",
+      "verification-required"
     ]
   },
   "executionHandoff": {
     "schemaVersion": 1,
-    "summary": "No further commands are required.",
-    "steps": []
+    "summary": "Run the required verification commands now.",
+    "steps": [
+      {
+        "id": "verify-check",
+        "title": "Unified package check",
+        "required": true,
+        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, runtime, build-metadata, publish-workflow, documentation.",
+        "workingDirectory": "E:\\sdkwork-space\\sdkwork-memory\\sdks\\sdkwork-memory-backend-sdk\\sdkwork-memory-backend-sdk-typescript\\generated\\server-openapi",
+        "command": "node",
+        "args": [
+          "./bin/publish-core.mjs",
+          "--language",
+          "typescript",
+          "--project-dir",
+          ".",
+          "--action",
+          "check"
+        ],
+        "displayCommand": "node ./bin/publish-core.mjs --language typescript --project-dir . --action check"
+      },
+      {
+        "id": "verify-build",
+        "title": "Unified package build",
+        "required": true,
+        "rationale": "Run the full package build because this language uses a lighter check path than the final build. Triggered by: api-surface, models, runtime, build-metadata, publish-workflow, documentation.",
+        "workingDirectory": "E:\\sdkwork-space\\sdkwork-memory\\sdks\\sdkwork-memory-backend-sdk\\sdkwork-memory-backend-sdk-typescript\\generated\\server-openapi",
+        "command": "node",
+        "args": [
+          "./bin/publish-core.mjs",
+          "--language",
+          "typescript",
+          "--project-dir",
+          ".",
+          "--action",
+          "build"
+        ],
+        "displayCommand": "node ./bin/publish-core.mjs --language typescript --project-dir . --action build"
+      }
+    ]
   },
   "verificationPlan": {
-    "shouldRun": false,
-    "runPhase": "skip",
-    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped.",
-    "steps": []
+    "shouldRun": true,
+    "runPhase": "now",
+    "summary": "Detected impact areas: api-surface, models, runtime, build-metadata, publish-workflow, documentation. Verification is required. Run the required verification commands now against the generated SDK output.",
+    "steps": [
+      {
+        "id": "check",
+        "title": "Unified package check",
+        "required": true,
+        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, runtime, build-metadata, publish-workflow, documentation.",
+        "workingDirectory": "E:\\sdkwork-space\\sdkwork-memory\\sdks\\sdkwork-memory-backend-sdk\\sdkwork-memory-backend-sdk-typescript\\generated\\server-openapi",
+        "command": "node",
+        "args": [
+          "./bin/publish-core.mjs",
+          "--language",
+          "typescript",
+          "--project-dir",
+          ".",
+          "--action",
+          "check"
+        ],
+        "displayCommand": "node ./bin/publish-core.mjs --language typescript --project-dir . --action check"
+      },
+      {
+        "id": "build",
+        "title": "Unified package build",
+        "required": true,
+        "rationale": "Run the full package build because this language uses a lighter check path than the final build. Triggered by: api-surface, models, runtime, build-metadata, publish-workflow, documentation.",
+        "workingDirectory": "E:\\sdkwork-space\\sdkwork-memory\\sdks\\sdkwork-memory-backend-sdk\\sdkwork-memory-backend-sdk-typescript\\generated\\server-openapi",
+        "command": "node",
+        "args": [
+          "./bin/publish-core.mjs",
+          "--language",
+          "typescript",
+          "--project-dir",
+          ".",
+          "--action",
+          "build"
+        ],
+        "displayCommand": "node ./bin/publish-core.mjs --language typescript --project-dir . --action build"
+      }
+    ]
   },
   "sdk": {
     "name": "sdkwork-memory-backend-sdk",
@@ -65,35 +261,21 @@
   "syncSummary": {
     "dryRun": false,
     "controlPlaneEnabled": true,
-    "writtenFiles": 0,
+    "writtenFiles": 81,
     "skippedScaffoldFiles": 2,
-    "skippedUnchangedGeneratedFiles": 198,
+    "skippedUnchangedGeneratedFiles": 117,
     "deletedGeneratedFiles": 0,
     "changeSummaryPath": ".sdkwork/sdkwork-generator-changes.json",
-    "changeFingerprint": "aa301fe4fcc8968a1c66a8be370b1b04fb80921276c7279901ee2bdc3f05a53d",
+    "changeFingerprint": "515713055d4fdea91207b0ac2c41689d28e2c2c28445a8fdbfc9b1d36a16e5da",
     "changes": {
       "createdGeneratedFiles": [],
-      "updatedGeneratedFiles": [],
-      "unchangedGeneratedFiles": [
+      "updatedGeneratedFiles": [
         "bin/publish-core.mjs",
-        "bin/publish.ps1",
-        "bin/publish.sh",
-        "bin/sdk-gen.bat",
-        "bin/sdk-gen.sh",
-        "CHANGELOG.md",
-        "LICENSE",
         "package.json",
         "README.md",
-        "sdkwork-sdk.json",
         "src/api/base.ts",
-        "src/api/index.ts",
         "src/api/memory.ts",
-        "src/api/paths.ts",
-        "src/auth/index.ts",
         "src/http/client.ts",
-        "src/http/index.ts",
-        "src/index.ts",
-        "src/sdk.ts",
         "src/types/audit-logs-list-response.ts",
         "src/types/bindings-create-response201.ts",
         "src/types/bindings-list-response.ts",
@@ -106,7 +288,6 @@
         "src/types/capability-bindings-retrieve-response.ts",
         "src/types/commercial-readiness-rebuild-response.ts",
         "src/types/commercial-readiness-retrieve-response.ts",
-        "src/types/common.ts",
         "src/types/consolidation-jobs-create-response201.ts",
         "src/types/consolidation-jobs-list-response.ts",
         "src/types/consolidation-jobs-retrieve-response.ts",
@@ -126,12 +307,10 @@
         "src/types/extraction-jobs-create-response201.ts",
         "src/types/extraction-jobs-list-response.ts",
         "src/types/extraction-jobs-retrieve-response.ts",
-        "src/types/field-error.ts",
         "src/types/implementation-profiles-create-response201.ts",
         "src/types/implementation-profiles-list-response.ts",
         "src/types/implementation-profiles-retrieve-response.ts",
         "src/types/implementation-profiles-update-response.ts",
-        "src/types/index.ts",
         "src/types/indexes-create-response201.ts",
         "src/types/indexes-list-response.ts",
         "src/types/indexes-rebuild-response.ts",
@@ -141,6 +320,55 @@
         "src/types/memories-retrieve-response.ts",
         "src/types/memories-supersede-response.ts",
         "src/types/memories-update-response.ts",
+        "src/types/migration-jobs-create-response201.ts",
+        "src/types/migration-jobs-list-response.ts",
+        "src/types/migration-jobs-retrieve-response.ts",
+        "src/types/policies-create-response201.ts",
+        "src/types/policies-list-response.ts",
+        "src/types/policies-retrieve-response.ts",
+        "src/types/policies-update-response.ts",
+        "src/types/policy-assignments-create-response201.ts",
+        "src/types/policy-assignments-list-response.ts",
+        "src/types/policy-assignments-retrieve-response.ts",
+        "src/types/policy-assignments-update-response.ts",
+        "src/types/provider-bindings-create-response201.ts",
+        "src/types/provider-bindings-list-response.ts",
+        "src/types/provider-bindings-update-response.ts",
+        "src/types/provider-health-retrieve-response.ts",
+        "src/types/retention-jobs-create-response201.ts",
+        "src/types/retention-jobs-list-response.ts",
+        "src/types/retention-jobs-retrieve-response.ts",
+        "src/types/retrieval-profiles-create-response201.ts",
+        "src/types/retrieval-profiles-list-response.ts",
+        "src/types/retrieval-profiles-retrieve-response.ts",
+        "src/types/retrieval-profiles-update-response.ts",
+        "src/types/retrieval-traces-list-response.ts",
+        "src/types/retrieval-traces-retrieve-response.ts",
+        "src/types/spaces-list-response.ts",
+        "src/types/spaces-retrieve-response.ts",
+        "src/types/spaces-update-response.ts",
+        "src/types/subjects-create-response201.ts",
+        "src/types/subjects-list-response.ts",
+        "src/types/subjects-retrieve-response.ts",
+        "src/types/subjects-update-response.ts"
+      ],
+      "unchangedGeneratedFiles": [
+        "bin/publish.ps1",
+        "bin/publish.sh",
+        "bin/sdk-gen.bat",
+        "bin/sdk-gen.sh",
+        "CHANGELOG.md",
+        "LICENSE",
+        "sdkwork-sdk.json",
+        "src/api/index.ts",
+        "src/api/paths.ts",
+        "src/auth/index.ts",
+        "src/http/index.ts",
+        "src/index.ts",
+        "src/sdk.ts",
+        "src/types/common.ts",
+        "src/types/field-error.ts",
+        "src/types/index.ts",
         "src/types/memory-audit-log-list.ts",
         "src/types/memory-audit-log.ts",
         "src/types/memory-binding-list.ts",
@@ -231,32 +459,8 @@
         "src/types/memory-subject-patch.ts",
         "src/types/memory-subject-request.ts",
         "src/types/memory-subject.ts",
-        "src/types/migration-jobs-create-response201.ts",
-        "src/types/migration-jobs-list-response.ts",
-        "src/types/migration-jobs-retrieve-response.ts",
         "src/types/page-info.ts",
-        "src/types/policies-create-response201.ts",
-        "src/types/policies-list-response.ts",
-        "src/types/policies-retrieve-response.ts",
-        "src/types/policies-update-response.ts",
-        "src/types/policy-assignments-create-response201.ts",
-        "src/types/policy-assignments-list-response.ts",
-        "src/types/policy-assignments-retrieve-response.ts",
-        "src/types/policy-assignments-update-response.ts",
         "src/types/problem-detail.ts",
-        "src/types/provider-bindings-create-response201.ts",
-        "src/types/provider-bindings-list-response.ts",
-        "src/types/provider-bindings-update-response.ts",
-        "src/types/provider-health-retrieve-response.ts",
-        "src/types/retention-jobs-create-response201.ts",
-        "src/types/retention-jobs-list-response.ts",
-        "src/types/retention-jobs-retrieve-response.ts",
-        "src/types/retrieval-profiles-create-response201.ts",
-        "src/types/retrieval-profiles-list-response.ts",
-        "src/types/retrieval-profiles-retrieve-response.ts",
-        "src/types/retrieval-profiles-update-response.ts",
-        "src/types/retrieval-traces-list-response.ts",
-        "src/types/retrieval-traces-retrieve-response.ts",
         "src/types/sdk-work-api-response.ts",
         "src/types/sdk-work-command-data.ts",
         "src/types/sdk-work-command-response.ts",
@@ -265,13 +469,6 @@
         "src/types/sdk-work-platform-error-code.ts",
         "src/types/sdk-work-resource-data.ts",
         "src/types/sdk-work-resource-response.ts",
-        "src/types/spaces-list-response.ts",
-        "src/types/spaces-retrieve-response.ts",
-        "src/types/spaces-update-response.ts",
-        "src/types/subjects-create-response201.ts",
-        "src/types/subjects-list-response.ts",
-        "src/types/subjects-retrieve-response.ts",
-        "src/types/subjects-update-response.ts",
         "tsconfig.json"
       ],
       "deletedGeneratedFiles": [],
@@ -280,33 +477,196 @@
         "custom/build-runtime.mjs",
         "custom/README.md"
       ],
-      "backedUpFiles": []
+      "backedUpFiles": [
+        "package.json"
+      ]
     },
     "impact": {
       "schemaVersion": 1,
-      "areas": [],
-      "details": [],
-      "requiresVerification": false,
-      "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped."
+      "areas": [
+        "api-surface",
+        "models",
+        "runtime",
+        "build-metadata",
+        "publish-workflow",
+        "documentation"
+      ],
+      "details": [
+        {
+          "area": "api-surface",
+          "paths": [
+            "src/api/base.ts",
+            "src/api/memory.ts",
+            "src/http/client.ts"
+          ]
+        },
+        {
+          "area": "models",
+          "paths": [
+            "src/types/audit-logs-list-response.ts",
+            "src/types/bindings-create-response201.ts",
+            "src/types/bindings-list-response.ts",
+            "src/types/bindings-retrieve-response.ts",
+            "src/types/candidates-approve-response.ts",
+            "src/types/candidates-list-response.ts",
+            "src/types/candidates-reject-response.ts",
+            "src/types/capability-bindings-create-response201.ts",
+            "src/types/capability-bindings-list-response.ts",
+            "src/types/capability-bindings-retrieve-response.ts",
+            "src/types/commercial-readiness-rebuild-response.ts",
+            "src/types/commercial-readiness-retrieve-response.ts",
+            "src/types/consolidation-jobs-create-response201.ts",
+            "src/types/consolidation-jobs-list-response.ts",
+            "src/types/consolidation-jobs-retrieve-response.ts",
+            "src/types/edges-create-response201.ts",
+            "src/types/edges-list-response.ts",
+            "src/types/edges-retrieve-response.ts",
+            "src/types/edges-update-response.ts",
+            "src/types/entities-create-response201.ts",
+            "src/types/entities-list-response.ts",
+            "src/types/entities-retrieve-response.ts",
+            "src/types/entities-update-response.ts",
+            "src/types/eval-runs-create-response201.ts",
+            "src/types/eval-runs-list-response.ts",
+            "src/types/eval-runs-retrieve-response.ts",
+            "src/types/events-list-response.ts",
+            "src/types/events-retrieve-response.ts",
+            "src/types/extraction-jobs-create-response201.ts",
+            "src/types/extraction-jobs-list-response.ts",
+            "src/types/extraction-jobs-retrieve-response.ts",
+            "src/types/implementation-profiles-create-response201.ts",
+            "src/types/implementation-profiles-list-response.ts",
+            "src/types/implementation-profiles-retrieve-response.ts",
+            "src/types/implementation-profiles-update-response.ts",
+            "src/types/indexes-create-response201.ts",
+            "src/types/indexes-list-response.ts",
+            "src/types/indexes-rebuild-response.ts",
+            "src/types/indexes-retrieve-response.ts",
+            "src/types/indexes-update-response.ts",
+            "src/types/memories-list-response.ts",
+            "src/types/memories-retrieve-response.ts",
+            "src/types/memories-supersede-response.ts",
+            "src/types/memories-update-response.ts",
+            "src/types/migration-jobs-create-response201.ts",
+            "src/types/migration-jobs-list-response.ts",
+            "src/types/migration-jobs-retrieve-response.ts",
+            "src/types/policies-create-response201.ts",
+            "src/types/policies-list-response.ts",
+            "src/types/policies-retrieve-response.ts",
+            "src/types/policies-update-response.ts",
+            "src/types/policy-assignments-create-response201.ts",
+            "src/types/policy-assignments-list-response.ts",
+            "src/types/policy-assignments-retrieve-response.ts",
+            "src/types/policy-assignments-update-response.ts",
+            "src/types/provider-bindings-create-response201.ts",
+            "src/types/provider-bindings-list-response.ts",
+            "src/types/provider-bindings-update-response.ts",
+            "src/types/provider-health-retrieve-response.ts",
+            "src/types/retention-jobs-create-response201.ts",
+            "src/types/retention-jobs-list-response.ts",
+            "src/types/retention-jobs-retrieve-response.ts",
+            "src/types/retrieval-profiles-create-response201.ts",
+            "src/types/retrieval-profiles-list-response.ts",
+            "src/types/retrieval-profiles-retrieve-response.ts",
+            "src/types/retrieval-profiles-update-response.ts",
+            "src/types/retrieval-traces-list-response.ts",
+            "src/types/retrieval-traces-retrieve-response.ts",
+            "src/types/spaces-list-response.ts",
+            "src/types/spaces-retrieve-response.ts",
+            "src/types/spaces-update-response.ts",
+            "src/types/subjects-create-response201.ts",
+            "src/types/subjects-list-response.ts",
+            "src/types/subjects-retrieve-response.ts",
+            "src/types/subjects-update-response.ts"
+          ]
+        },
+        {
+          "area": "runtime",
+          "paths": [
+            "src/http/client.ts"
+          ]
+        },
+        {
+          "area": "build-metadata",
+          "paths": [
+            "package.json"
+          ]
+        },
+        {
+          "area": "publish-workflow",
+          "paths": [
+            "bin/publish-core.mjs"
+          ]
+        },
+        {
+          "area": "documentation",
+          "paths": [
+            "README.md"
+          ]
+        }
+      ],
+      "requiresVerification": true,
+      "summary": "Detected impact areas: api-surface, models, runtime, build-metadata, publish-workflow, documentation. Verification is required."
     },
     "verificationPlan": {
-      "shouldRun": false,
-      "runPhase": "skip",
-      "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped.",
-      "steps": []
+      "shouldRun": true,
+      "runPhase": "now",
+      "summary": "Detected impact areas: api-surface, models, runtime, build-metadata, publish-workflow, documentation. Verification is required. Run the required verification commands now against the generated SDK output.",
+      "steps": [
+        {
+          "id": "check",
+          "title": "Unified package check",
+          "required": true,
+          "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, runtime, build-metadata, publish-workflow, documentation.",
+          "workingDirectory": "E:\\sdkwork-space\\sdkwork-memory\\sdks\\sdkwork-memory-backend-sdk\\sdkwork-memory-backend-sdk-typescript\\generated\\server-openapi",
+          "command": "node",
+          "args": [
+            "./bin/publish-core.mjs",
+            "--language",
+            "typescript",
+            "--project-dir",
+            ".",
+            "--action",
+            "check"
+          ],
+          "displayCommand": "node ./bin/publish-core.mjs --language typescript --project-dir . --action check"
+        },
+        {
+          "id": "build",
+          "title": "Unified package build",
+          "required": true,
+          "rationale": "Run the full package build because this language uses a lighter check path than the final build. Triggered by: api-surface, models, runtime, build-metadata, publish-workflow, documentation.",
+          "workingDirectory": "E:\\sdkwork-space\\sdkwork-memory\\sdks\\sdkwork-memory-backend-sdk\\sdkwork-memory-backend-sdk-typescript\\generated\\server-openapi",
+          "command": "node",
+          "args": [
+            "./bin/publish-core.mjs",
+            "--language",
+            "typescript",
+            "--project-dir",
+            ".",
+            "--action",
+            "build"
+          ],
+          "displayCommand": "node ./bin/publish-core.mjs --language typescript --project-dir . --action build"
+        }
+      ]
     },
     "executionDecision": {
       "schemaVersion": 1,
-      "riskLevel": "low",
-      "nextAction": "skip",
+      "riskLevel": "high",
+      "nextAction": "verify",
       "requiresManualReview": false,
       "applyRequiresExpectedFingerprint": false,
-      "summary": "No actionable changes were detected. No apply or verification step is required.",
+      "summary": "Changes have been applied. Run the required verification plan now.",
       "reasons": [
-        "no-actionable-changes"
+        "backed-up-generated-files",
+        "manual-review-required",
+        "verification-required"
       ]
     },
-    "backedUpFiles": [],
+    "backedUpFiles": [
+      "package.json"
+    ],
     "preservedLegacyFiles": false
   }
 }
