@@ -1,6 +1,6 @@
 {
   "name": "@sdkwork/memory-sdk",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "SDKWork sdkwork-memory-sdk composed consumer facade.",
   "type": "module",
   "private": false,
