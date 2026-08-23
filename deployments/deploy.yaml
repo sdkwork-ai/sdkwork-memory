@@ -1,6 +1,5 @@
 version: 2
 defaultProfile: cloud.production
-
 profiles:
   cloud.production:
     deployment:
@@ -17,10 +16,55 @@ profiles:
     install:
       layout: binary-package
     expose:
-      - domain: memory.sdkwork.com
+      - domain: mem.sdkwork.com
         tls: sdkwork.com
         mode: api
         apiPathStyle: full-prefix
+        aliases:
+          - memory-admin.sdkwork.com
+          - memory-app.sdkwork.com
+          - memory-open.sdkwork.com
+          - memory.sdkwork.com
+      - domain: memory-admin.birdcoder.com
+        tls: birdcoder.com
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.birdcoder.com
+          - memory-open.birdcoder.com
+          - memory.birdcoder.com
+      - domain: memory-admin.dtupay.com
+        tls: dtupay.com
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.dtupay.com
+          - memory-open.dtupay.com
+          - memory.dtupay.com
+      - domain: memory-admin.sdkwork.cn
+        tls: sdkwork.cn
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.sdkwork.cn
+          - memory-open.sdkwork.cn
+          - memory.sdkwork.cn
+      - domain: memory-admin.birdcoder.cn
+        tls: birdcoder.cn
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.birdcoder.cn
+          - memory-open.birdcoder.cn
+          - memory.birdcoder.cn
+      - domain: memory-admin.dtupay.cn
+        tls: dtupay.cn
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.dtupay.cn
+          - memory-open.dtupay.cn
+          - memory.dtupay.cn
     packages: []
     overrides:
       topology:
@@ -35,7 +79,6 @@ profiles:
           platform.api-gateway: http://127.0.0.1:3900
       nginx:
         clientMaxBodySize: 32m
-
   standalone.production:
     deployment:
       deploymentProfile: standalone
@@ -51,10 +94,55 @@ profiles:
     install:
       layout: binary-package
     expose:
-      - domain: memory.sdkwork.com
+      - domain: mem.sdkwork.com
         tls: sdkwork.com
         mode: api
         apiPathStyle: full-prefix
+        aliases:
+          - memory-admin.sdkwork.com
+          - memory-app.sdkwork.com
+          - memory-open.sdkwork.com
+          - memory.sdkwork.com
+      - domain: memory-admin.birdcoder.com
+        tls: birdcoder.com
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.birdcoder.com
+          - memory-open.birdcoder.com
+          - memory.birdcoder.com
+      - domain: memory-admin.dtupay.com
+        tls: dtupay.com
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.dtupay.com
+          - memory-open.dtupay.com
+          - memory.dtupay.com
+      - domain: memory-admin.sdkwork.cn
+        tls: sdkwork.cn
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.sdkwork.cn
+          - memory-open.sdkwork.cn
+          - memory.sdkwork.cn
+      - domain: memory-admin.birdcoder.cn
+        tls: birdcoder.cn
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.birdcoder.cn
+          - memory-open.birdcoder.cn
+          - memory.birdcoder.cn
+      - domain: memory-admin.dtupay.cn
+        tls: dtupay.cn
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.dtupay.cn
+          - memory-open.dtupay.cn
+          - memory.dtupay.cn
     packages: []
     overrides:
       topology:
