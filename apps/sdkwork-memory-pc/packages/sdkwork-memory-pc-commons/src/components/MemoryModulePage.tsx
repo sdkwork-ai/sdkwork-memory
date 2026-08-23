@@ -1,5 +1,6 @@
 import { AlertTriangle, ChevronLeft, ChevronRight, Database, Play, RefreshCw, Search, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { uuid } from "@sdkwork/utils/id";
 
 import { useMemoryI18n } from "../i18n/runtime.tsx";
 import type { MemoryListQuery, MemoryPageResult, MemoryPcModuleDefinition, MemoryPcResourceKey, MemoryResourceAction, MemoryResourceRegistry } from "../types.ts";
@@ -111,7 +112,7 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
     }
     setActionBody(JSON.stringify(body, null, 2));
     setAuditReason("");
-    setIdempotencyKey(globalThis.crypto?.randomUUID?.() ?? "");
+    setIdempotencyKey(uuid());
     setActionConfirmed(false);
     setActionError(undefined);
   }
