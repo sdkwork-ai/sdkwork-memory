@@ -2,59 +2,8 @@ environment = "staging"
 
 [http]
 
-[http.certificates]
-
-[http.certificates."sdkwork.com"]
-certFile = "/opt/certs/letsencrypt/live/sdkwork.com/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/sdkwork.com/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/sdkwork.com/chain.pem"
-ocspStapling = true
-
-[http.certificates."birdcoder.com"]
-certFile = "/opt/certs/letsencrypt/live/birdcoder.com/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/birdcoder.com/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/birdcoder.com/chain.pem"
-ocspStapling = true
-
-[http.certificates."dtupay.com"]
-certFile = "/opt/certs/letsencrypt/live/dtupay.com/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/dtupay.com/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/dtupay.com/chain.pem"
-ocspStapling = true
-
-[http.certificates."sdkwork.cn"]
-certFile = "/opt/certs/letsencrypt/live/sdkwork.cn/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/sdkwork.cn/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/sdkwork.cn/chain.pem"
-ocspStapling = true
-
-[http.certificates."birdcoder.cn"]
-certFile = "/opt/certs/letsencrypt/live/birdcoder.cn/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/birdcoder.cn/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/birdcoder.cn/chain.pem"
-ocspStapling = true
-
-[http.certificates."dtupay.cn"]
-certFile = "/opt/certs/letsencrypt/live/dtupay.cn/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/dtupay.cn/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/dtupay.cn/chain.pem"
-ocspStapling = true
-
 [[http.server]]
 listen = ["80"]
-serverName = ["memory-staging.sdkwork.com", "memory-staging.birdcoder.com", "memory-staging.dtupay.com", "memory-staging.sdkwork.cn", "memory-staging.birdcoder.cn", "memory-staging.dtupay.cn", "memory-app-staging.sdkwork.com", "memory-app-staging.birdcoder.com", "memory-app-staging.dtupay.com", "memory-app-staging.sdkwork.cn", "memory-app-staging.birdcoder.cn", "memory-app-staging.dtupay.cn", "memory-admin-staging.sdkwork.com", "memory-admin-staging.birdcoder.com", "memory-admin-staging.dtupay.com", "memory-admin-staging.sdkwork.cn", "memory-admin-staging.birdcoder.cn", "memory-admin-staging.dtupay.cn", "memory-open-staging.sdkwork.com", "memory-open-staging.birdcoder.com", "memory-open-staging.dtupay.com", "memory-open-staging.sdkwork.cn", "memory-open-staging.birdcoder.cn", "memory-open-staging.dtupay.cn", "mem-staging.sdkwork.com"]
-
-[[http.server.location]]
-match = "/api/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
-
-[[http.server.location]]
-match = "/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
-proxyBuffering = false
-proxyReadTimeout = "300s"
+serverName = ["memory-staging.sdkwork.com", "memory-staging.birdcoder.com", "memory-staging.dtupay.com", "memory-staging.sdkwork.cn", "memory-staging.birdcoder.cn", "memory-staging.dtupay.cn", "memory-staging.skubc.com", "memory-staging.skubc.cn", "memory-staging.zowalk.com", "memory-staging.zowalk.cn", "memory-staging.offer86.com", "memory-staging.offer86.cn", "memory-staging.86offer.com", "memory-staging.86offer.cn", "memory-app-staging.sdkwork.com", "memory-app-staging.birdcoder.com", "memory-app-staging.dtupay.com", "memory-app-staging.sdkwork.cn", "memory-app-staging.birdcoder.cn", "memory-app-staging.dtupay.cn", "memory-app-staging.skubc.com", "memory-app-staging.skubc.cn", "memory-app-staging.zowalk.com", "memory-app-staging.zowalk.cn", "memory-app-staging.offer86.com", "memory-app-staging.offer86.cn", "memory-app-staging.86offer.com", "memory-app-staging.86offer.cn", "memory-admin-staging.sdkwork.com", "memory-admin-staging.birdcoder.com", "memory-admin-staging.dtupay.com", "memory-admin-staging.sdkwork.cn", "memory-admin-staging.birdcoder.cn", "memory-admin-staging.dtupay.cn", "memory-admin-staging.skubc.com", "memory-admin-staging.skubc.cn", "memory-admin-staging.zowalk.com", "memory-admin-staging.zowalk.cn", "memory-admin-staging.offer86.com", "memory-admin-staging.offer86.cn", "memory-admin-staging.86offer.com", "memory-admin-staging.86offer.cn", "memory-open-staging.sdkwork.com", "memory-open-staging.birdcoder.com", "memory-open-staging.dtupay.com", "memory-open-staging.sdkwork.cn", "memory-open-staging.birdcoder.cn", "memory-open-staging.dtupay.cn", "memory-open-staging.skubc.com", "memory-open-staging.skubc.cn", "memory-open-staging.zowalk.com", "memory-open-staging.zowalk.cn", "memory-open-staging.offer86.com", "memory-open-staging.offer86.cn", "memory-open-staging.86offer.com", "memory-open-staging.86offer.cn", "mem-staging.sdkwork.com"]
+include = ["snippets/gateway-locations.nonproduction.conf"]
 

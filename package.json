@@ -61,7 +61,12 @@
     "dev:cloud": "pnpm exec sdkwork-app dev --deployment-profile cloud",
     "release:package:standalone": "pnpm exec sdkwork-app release:package --deployment-profile standalone",
     "release:package:cloud": "pnpm exec sdkwork-app release:package --deployment-profile cloud",
-    "_sdkwork:release:package": "node scripts/package-release-artifact.mjs"
+    "_sdkwork:release:package": "node scripts/package-release-artifact.mjs",
+    "build:pc:dev": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture pc --environment dev",
+    "build:pc:test": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture pc --environment test",
+    "build:pc:staging": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture pc --environment staging",
+    "build:pc:prod": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture pc --environment prod",
+    "check:browser-build-scripts": "node ../sdkwork-specs/tools/check-browser-build-scripts.mjs --root ."
   },
   "exports": {
     ".": {

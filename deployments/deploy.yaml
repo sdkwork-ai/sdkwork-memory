@@ -65,6 +65,70 @@ profiles:
           - memory-app.dtupay.cn
           - memory-open.dtupay.cn
           - memory.dtupay.cn
+      - domain: memory-admin.skubc.com
+        tls: skubc.com
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.skubc.com
+          - memory-open.skubc.com
+          - memory.skubc.com
+      - domain: memory-admin.skubc.cn
+        tls: skubc.cn
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.skubc.cn
+          - memory-open.skubc.cn
+          - memory.skubc.cn
+      - domain: memory-admin.zowalk.com
+        tls: zowalk.com
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.zowalk.com
+          - memory-open.zowalk.com
+          - memory.zowalk.com
+      - domain: memory-admin.zowalk.cn
+        tls: zowalk.cn
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.zowalk.cn
+          - memory-open.zowalk.cn
+          - memory.zowalk.cn
+      - domain: memory-admin.offer86.com
+        tls: offer86.com
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.offer86.com
+          - memory-open.offer86.com
+          - memory.offer86.com
+      - domain: memory-admin.offer86.cn
+        tls: offer86.cn
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.offer86.cn
+          - memory-open.offer86.cn
+          - memory.offer86.cn
+      - domain: memory-admin.86offer.com
+        tls: 86offer.com
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.86offer.com
+          - memory-open.86offer.com
+          - memory.86offer.com
+      - domain: memory-admin.86offer.cn
+        tls: 86offer.cn
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.86offer.cn
+          - memory-open.86offer.cn
+          - memory.86offer.cn
     packages: []
     overrides:
       topology:
@@ -143,6 +207,70 @@ profiles:
           - memory-app.dtupay.cn
           - memory-open.dtupay.cn
           - memory.dtupay.cn
+      - domain: memory-admin.skubc.com
+        tls: skubc.com
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.skubc.com
+          - memory-open.skubc.com
+          - memory.skubc.com
+      - domain: memory-admin.skubc.cn
+        tls: skubc.cn
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.skubc.cn
+          - memory-open.skubc.cn
+          - memory.skubc.cn
+      - domain: memory-admin.zowalk.com
+        tls: zowalk.com
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.zowalk.com
+          - memory-open.zowalk.com
+          - memory.zowalk.com
+      - domain: memory-admin.zowalk.cn
+        tls: zowalk.cn
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.zowalk.cn
+          - memory-open.zowalk.cn
+          - memory.zowalk.cn
+      - domain: memory-admin.offer86.com
+        tls: offer86.com
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.offer86.com
+          - memory-open.offer86.com
+          - memory.offer86.com
+      - domain: memory-admin.offer86.cn
+        tls: offer86.cn
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.offer86.cn
+          - memory-open.offer86.cn
+          - memory.offer86.cn
+      - domain: memory-admin.86offer.com
+        tls: 86offer.com
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.86offer.com
+          - memory-open.86offer.com
+          - memory.86offer.com
+      - domain: memory-admin.86offer.cn
+        tls: 86offer.cn
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.86offer.cn
+          - memory-open.86offer.cn
+          - memory.86offer.cn
     packages: []
     overrides:
       topology:

@@ -2,263 +2,115 @@ environment = "production"
 
 [http]
 
-[http.certificates]
-
-[http.certificates."sdkwork.com"]
-certFile = "/opt/certs/letsencrypt/live/sdkwork.com/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/sdkwork.com/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/sdkwork.com/chain.pem"
-ocspStapling = true
-
-[http.certificates."birdcoder.com"]
-certFile = "/opt/certs/letsencrypt/live/birdcoder.com/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/birdcoder.com/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/birdcoder.com/chain.pem"
-ocspStapling = true
-
-[http.certificates."dtupay.com"]
-certFile = "/opt/certs/letsencrypt/live/dtupay.com/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/dtupay.com/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/dtupay.com/chain.pem"
-ocspStapling = true
-
-[http.certificates."sdkwork.cn"]
-certFile = "/opt/certs/letsencrypt/live/sdkwork.cn/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/sdkwork.cn/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/sdkwork.cn/chain.pem"
-ocspStapling = true
-
-[http.certificates."birdcoder.cn"]
-certFile = "/opt/certs/letsencrypt/live/birdcoder.cn/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/birdcoder.cn/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/birdcoder.cn/chain.pem"
-ocspStapling = true
-
-[http.certificates."dtupay.cn"]
-certFile = "/opt/certs/letsencrypt/live/dtupay.cn/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/dtupay.cn/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/dtupay.cn/chain.pem"
-ocspStapling = true
-
 [[http.server]]
 listen = ["443 ssl", "80"]
 serverName = ["memory.sdkwork.com", "memory-app.sdkwork.com", "memory-admin.sdkwork.com", "memory-open.sdkwork.com", "mem.sdkwork.com"]
+include = ["snippets/gateway-locations.production.conf"]
 
 [http.server.tls]
 cert = "sdkwork.com"
-protocols = ["TLSv1.2", "TLSv1.3"]
-preferServerCiphers = true
-sessionCache = "shared:SSL:10m"
-
-[[http.server.location]]
-match = "= /healthz"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host"]
-
-[[http.server.location]]
-match = "= /readyz"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host"]
-
-[[http.server.location]]
-match = "/api/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
-
-[[http.server.location]]
-match = "/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Real-IP $remote_addr", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
-proxyBuffering = false
-proxyReadTimeout = "120s"
-proxySendTimeout = "120s"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
 serverName = ["memory.birdcoder.com", "memory-app.birdcoder.com", "memory-admin.birdcoder.com", "memory-open.birdcoder.com"]
+include = ["snippets/gateway-locations.production.conf"]
 
 [http.server.tls]
 cert = "birdcoder.com"
-protocols = ["TLSv1.2", "TLSv1.3"]
-preferServerCiphers = true
-sessionCache = "shared:SSL:10m"
-
-[[http.server.location]]
-match = "= /healthz"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host"]
-
-[[http.server.location]]
-match = "= /readyz"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host"]
-
-[[http.server.location]]
-match = "/api/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
-
-[[http.server.location]]
-match = "/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Real-IP $remote_addr", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
-proxyBuffering = false
-proxyReadTimeout = "120s"
-proxySendTimeout = "120s"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
 serverName = ["memory.dtupay.com", "memory-app.dtupay.com", "memory-admin.dtupay.com", "memory-open.dtupay.com"]
+include = ["snippets/gateway-locations.production.conf"]
 
 [http.server.tls]
 cert = "dtupay.com"
-protocols = ["TLSv1.2", "TLSv1.3"]
-preferServerCiphers = true
-sessionCache = "shared:SSL:10m"
-
-[[http.server.location]]
-match = "= /healthz"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host"]
-
-[[http.server.location]]
-match = "= /readyz"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host"]
-
-[[http.server.location]]
-match = "/api/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
-
-[[http.server.location]]
-match = "/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Real-IP $remote_addr", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
-proxyBuffering = false
-proxyReadTimeout = "120s"
-proxySendTimeout = "120s"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
 serverName = ["memory.sdkwork.cn", "memory-app.sdkwork.cn", "memory-admin.sdkwork.cn", "memory-open.sdkwork.cn"]
+include = ["snippets/gateway-locations.production.conf"]
 
 [http.server.tls]
 cert = "sdkwork.cn"
-protocols = ["TLSv1.2", "TLSv1.3"]
-preferServerCiphers = true
-sessionCache = "shared:SSL:10m"
-
-[[http.server.location]]
-match = "= /healthz"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host"]
-
-[[http.server.location]]
-match = "= /readyz"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host"]
-
-[[http.server.location]]
-match = "/api/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
-
-[[http.server.location]]
-match = "/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Real-IP $remote_addr", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
-proxyBuffering = false
-proxyReadTimeout = "120s"
-proxySendTimeout = "120s"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
 serverName = ["memory.birdcoder.cn", "memory-app.birdcoder.cn", "memory-admin.birdcoder.cn", "memory-open.birdcoder.cn"]
+include = ["snippets/gateway-locations.production.conf"]
 
 [http.server.tls]
 cert = "birdcoder.cn"
-protocols = ["TLSv1.2", "TLSv1.3"]
-preferServerCiphers = true
-sessionCache = "shared:SSL:10m"
-
-[[http.server.location]]
-match = "= /healthz"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host"]
-
-[[http.server.location]]
-match = "= /readyz"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host"]
-
-[[http.server.location]]
-match = "/api/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
-
-[[http.server.location]]
-match = "/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Real-IP $remote_addr", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
-proxyBuffering = false
-proxyReadTimeout = "120s"
-proxySendTimeout = "120s"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
 serverName = ["memory.dtupay.cn", "memory-app.dtupay.cn", "memory-admin.dtupay.cn", "memory-open.dtupay.cn"]
+include = ["snippets/gateway-locations.production.conf"]
 
 [http.server.tls]
 cert = "dtupay.cn"
-protocols = ["TLSv1.2", "TLSv1.3"]
-preferServerCiphers = true
-sessionCache = "shared:SSL:10m"
 
-[[http.server.location]]
-match = "= /healthz"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host"]
+[[http.server]]
+listen = ["443 ssl", "80"]
+serverName = ["memory.skubc.com", "memory-app.skubc.com", "memory-admin.skubc.com", "memory-open.skubc.com"]
+include = ["snippets/gateway-locations.production.conf"]
 
-[[http.server.location]]
-match = "= /readyz"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host"]
+[http.server.tls]
+cert = "skubc.com"
 
-[[http.server.location]]
-match = "/api/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
+[[http.server]]
+listen = ["443 ssl", "80"]
+serverName = ["memory.skubc.cn", "memory-app.skubc.cn", "memory-admin.skubc.cn", "memory-open.skubc.cn"]
+include = ["snippets/gateway-locations.production.conf"]
 
-[[http.server.location]]
-match = "/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Real-IP $remote_addr", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
-proxyBuffering = false
-proxyReadTimeout = "120s"
-proxySendTimeout = "120s"
+[http.server.tls]
+cert = "skubc.cn"
+
+[[http.server]]
+listen = ["443 ssl", "80"]
+serverName = ["memory.zowalk.com", "memory-app.zowalk.com", "memory-admin.zowalk.com", "memory-open.zowalk.com"]
+include = ["snippets/gateway-locations.production.conf"]
+
+[http.server.tls]
+cert = "zowalk.com"
+
+[[http.server]]
+listen = ["443 ssl", "80"]
+serverName = ["memory.zowalk.cn", "memory-app.zowalk.cn", "memory-admin.zowalk.cn", "memory-open.zowalk.cn"]
+include = ["snippets/gateway-locations.production.conf"]
+
+[http.server.tls]
+cert = "zowalk.cn"
+
+[[http.server]]
+listen = ["443 ssl", "80"]
+serverName = ["memory.offer86.com", "memory-app.offer86.com", "memory-admin.offer86.com", "memory-open.offer86.com"]
+include = ["snippets/gateway-locations.production.conf"]
+
+[http.server.tls]
+cert = "offer86.com"
+
+[[http.server]]
+listen = ["443 ssl", "80"]
+serverName = ["memory.offer86.cn", "memory-app.offer86.cn", "memory-admin.offer86.cn", "memory-open.offer86.cn"]
+include = ["snippets/gateway-locations.production.conf"]
+
+[http.server.tls]
+cert = "offer86.cn"
+
+[[http.server]]
+listen = ["443 ssl", "80"]
+serverName = ["memory.86offer.com", "memory-app.86offer.com", "memory-admin.86offer.com", "memory-open.86offer.com"]
+include = ["snippets/gateway-locations.production.conf"]
+
+[http.server.tls]
+cert = "86offer.com"
+
+[[http.server]]
+listen = ["443 ssl", "80"]
+serverName = ["memory.86offer.cn", "memory-app.86offer.cn", "memory-admin.86offer.cn", "memory-open.86offer.cn"]
+include = ["snippets/gateway-locations.production.conf"]
+
+[http.server.tls]
+cert = "86offer.cn"
 

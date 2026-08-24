@@ -2,59 +2,8 @@ environment = "test"
 
 [http]
 
-[http.certificates]
-
-[http.certificates."sdkwork.com"]
-certFile = "/opt/certs/letsencrypt/live/sdkwork.com/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/sdkwork.com/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/sdkwork.com/chain.pem"
-ocspStapling = true
-
-[http.certificates."birdcoder.com"]
-certFile = "/opt/certs/letsencrypt/live/birdcoder.com/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/birdcoder.com/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/birdcoder.com/chain.pem"
-ocspStapling = true
-
-[http.certificates."dtupay.com"]
-certFile = "/opt/certs/letsencrypt/live/dtupay.com/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/dtupay.com/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/dtupay.com/chain.pem"
-ocspStapling = true
-
-[http.certificates."sdkwork.cn"]
-certFile = "/opt/certs/letsencrypt/live/sdkwork.cn/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/sdkwork.cn/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/sdkwork.cn/chain.pem"
-ocspStapling = true
-
-[http.certificates."birdcoder.cn"]
-certFile = "/opt/certs/letsencrypt/live/birdcoder.cn/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/birdcoder.cn/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/birdcoder.cn/chain.pem"
-ocspStapling = true
-
-[http.certificates."dtupay.cn"]
-certFile = "/opt/certs/letsencrypt/live/dtupay.cn/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/dtupay.cn/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/dtupay.cn/chain.pem"
-ocspStapling = true
-
 [[http.server]]
 listen = ["80"]
-serverName = ["memory-test.sdkwork.com", "memory-test.birdcoder.com", "memory-test.dtupay.com", "memory-test.sdkwork.cn", "memory-test.birdcoder.cn", "memory-test.dtupay.cn", "memory-app-test.sdkwork.com", "memory-app-test.birdcoder.com", "memory-app-test.dtupay.com", "memory-app-test.sdkwork.cn", "memory-app-test.birdcoder.cn", "memory-app-test.dtupay.cn", "memory-admin-test.sdkwork.com", "memory-admin-test.birdcoder.com", "memory-admin-test.dtupay.com", "memory-admin-test.sdkwork.cn", "memory-admin-test.birdcoder.cn", "memory-admin-test.dtupay.cn", "memory-open-test.sdkwork.com", "memory-open-test.birdcoder.com", "memory-open-test.dtupay.com", "memory-open-test.sdkwork.cn", "memory-open-test.birdcoder.cn", "memory-open-test.dtupay.cn", "mem-test.sdkwork.com"]
-
-[[http.server.location]]
-match = "/api/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
-
-[[http.server.location]]
-match = "/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
-proxyBuffering = false
-proxyReadTimeout = "300s"
+serverName = ["memory-test.sdkwork.com", "memory-test.birdcoder.com", "memory-test.dtupay.com", "memory-test.sdkwork.cn", "memory-test.birdcoder.cn", "memory-test.dtupay.cn", "memory-test.skubc.com", "memory-test.skubc.cn", "memory-test.zowalk.com", "memory-test.zowalk.cn", "memory-test.offer86.com", "memory-test.offer86.cn", "memory-test.86offer.com", "memory-test.86offer.cn", "memory-app-test.sdkwork.com", "memory-app-test.birdcoder.com", "memory-app-test.dtupay.com", "memory-app-test.sdkwork.cn", "memory-app-test.birdcoder.cn", "memory-app-test.dtupay.cn", "memory-app-test.skubc.com", "memory-app-test.skubc.cn", "memory-app-test.zowalk.com", "memory-app-test.zowalk.cn", "memory-app-test.offer86.com", "memory-app-test.offer86.cn", "memory-app-test.86offer.com", "memory-app-test.86offer.cn", "memory-admin-test.sdkwork.com", "memory-admin-test.birdcoder.com", "memory-admin-test.dtupay.com", "memory-admin-test.sdkwork.cn", "memory-admin-test.birdcoder.cn", "memory-admin-test.dtupay.cn", "memory-admin-test.skubc.com", "memory-admin-test.skubc.cn", "memory-admin-test.zowalk.com", "memory-admin-test.zowalk.cn", "memory-admin-test.offer86.com", "memory-admin-test.offer86.cn", "memory-admin-test.86offer.com", "memory-admin-test.86offer.cn", "memory-open-test.sdkwork.com", "memory-open-test.birdcoder.com", "memory-open-test.dtupay.com", "memory-open-test.sdkwork.cn", "memory-open-test.birdcoder.cn", "memory-open-test.dtupay.cn", "memory-open-test.skubc.com", "memory-open-test.skubc.cn", "memory-open-test.zowalk.com", "memory-open-test.zowalk.cn", "memory-open-test.offer86.com", "memory-open-test.offer86.cn", "memory-open-test.86offer.com", "memory-open-test.86offer.cn", "mem-test.sdkwork.com"]
+include = ["snippets/gateway-locations.nonproduction.conf"]
 
