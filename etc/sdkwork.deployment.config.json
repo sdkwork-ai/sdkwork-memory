@@ -12,6 +12,12 @@
     "production": {
       "applicationOrigin": "https://memory.sdkwork.com",
       "cloudApiBaseUrl": "https://api.sdkwork.com"
+    },
+    "test": {
+      "cloudApiBaseUrl": "https://api-test.sdkwork.com"
+    },
+    "staging": {
+      "cloudApiBaseUrl": "https://api-staging.sdkwork.com"
     }
   },
   "profiles": {
