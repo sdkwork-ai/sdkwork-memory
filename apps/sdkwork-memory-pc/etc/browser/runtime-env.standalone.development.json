@@ -14,5 +14,7 @@
   "backendApiBaseUrl": "/",
   "driveAppApiBaseUrl": "/",
   "appbaseAppApiBaseUrl": "/",
-  "deployAppApiBaseUrl": "/"
+  "deployAppApiBaseUrl": "/",
+  "openApiBaseUrl": "/",
+  "sdkBaseUrl": "/"
 }
