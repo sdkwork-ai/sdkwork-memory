@@ -16,5 +16,5 @@ sdkwork-drive-uploader-service = { workspace = true }
 sdkwork-drive-workspace-service = { workspace = true }
 sdkwork-memory-spi.workspace = true
 sdkwork-utils-rust.workspace = true
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "postgres", "any"] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite", "postgres", "any", "derive"] }
 tracing.workspace = true
