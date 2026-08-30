@@ -18,7 +18,8 @@
         "development",
         "test",
         "staging",
-        "production"
+        "production",
+        "demo"
       ]
     }
   },
@@ -36,7 +37,9 @@
     "standalone.test": "etc/topology/standalone.test.env",
     "standalone.staging": "etc/topology/standalone.staging.env",
     "cloud.test": "etc/topology/cloud.test.env",
-    "cloud.staging": "etc/topology/cloud.staging.env"
+    "cloud.staging": "etc/topology/cloud.staging.env",
+    "standalone.demo": "etc/topology/standalone.demo.env",
+    "cloud.demo": "etc/topology/cloud.demo.env"
   },
   "envKeys": {
     "deploymentProfile": "SDKWORK_MEMORY_DEPLOYMENT_PROFILE",
@@ -150,6 +153,24 @@
             "memory-staging.86offer.com",
             "memory-staging.86offer.cn"
           ]
+        },
+        "demo": {
+          "httpHosts": [
+            "memory-demo.sdkwork.com",
+            "memory-demo.birdcoder.com",
+            "memory-demo.dtupay.com",
+            "memory-demo.sdkwork.cn",
+            "memory-demo.birdcoder.cn",
+            "memory-demo.dtupay.cn",
+            "memory-demo.skubc.com",
+            "memory-demo.skubc.cn",
+            "memory-demo.zowalk.com",
+            "memory-demo.zowalk.cn",
+            "memory-demo.offer86.com",
+            "memory-demo.offer86.cn",
+            "memory-demo.86offer.com",
+            "memory-demo.86offer.cn"
+          ]
         }
       },
       "httpHosts": [
@@ -224,6 +245,24 @@
             "memory-admin-staging.offer86.cn",
             "memory-admin-staging.86offer.com",
             "memory-admin-staging.86offer.cn"
+          ]
+        },
+        "demo": {
+          "httpHosts": [
+            "memory-admin-demo.sdkwork.com",
+            "memory-admin-demo.birdcoder.com",
+            "memory-admin-demo.dtupay.com",
+            "memory-admin-demo.sdkwork.cn",
+            "memory-admin-demo.birdcoder.cn",
+            "memory-admin-demo.dtupay.cn",
+            "memory-admin-demo.skubc.com",
+            "memory-admin-demo.skubc.cn",
+            "memory-admin-demo.zowalk.com",
+            "memory-admin-demo.zowalk.cn",
+            "memory-admin-demo.offer86.com",
+            "memory-admin-demo.offer86.cn",
+            "memory-admin-demo.86offer.com",
+            "memory-admin-demo.86offer.cn"
           ]
         }
       },
@@ -303,6 +342,25 @@
             "memory-open-staging.86offer.cn",
             "mem-staging.sdkwork.com"
           ]
+        },
+        "demo": {
+          "httpHosts": [
+            "memory-open-demo.sdkwork.com",
+            "memory-open-demo.birdcoder.com",
+            "memory-open-demo.dtupay.com",
+            "memory-open-demo.sdkwork.cn",
+            "memory-open-demo.birdcoder.cn",
+            "memory-open-demo.dtupay.cn",
+            "memory-open-demo.skubc.com",
+            "memory-open-demo.skubc.cn",
+            "memory-open-demo.zowalk.com",
+            "memory-open-demo.zowalk.cn",
+            "memory-open-demo.offer86.com",
+            "memory-open-demo.offer86.cn",
+            "memory-open-demo.86offer.com",
+            "memory-open-demo.86offer.cn",
+            "mem-demo.sdkwork.com"
+          ]
         }
       },
       "httpHosts": [
@@ -379,6 +437,24 @@
             "memory-app-staging.86offer.com",
             "memory-app-staging.86offer.cn"
           ]
+        },
+        "demo": {
+          "httpHosts": [
+            "memory-app-demo.sdkwork.com",
+            "memory-app-demo.birdcoder.com",
+            "memory-app-demo.dtupay.com",
+            "memory-app-demo.sdkwork.cn",
+            "memory-app-demo.birdcoder.cn",
+            "memory-app-demo.dtupay.cn",
+            "memory-app-demo.skubc.com",
+            "memory-app-demo.skubc.cn",
+            "memory-app-demo.zowalk.com",
+            "memory-app-demo.zowalk.cn",
+            "memory-app-demo.offer86.com",
+            "memory-app-demo.offer86.cn",
+            "memory-app-demo.86offer.com",
+            "memory-app-demo.86offer.cn"
+          ]
         }
       },
       "httpHosts": [
@@ -453,6 +529,24 @@
             "api-staging.offer86.cn",
             "api-staging.86offer.com",
             "api-staging.86offer.cn"
+          ]
+        },
+        "demo": {
+          "httpHosts": [
+            "api-demo.sdkwork.com",
+            "api-demo.birdcoder.com",
+            "api-demo.dtupay.com",
+            "api-demo.sdkwork.cn",
+            "api-demo.birdcoder.cn",
+            "api-demo.dtupay.cn",
+            "api-demo.skubc.com",
+            "api-demo.skubc.cn",
+            "api-demo.zowalk.com",
+            "api-demo.zowalk.cn",
+            "api-demo.offer86.com",
+            "api-demo.offer86.cn",
+            "api-demo.86offer.com",
+            "api-demo.86offer.cn"
           ]
         }
       },
@@ -589,6 +683,14 @@
           "application.public-ingress",
           "platform.api-gateway"
         ]
+      },
+      "standalone.demo": {
+        "processes": [],
+        "healthSurfaces": []
+      },
+      "cloud.demo": {
+        "processes": [],
+        "healthSurfaces": []
       }
     }
   },
