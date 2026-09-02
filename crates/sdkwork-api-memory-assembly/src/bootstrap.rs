@@ -38,10 +38,7 @@ use sdkwork_routes_memory_support::{
     memory_dependency_ready_check, memory_http_metrics, memory_metric_environment_label,
     refresh_memory_http_metric_dimensions,
 };
-use sdkwork_web_bootstrap::{
-    healthz_handler, livez_handler, readyz_handler, ApiAssemblyContribution, ReadinessCheck,
-    ReadinessFuture,
-};
+use sdkwork_web_bootstrap::{ApiAssemblyContribution, healthz_handler, livez_handler, ReadinessCheck, ReadinessFuture, readyz_handler, WebModule};
 use sdkwork_web_core::HttpRouteManifest;
 use tower::limit::ConcurrencyLimitLayer;
 use tracing::info;
@@ -251,4 +248,11 @@ pub async fn run_database_migrate_only() -> Result<(), String> {
     result?;
     info!("memory database migration completed");
     Ok(())
+}
+
+/// Canonical Web Module definition for this application
+/// (API_ASSEMBLY_SPEC §4.1.1): the complete HTTP surface — every route,
+/// manifest, and OpenAPI document of this owner — as one installable module.
+pub async fn web_module() -> Result<WebModule, String> {
+    Ok(WebModule::from_contribution(assemble_api_router_from_env().await?))
 }

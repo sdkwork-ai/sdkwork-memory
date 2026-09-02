@@ -2970,6 +2970,7 @@ dependencies = [
  "opentelemetry_sdk",
  "sdkwork-api-memory-assembly",
  "sdkwork-utils-rust",
+ "sdkwork-web-bootstrap",
  "tokio",
  "tracing",
  "tracing-opentelemetry",
@@ -3026,7 +3027,6 @@ dependencies = [
  "serde_json",
  "sqlx",
  "thiserror 2.0.18",
- "tokio",
  "tracing",
 ]
 

@@ -2,6 +2,7 @@ use sdkwork_api_memory_assembly::{
     assemble_api_router_from_env, run_database_migrate_only,
 };
 use sdkwork_api_memory_standalone_gateway::init_tracing;
+use sdkwork_web_bootstrap::ApiModuleRegistry;
 use std::process;
 use tokio::signal;
 use tokio::time::Duration;
@@ -29,10 +30,14 @@ async fn main() {
     // The assembly owns service construction, route composition, readiness,
     // and background workers; the listener projects `.router` and keeps the
     // worker shutdown handle for graceful drain (API_ASSEMBLY_SPEC §6.1).
-    let app = match assemble_api_router_from_env().await {
+    let mut module_registry = ApiModuleRegistry::new();
+    module_registry.add_module(match assemble_api_router_from_env().await {
         Ok(app) => app,
         Err(error) => exit_with_error("bootstrap", error),
-    };
+    });
+    let app = module_registry
+        .try_compose("SDKWork Memory API")
+        .unwrap_or_else(|error| panic!("SDKWork Memory API module composition failed: {error}"));
 
     let listener = match tokio::net::TcpListener::bind(&bind_address).await {
         Ok(listener) => listener,

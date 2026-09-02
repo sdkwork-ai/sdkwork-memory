@@ -27,3 +27,4 @@ tracing-opentelemetry = { version = "0.28", optional = true }
 opentelemetry = { version = "0.27", optional = true }
 opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"], optional = true }
 opentelemetry-otlp = { version = "0.27", features = ["http-proto", "reqwest-client"], optional = true }
+sdkwork-web-bootstrap.workspace = true
