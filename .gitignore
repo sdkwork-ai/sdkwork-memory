@@ -66,3 +66,6 @@ apps/sdkwork-memory-pc/public/runtime-env.json
 *.log
 .DS_Store
 Thumbs.db
+
+# Build artifacts
+/bin/

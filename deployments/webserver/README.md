@@ -38,6 +38,7 @@ effective(<profile>.<environment>) =
 | development | `server.development.toml` | 57 | `memory-dev.sdkwork.com` | 80 |
 | test | `server.test.toml` | 57 | `memory-test.sdkwork.com` | 80 |
 | staging | `server.staging.toml` | 57 | `memory-staging.sdkwork.com` | 80 |
+| demo | `server.demo.toml` | 57 | `memory-demo.sdkwork.com` | 80 |
 | production | `server.production.toml` | 57 | `memory.sdkwork.com` | 443 ssl + 80 |
 
 Surfaces: application.public-ingress, application.app-http, application.backend-http, application.open-http.
