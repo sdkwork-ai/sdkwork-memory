@@ -28,6 +28,14 @@ cert = "dtupay.com"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
+serverName = ["memory.noaper.com", "memory-app.noaper.com", "memory-admin.noaper.com", "memory-open.noaper.com"]
+include = ["snippets/gateway-locations.production.conf"]
+
+[http.server.tls]
+cert = "noaper.com"
+
+[[http.server]]
+listen = ["443 ssl", "80"]
 serverName = ["memory.sdkwork.cn", "memory-app.sdkwork.cn", "memory-admin.sdkwork.cn", "memory-open.sdkwork.cn"]
 include = ["snippets/gateway-locations.production.conf"]
 
@@ -49,6 +57,14 @@ include = ["snippets/gateway-locations.production.conf"]
 
 [http.server.tls]
 cert = "dtupay.cn"
+
+[[http.server]]
+listen = ["443 ssl", "80"]
+serverName = ["memory.noaper.cn", "memory-app.noaper.cn", "memory-admin.noaper.cn", "memory-open.noaper.cn"]
+include = ["snippets/gateway-locations.production.conf"]
+
+[http.server.tls]
+cert = "noaper.cn"
 
 [[http.server]]
 listen = ["443 ssl", "80"]

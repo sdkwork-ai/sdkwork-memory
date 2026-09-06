@@ -41,6 +41,14 @@ profiles:
           - memory-app.dtupay.com
           - memory-open.dtupay.com
           - memory.dtupay.com
+      - domain: memory-admin.noaper.com
+        tls: noaper.com
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.noaper.com
+          - memory-open.noaper.com
+          - memory.noaper.com
       - domain: memory-admin.sdkwork.cn
         tls: sdkwork.cn
         mode: api
@@ -65,6 +73,14 @@ profiles:
           - memory-app.dtupay.cn
           - memory-open.dtupay.cn
           - memory.dtupay.cn
+      - domain: memory-admin.noaper.cn
+        tls: noaper.cn
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.noaper.cn
+          - memory-open.noaper.cn
+          - memory.noaper.cn
       - domain: memory-admin.skubc.com
         tls: skubc.com
         mode: api
@@ -183,6 +199,14 @@ profiles:
           - memory-app.dtupay.com
           - memory-open.dtupay.com
           - memory.dtupay.com
+      - domain: memory-admin.noaper.com
+        tls: noaper.com
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.noaper.com
+          - memory-open.noaper.com
+          - memory.noaper.com
       - domain: memory-admin.sdkwork.cn
         tls: sdkwork.cn
         mode: api
@@ -207,6 +231,14 @@ profiles:
           - memory-app.dtupay.cn
           - memory-open.dtupay.cn
           - memory.dtupay.cn
+      - domain: memory-admin.noaper.cn
+        tls: noaper.cn
+        mode: api
+        apiPathStyle: full-prefix
+        aliases:
+          - memory-app.noaper.cn
+          - memory-open.noaper.cn
+          - memory.noaper.cn
       - domain: memory-admin.skubc.com
         tls: skubc.com
         mode: api
