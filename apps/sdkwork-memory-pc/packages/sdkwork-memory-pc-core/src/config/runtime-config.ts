@@ -1,4 +1,4 @@
-export type MemoryLifecycleEnvironment = "development" | "production" | "staging" | "test";
+export type MemoryLifecycleEnvironment = "development" | "production" | "staging" | "demo" | "test";
 export type MemoryDeploymentProfile = "cloud" | "standalone";
 export type MemoryLocale = "en-US" | "zh-CN";
 
@@ -21,7 +21,7 @@ export async function loadMemoryPcRuntimeConfig(fetcher: typeof fetch = fetch): 
 
 export function parseMemoryPcRuntimeConfig(value: unknown): MemoryPcRuntimeConfig {
   if (!isRecord(value)) throw new Error("Runtime configuration must be an object");
-  const environment = readEnum(value.environment, ["development", "test", "staging", "production"] as const, "environment");
+  const environment = readEnum(value.environment, ["development", "test", "staging", "demo", "production"] as const, "environment");
   const deploymentProfile = readEnum(value.deploymentProfile, ["standalone", "cloud"] as const, "deploymentProfile");
   const defaultLocale = readEnum(value.defaultLocale, ["zh-CN", "en-US"] as const, "defaultLocale");
   const fallbackLocale = readEnum(value.fallbackLocale, ["zh-CN", "en-US"] as const, "fallbackLocale");

@@ -69,3 +69,10 @@ Thumbs.db
 
 # Build artifacts
 /bin/
+
+# Generated SDK local regeneration output & compiled sourcemaps (not committed)
+sdks/**/generated/
+*.js.map
+*.d.ts.map
+sdks/**/*-typescript/src/index.js
+sdks/**/*-typescript/src/index.d.ts
