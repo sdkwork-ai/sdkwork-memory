@@ -1,0 +1,1 @@
+{"version":3,"file":"candidates-reject-response.d.ts","sourceRoot":"","sources":["candidates-reject-response.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,eAAe,EAAE,MAAM,oBAAoB,CAAC;AAE1D,MAAM,WAAW,wBAAwB;IACvC,IAAI,EAAE,CAAC,CAAC;IACR,IAAI,EAAE,OAAO,GAAG;QAAE,IAAI,EAAE,eAAe,CAAC;KAAE,CAAC;IAC3C,2CAA2C;IAC3C,OAAO,EAAE,MAAM,CAAC;CACjB"}

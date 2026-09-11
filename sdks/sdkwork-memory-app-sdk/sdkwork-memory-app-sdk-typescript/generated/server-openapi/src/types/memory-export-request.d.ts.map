@@ -1,0 +1,1 @@
+{"version":3,"file":"memory-export-request.d.ts","sourceRoot":"","sources":["memory-export-request.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,mBAAmB;IAClC,QAAQ,EAAE,MAAM,EAAE,CAAC;IACnB,MAAM,EAAE,MAAM,GAAG,OAAO,GAAG,UAAU,CAAC;IACtC,aAAa,CAAC,EAAE,OAAO,CAAC;IACxB,cAAc,CAAC,EAAE,MAAM,GAAG,IAAI,CAAC;IAC/B,QAAQ,CAAC,EAAE,MAAM,CAAC,MAAM,EAAE,OAAO,CAAC,GAAG,IAAI,CAAC;CAC3C"}

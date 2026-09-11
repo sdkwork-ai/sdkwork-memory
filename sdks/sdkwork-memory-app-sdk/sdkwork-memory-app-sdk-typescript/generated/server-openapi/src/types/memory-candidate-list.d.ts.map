@@ -1,0 +1,1 @@
+{"version":3,"file":"memory-candidate-list.d.ts","sourceRoot":"","sources":["memory-candidate-list.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,eAAe,EAAE,MAAM,oBAAoB,CAAC;AAC1D,OAAO,KAAK,EAAE,QAAQ,EAAE,MAAM,aAAa,CAAC;AAE5C,MAAM,WAAW,mBAAmB;IAClC,KAAK,EAAE,eAAe,EAAE,CAAC;IACzB,QAAQ,EAAE,QAAQ,CAAC;CACpB"}

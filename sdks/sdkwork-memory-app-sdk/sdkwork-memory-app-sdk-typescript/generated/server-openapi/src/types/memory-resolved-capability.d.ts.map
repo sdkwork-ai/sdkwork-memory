@@ -1,0 +1,1 @@
+{"version":3,"file":"memory-resolved-capability.d.ts","sourceRoot":"","sources":["memory-resolved-capability.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,wBAAwB;IACvC,cAAc,EAAE,MAAM,CAAC;IACvB,IAAI,EAAE,OAAO,GAAG,MAAM,GAAG,aAAa,CAAC;IACvC,QAAQ,EAAE,MAAM,CAAC;IACjB,MAAM,EAAE,MAAM,CAAC;CAChB"}

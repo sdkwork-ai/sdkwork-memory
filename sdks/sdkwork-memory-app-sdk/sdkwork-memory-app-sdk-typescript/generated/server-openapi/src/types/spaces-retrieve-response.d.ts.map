@@ -1,0 +1,1 @@
+{"version":3,"file":"spaces-retrieve-response.d.ts","sourceRoot":"","sources":["spaces-retrieve-response.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,WAAW,EAAE,MAAM,gBAAgB,CAAC;AAElD,MAAM,WAAW,sBAAsB;IACrC,IAAI,EAAE,CAAC,CAAC;IACR,IAAI,EAAE,OAAO,GAAG;QAAE,IAAI,EAAE,WAAW,CAAC;KAAE,CAAC;IACvC,2CAA2C;IAC3C,OAAO,EAAE,MAAM,CAAC;CACjB"}

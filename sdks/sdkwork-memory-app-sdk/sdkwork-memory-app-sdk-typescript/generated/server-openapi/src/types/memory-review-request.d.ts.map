@@ -1,0 +1,1 @@
+{"version":3,"file":"memory-review-request.d.ts","sourceRoot":"","sources":["memory-review-request.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,mBAAmB;IAClC,MAAM,CAAC,EAAE,MAAM,GAAG,IAAI,CAAC;IACvB,YAAY,CAAC,EAAE,MAAM,GAAG,IAAI,CAAC;IAC7B,QAAQ,CAAC,EAAE,MAAM,CAAC,MAAM,EAAE,OAAO,CAAC,GAAG,IAAI,CAAC;CAC3C"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"sdk-work-list-response.d.ts","sourceRoot":"","sources":["sdk-work-list-response.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,eAAe,EAAE,MAAM,sBAAsB,CAAC;AAE5D,MAAM,WAAW,mBAAmB;IAClC,IAAI,EAAE,CAAC,CAAC;IACR,IAAI,EAAE,OAAO,GAAG,eAAe,CAAC;IAChC,2CAA2C;IAC3C,OAAO,EAAE,MAAM,CAAC;CACjB"}

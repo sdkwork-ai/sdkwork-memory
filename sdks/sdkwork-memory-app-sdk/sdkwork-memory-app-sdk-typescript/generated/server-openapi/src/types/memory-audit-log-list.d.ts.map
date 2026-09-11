@@ -1,0 +1,1 @@
+{"version":3,"file":"memory-audit-log-list.d.ts","sourceRoot":"","sources":["memory-audit-log-list.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,cAAc,EAAE,MAAM,oBAAoB,CAAC;AACzD,OAAO,KAAK,EAAE,QAAQ,EAAE,MAAM,aAAa,CAAC;AAE5C,MAAM,WAAW,kBAAkB;IACjC,KAAK,EAAE,cAAc,EAAE,CAAC;IACxB,QAAQ,EAAE,QAAQ,CAAC;CACpB"}

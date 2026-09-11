@@ -1,0 +1,1 @@
+{"version":3,"file":"memory-entity-list.d.ts","sourceRoot":"","sources":["memory-entity-list.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,YAAY,EAAE,MAAM,iBAAiB,CAAC;AACpD,OAAO,KAAK,EAAE,QAAQ,EAAE,MAAM,aAAa,CAAC;AAE5C,MAAM,WAAW,gBAAgB;IAC/B,KAAK,EAAE,YAAY,EAAE,CAAC;IACtB,QAAQ,EAAE,QAAQ,CAAC;CACpB"}
