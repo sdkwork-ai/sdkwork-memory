@@ -68,10 +68,8 @@ apps/sdkwork-memory-pc/public/runtime-env.json
 Thumbs.db
 
 # Build artifacts
-/bin/
 
 # Generated SDK local regeneration output & compiled sourcemaps (not committed)
-sdks/**/generated/
 *.js.map
 *.d.ts.map
 sdks/**/*-typescript/src/index.js
