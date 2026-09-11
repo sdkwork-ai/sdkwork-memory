@@ -1,9 +1,13 @@
 [package]
+rust-version.workspace = true
 name = "sdkwork-memory-plugin-native-sql"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
 
+
+[lints]
+workspace = true
 [dependencies]
 async-trait.workspace = true
 futures = "0.3"

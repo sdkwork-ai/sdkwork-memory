@@ -1,9 +1,13 @@
 [package]
+rust-version.workspace = true
 name = "sdkwork-memory-profile-resolver"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
 
+
+[lints]
+workspace = true
 [dependencies]
 sdkwork-memory-spi.workspace = true
 serde.workspace = true

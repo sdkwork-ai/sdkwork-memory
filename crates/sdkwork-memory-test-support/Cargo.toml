@@ -1,9 +1,13 @@
 [package]
+rust-version.workspace = true
 name = "sdkwork-memory-test-support"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
 
+
+[lints]
+workspace = true
 [dependencies]
 async-trait.workspace = true
 sdkwork-memory-contract.workspace = true

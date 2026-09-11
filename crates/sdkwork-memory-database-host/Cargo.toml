@@ -1,10 +1,14 @@
 [package]
+rust-version.workspace = true
 name = "sdkwork-memory-database-host"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
 description = "SDKWork Memory database lifecycle bootstrap."
 
+
+[lints]
+workspace = true
 [lib]
 name = "sdkwork_memory_database_host"
 path = "src/lib.rs"

@@ -1,9 +1,13 @@
 [package]
+rust-version.workspace = true
 name = "sdkwork-memory-integration-tests"
 version.workspace = true
 edition.workspace = true
 publish = false
 
+
+[lints]
+workspace = true
 [dev-dependencies]
 axum.workspace = true
 http.workspace = true
