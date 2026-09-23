@@ -16503,6 +16503,16 @@
           "relationType": {
             "type": "string"
           },
+          "sourceMemoryId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "weight": {
             "anyOf": [
               {
@@ -16594,6 +16604,16 @@
           },
           "relationType": {
             "type": "string"
+          },
+          "sourceMemoryId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "weight": {
             "anyOf": [

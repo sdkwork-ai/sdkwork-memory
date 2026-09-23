@@ -14,6 +14,7 @@ use sdkwork_routes_memory_backend_api::{
 };
 use sdkwork_web_core::CONTENT_SHA256_HEADER;
 use serde_json::json;
+use sqlx::Row;
 use tower::util::ServiceExt;
 
 fn authed_get(uri: &str) -> Request<Body> {
@@ -148,6 +149,29 @@ async fn backend_commercial_entity_edge_policy_and_readiness_flow() {
         .expect("entityId");
     assert_ne!(entity_a_id, entity_b_id);
 
+    // A provenance memory the edge can point at (source_memory_id is a real
+    // foreign key into ai_record); written straight through the store because
+    // the backend face has no memory-create endpoint.
+    sqlx::query(
+        r#"
+        INSERT INTO ai_record (
+          id, uuid, tenant_id, space_id, user_id, scope, memory_type,
+          subject, predicate, object_text, canonical_text,
+          confidence, evidence_count, contradiction_count,
+          importance_score, recency_score,
+          status, sensitivity_level, created_at, updated_at, version
+        )
+        VALUES (9001, '99001', 100001, 1, 9001, 'user', 'semantic',
+                'person', 'knows', 'Alice knows Bob', 'Alice knows Bob',
+                1.0, 1, 0, 0.5, 0.5, 'active', 'internal',
+                '2026-09-23T00:00:00.000Z', '2026-09-23T00:00:00.000Z', 1)
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("provenance memory fixture");
+    let provenance_memory_id = "99001";
+
     let edge = app
         .clone()
         .oneshot(authed_json(
@@ -157,12 +181,20 @@ async fn backend_commercial_entity_edge_policy_and_readiness_flow() {
                 "spaceId": "1",
                 "sourceEntityId": entity_a_id,
                 "targetEntityId": entity_b_id,
-                "relationType": "knows"
+                "relationType": "knows",
+                "sourceMemoryId": provenance_memory_id
             }),
         ))
         .await
         .unwrap();
     assert_eq!(edge.status(), StatusCode::CREATED);
+    let edge_body = to_bytes(edge.into_body(), usize::MAX).await.unwrap();
+    let edge_json: serde_json::Value = serde_json::from_slice(&edge_body).unwrap();
+    assert_eq!(
+        api_envelope::item(&edge_json)["sourceMemoryId"].as_str(),
+        Some(provenance_memory_id),
+        "the edge must persist and echo its provenance memory id"
+    );
 
     let policy = app
         .clone()

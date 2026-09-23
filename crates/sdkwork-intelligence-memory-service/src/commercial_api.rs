@@ -789,6 +789,24 @@ impl super::open_api::OpenMemoryService {
 
         let scope = commercial_mutation_scope(&context, tenant_id, space_id);
         let journal = commercial_mutation_journal("edge", &uuid, "created")?;
+        // The caller names the provenance memory by its uuid; the column stores
+        // the internal record id. An unknown uuid is a validation error, not a
+        // silently dangling provenance link.
+        let source_record_id = match cmd.source_memory_id.as_deref() {
+            None => None,
+            Some(memory_uuid) => {
+                let record_id = self
+                    .store
+                    .lookup_record_row_id(&scope, memory_uuid)
+                    .await
+                    .map_err(Self::map_store_error)?;
+                Some(record_id.ok_or_else(|| {
+                    MemoryServiceError::validation(format!(
+                        "sourceMemoryId {memory_uuid} does not reference an existing memory"
+                    ))
+                })?)
+            }
+        };
         self.store
             .insert_edge_with_journal(
                 StoreInsertEdgeCommand {
@@ -799,6 +817,7 @@ impl super::open_api::OpenMemoryService {
                     source_entity_id,
                     target_entity_id,
                     relation_type: &cmd.relation_type,
+                    source_record_id,
                     weight: cmd.weight,
                     valid_from: cmd.valid_from.as_deref(),
                     valid_to: cmd.valid_to.as_deref(),
@@ -1756,6 +1775,7 @@ fn map_edge_row_to_dto(row: NativeSqlEdgeRow) -> MemoryEdge {
         source_entity_id: row.source_entity_uuid,
         target_entity_id: row.target_entity_uuid,
         relation_type: row.relation_type,
+        source_memory_id: row.source_memory_uuid,
         weight: row.weight,
         status: row.status,
         valid_from: row.valid_from,

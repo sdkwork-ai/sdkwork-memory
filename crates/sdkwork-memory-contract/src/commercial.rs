@@ -563,6 +563,9 @@ pub struct MemoryEdge {
     pub source_entity_id: String,
     pub target_entity_id: String,
     pub relation_type: String,
+    /// Canonical memory evidencing this edge (the edge's provenance link).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_memory_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub weight: Option<f64>,
     pub status: String,
@@ -594,6 +597,10 @@ pub struct CreateEdgeCommand {
     pub source_entity_id: String,
     pub target_entity_id: String,
     pub relation_type: String,
+    /// Canonical memory evidencing this edge; persisted so deleting that
+    /// memory clears exactly the edges it supported.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_memory_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub weight: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

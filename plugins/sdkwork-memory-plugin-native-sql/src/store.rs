@@ -4194,7 +4194,7 @@ impl NativeSqlMemoryStore {
         Ok(row)
     }
 
-    pub(crate) async fn lookup_record_row_id(
+    pub async fn lookup_record_row_id(
         &self,
         scope: &MemoryScopeContext,
         memory_id: &str,

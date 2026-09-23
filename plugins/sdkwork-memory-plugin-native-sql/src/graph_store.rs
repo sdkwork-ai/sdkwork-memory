@@ -35,6 +35,7 @@ pub struct NativeSqlEdgeRow {
     pub source_entity_uuid: String,
     pub target_entity_uuid: String,
     pub relation_type: String,
+    pub source_memory_uuid: Option<String>,
     pub weight: Option<f64>,
     pub status: String,
     pub valid_from: Option<String>,
@@ -73,6 +74,10 @@ pub struct InsertEdgeCommand<'a> {
     pub source_entity_id: i64,
     pub target_entity_id: i64,
     pub relation_type: &'a str,
+    /// Internal `ai_record.id` of the canonical memory evidencing this edge;
+    /// persisted into `ai_edge.source_memory_id` so deleting that memory can
+    /// clear exactly the edges it supported.
+    pub source_record_id: Option<i64>,
     pub weight: Option<f64>,
     pub valid_from: Option<&'a str>,
     pub valid_to: Option<&'a str>,
@@ -180,10 +185,11 @@ impl NativeSqlMemoryStore {
             r#"
             INSERT INTO ai_edge (
               id, uuid, tenant_id, space_id, source_entity_id, target_entity_id,
-              relation_type, weight, status, valid_from, valid_to, metadata_json,
+              relation_type, source_memory_id, weight, status, valid_from,
+              valid_to, metadata_json,
               created_at, updated_at, version
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, 1)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, 1)
             "#,
         )
         .bind(cmd.id)
@@ -193,6 +199,7 @@ impl NativeSqlMemoryStore {
         .bind(cmd.source_entity_id)
         .bind(cmd.target_entity_id)
         .bind(cmd.relation_type)
+        .bind(cmd.source_record_id)
         .bind(cmd.weight)
         .bind(cmd.valid_from)
         .bind(cmd.valid_to)
@@ -465,10 +472,11 @@ impl NativeSqlMemoryStore {
             r#"
             INSERT INTO ai_edge (
               id, uuid, tenant_id, space_id, source_entity_id, target_entity_id,
-              relation_type, weight, status, valid_from, valid_to, metadata_json,
+              relation_type, source_memory_id, weight, status, valid_from,
+              valid_to, metadata_json,
               created_at, updated_at, version
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, 1)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, 1)
             "#,
         )
         .bind(cmd.id)
@@ -478,6 +486,7 @@ impl NativeSqlMemoryStore {
         .bind(cmd.source_entity_id)
         .bind(cmd.target_entity_id)
         .bind(cmd.relation_type)
+        .bind(cmd.source_record_id)
         .bind(cmd.weight)
         .bind(cmd.valid_from)
         .bind(cmd.valid_to)
@@ -506,6 +515,7 @@ impl NativeSqlMemoryStore {
               source_entity.uuid AS source_entity_uuid,
               target_entity.uuid AS target_entity_uuid,
               edge.relation_type,
+              provenance.uuid AS source_memory_uuid,
               edge.weight,
               edge.status,
               edge.valid_from,
@@ -521,6 +531,9 @@ impl NativeSqlMemoryStore {
             JOIN ai_entity target_entity
               ON target_entity.id = edge.target_entity_id
              AND target_entity.tenant_id = edge.tenant_id
+            LEFT JOIN ai_record provenance
+              ON provenance.id = edge.source_memory_id
+             AND provenance.tenant_id = edge.tenant_id
             WHERE edge.tenant_id = ? AND edge.uuid = ? AND edge.status <> 'deleted'
             "#,
         )
@@ -554,6 +567,7 @@ impl NativeSqlMemoryStore {
               source_entity.uuid AS source_entity_uuid,
               target_entity.uuid AS target_entity_uuid,
               edge.relation_type,
+              provenance.uuid AS source_memory_uuid,
               edge.weight,
               edge.status,
               edge.valid_from,
@@ -569,6 +583,9 @@ impl NativeSqlMemoryStore {
             JOIN ai_entity target_entity
               ON target_entity.id = edge.target_entity_id
              AND target_entity.tenant_id = edge.tenant_id
+            LEFT JOIN ai_record provenance
+              ON provenance.id = edge.source_memory_id
+             AND provenance.tenant_id = edge.tenant_id
             WHERE edge.tenant_id = ?
               AND edge.status <> 'deleted'
               AND (? IS NULL OR edge.space_id = ?)
@@ -730,6 +747,7 @@ fn map_edge_row(row: sqlx::any::AnyRow) -> NativeSqlEdgeRow {
         source_entity_uuid: row.get("source_entity_uuid"),
         target_entity_uuid: row.get("target_entity_uuid"),
         relation_type: row.get("relation_type"),
+        source_memory_uuid: row.try_get("source_memory_uuid").ok(),
         weight: row.get("weight"),
         status: row.get("status"),
         valid_from: row.get("valid_from"),
