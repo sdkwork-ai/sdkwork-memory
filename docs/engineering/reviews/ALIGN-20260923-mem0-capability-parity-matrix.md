@@ -1597,6 +1597,18 @@ query 参数命名是 `page_size` 而实现（serde camelCase）实际只接收 
 **§9 计数更新**：缺失 6→**5**（#6 检索侧过期过滤关闭）；部分 7→**6**（#2 search 参数面
 的 `show_expired` 关闭；`threshold`/`explain` 仍被 provider 阻断，见 §20.4）。
 
+**批次 11 补记（同日，`7e7cde4` / `01f433d`）**：
+缺失 #5 `delete_all` 关闭 —— SPI `delete_all_canonical_atomic`（确定性 journal id，重复清扫幂等）+
+native-sql 单事务实现（逐条 journal + FTS 清理 + 可选 user_id 收窄）+ reference-profiles 实现 +
+open/app 两面 `POST .../memories/delete-all`（`memories.deleteAll`），backend 面保持不变（管理面已有单删与 supersede）。
+契约由 materializer 生成（`DeleteAllMemoriesRequest/Result` schema + 操作声明），parity 门禁绿。
+批次 4 ① `ai_edge.source_memory_id` 写入关闭 —— `InsertEdgeCommand.source_record_id`（内部 id）持久化，
+读回经 provenance JOIN 还原 uuid；`CreateEdgeCommand.sourceMemoryId` 指向不存在的记忆时报校验错而非静默悬挂。
+
+**最终计数（2026-09-23 批次 11 后）**：缺失 5→**4**（剩余：实体 SPI 端口抽象、查询侧实体选择、实体加权喂打分——
+三者同源于 §20.4 的 provider 阻断与结构决策；metadata_json 写入路径仍开放）；部分 6→**6**。
+provider-free 的用户可感对齐面在本轮**全部关闭**。
+
 ---
 
 ## 附：上游自身的缺陷（**不应复刻**，仅登记）
