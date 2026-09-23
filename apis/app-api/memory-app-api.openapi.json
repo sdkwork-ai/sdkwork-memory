@@ -46,7 +46,8 @@
               "type": "integer",
               "format": "int32",
               "minimum": 1,
-              "maximum": 200
+              "maximum": 200,
+              "default": 20
             }
           }
         ],
@@ -165,6 +166,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "spaces",
+        "x-sdkwork-permission": "memory.spaces.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -296,6 +298,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "spaces",
+        "x-sdkwork-permission": "memory.spaces.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -326,6 +329,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -438,6 +442,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "spaces",
+        "x-sdkwork-permission": "memory.spaces.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -456,6 +461,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -568,6 +574,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "spaces",
+        "x-sdkwork-permission": "memory.spaces.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -711,6 +718,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "events",
+        "x-sdkwork-permission": "memory.events.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -741,6 +749,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -751,6 +760,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -863,6 +873,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "events",
+        "x-sdkwork-permission": "memory.events.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -901,7 +912,8 @@
               "type": "integer",
               "format": "int32",
               "minimum": 1,
-              "maximum": 200
+              "maximum": 200,
+              "default": 20
             }
           },
           {
@@ -910,6 +922,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -1037,6 +1050,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "memories",
+        "x-sdkwork-permission": "memory.records.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -1168,6 +1182,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "memories",
+        "x-sdkwork-permission": "memory.records.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -1198,6 +1213,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -1208,6 +1224,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -1320,6 +1337,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "memories",
+        "x-sdkwork-permission": "memory.records.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -1338,6 +1356,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -1348,6 +1367,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -1460,6 +1480,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "memories",
+        "x-sdkwork-permission": "memory.records.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -1488,6 +1509,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -1498,6 +1520,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -1580,6 +1603,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "memories",
+        "x-sdkwork-permission": "memory.records.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -1601,6 +1625,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -1629,7 +1654,8 @@
               "type": "integer",
               "format": "int32",
               "minimum": 1,
-              "maximum": 200
+              "maximum": 200,
+              "default": 20
             }
           }
         ],
@@ -1748,6 +1774,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "memories",
+        "x-sdkwork-permission": "memory.records.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -1898,6 +1925,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "forgetRequests",
+        "x-sdkwork-permission": "memory.forget.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -2029,6 +2057,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "forgetRequests",
+        "x-sdkwork-permission": "memory.forget.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -2060,6 +2089,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -2172,6 +2202,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "forgetRequests",
+        "x-sdkwork-permission": "memory.forget.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -2305,6 +2336,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "extractions",
+        "x-sdkwork-permission": "memory.learning.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -2353,7 +2385,8 @@
               "type": "integer",
               "format": "int32",
               "minimum": 1,
-              "maximum": 200
+              "maximum": 200,
+              "default": 20
             }
           },
           {
@@ -2479,6 +2512,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "candidates",
+        "x-sdkwork-permission": "memory.candidates.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -2499,6 +2533,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -2611,6 +2646,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "candidates",
+        "x-sdkwork-permission": "memory.candidates.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -2631,6 +2667,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -2754,6 +2791,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "candidates",
+        "x-sdkwork-permission": "memory.candidates.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -2784,6 +2822,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -2907,6 +2946,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "candidates",
+        "x-sdkwork-permission": "memory.candidates.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -2955,7 +2995,8 @@
               "type": "integer",
               "format": "int32",
               "minimum": 1,
-              "maximum": 200
+              "maximum": 200,
+              "default": 20
             }
           },
           {
@@ -3081,6 +3122,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "habits",
+        "x-sdkwork-permission": "memory.habits.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -3101,6 +3143,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -3213,6 +3256,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "habits",
+        "x-sdkwork-permission": "memory.habits.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -3231,6 +3275,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -3343,6 +3388,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "habits",
+        "x-sdkwork-permission": "memory.habits.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -3373,6 +3419,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -3496,6 +3543,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "habits",
+        "x-sdkwork-permission": "memory.habits.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -3526,6 +3574,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -3649,6 +3698,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "habits",
+        "x-sdkwork-permission": "memory.habits.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -3792,6 +3842,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "retrievals",
+        "x-sdkwork-permission": "memory.retrievals.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -3822,6 +3873,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -3934,6 +3986,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "retrievals",
+        "x-sdkwork-permission": "memory.retrievals.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -4067,6 +4120,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "contextPacks",
+        "x-sdkwork-permission": "memory.contextPacks.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -4097,6 +4151,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -4209,6 +4264,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "contextPacks",
+        "x-sdkwork-permission": "memory.contextPacks.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -4342,6 +4398,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "feedback",
+        "x-sdkwork-permission": "memory.feedback.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -4502,6 +4559,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "exportJobs",
+        "x-sdkwork-permission": "memory.exports.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -4633,6 +4691,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "exportJobs",
+        "x-sdkwork-permission": "memory.exports.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -4664,6 +4723,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -4776,6 +4836,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "exportJobs",
+        "x-sdkwork-permission": "memory.exports.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -4897,6 +4958,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "learningSettings",
+        "x-sdkwork-permission": "memory.learningSettings.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -5016,6 +5078,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "learningSettings",
+        "x-sdkwork-permission": "memory.learningSettings.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -5064,21 +5127,23 @@
               "type": "integer",
               "format": "int32",
               "minimum": 1,
-              "maximum": 200
+              "maximum": 200,
+              "default": 20
             }
           },
           {
-            "name": "spaceId",
+            "name": "space_id",
             "in": "query",
             "required": false,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
           },
           {
-            "name": "entityType",
+            "name": "entity_type",
             "in": "query",
             "required": false,
             "schema": {
@@ -5201,6 +5266,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "entities",
+        "x-sdkwork-permission": "memory.app.entities.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -5332,6 +5398,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "entities",
+        "x-sdkwork-permission": "memory.app.entities.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -5362,6 +5429,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -5474,6 +5542,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "entities",
+        "x-sdkwork-permission": "memory.app.entities.read",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -5492,6 +5561,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -5604,6 +5674,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "entities",
+        "x-sdkwork-permission": "memory.app.entities.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -5652,7 +5723,8 @@
               "type": "integer",
               "format": "int32",
               "minimum": 1,
-              "maximum": 200
+              "maximum": 200,
+              "default": 20
             }
           }
         ],
@@ -5771,6 +5843,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "policyAssignments",
+        "x-sdkwork-permission": "memory.app.policies.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -5902,6 +5975,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "policyAssignments",
+        "x-sdkwork-permission": "memory.app.policies.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -5932,6 +6006,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -6044,6 +6119,7 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
         "x-sdkwork-resource": "policyAssignments",
+        "x-sdkwork-permission": "memory.app.policies.write",
         "x-sdkwork-tenant-scope": "tenant",
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
@@ -6081,6 +6157,7 @@
         "properties": {
           "spaceId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -6089,6 +6166,7 @@
           },
           "tenantId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -6096,6 +6174,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -6154,6 +6233,7 @@
           },
           "version": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -6172,6 +6252,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -6221,6 +6302,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -6264,6 +6346,7 @@
         "properties": {
           "eventId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -6272,6 +6355,7 @@
           },
           "spaceId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -6279,6 +6363,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -6371,6 +6456,7 @@
         "properties": {
           "spaceId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -6378,6 +6464,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -6483,6 +6570,7 @@
         "properties": {
           "memoryId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -6491,6 +6579,7 @@
           },
           "spaceId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -6498,6 +6587,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -6674,6 +6764,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -6686,6 +6777,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -6704,6 +6796,7 @@
           },
           "version": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -6720,6 +6813,7 @@
         "properties": {
           "spaceId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -6727,6 +6821,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -6869,6 +6964,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -6909,16 +7005,19 @@
         "properties": {
           "sourceId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "memoryId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "eventId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -6976,11 +7075,13 @@
         "properties": {
           "candidateId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "spaceId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -6988,6 +7089,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -7030,6 +7132,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -7106,6 +7209,7 @@
           },
           "version": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -7185,16 +7289,19 @@
         "properties": {
           "habitId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "spaceId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "userId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -7245,6 +7352,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -7285,6 +7393,7 @@
           },
           "version": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -7329,6 +7438,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -7366,6 +7476,7 @@
         "properties": {
           "spaceId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -7373,6 +7484,7 @@
             "type": "array",
             "items": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -7414,6 +7526,7 @@
         "properties": {
           "jobId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -7421,6 +7534,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -7493,6 +7607,7 @@
           },
           "version": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -7532,6 +7647,7 @@
             "type": "array",
             "items": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -7550,6 +7666,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -7618,6 +7735,7 @@
         "properties": {
           "retrievalId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -7654,6 +7772,7 @@
         "properties": {
           "traceId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -7661,6 +7780,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -7673,6 +7793,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -7779,6 +7900,7 @@
         "properties": {
           "hitId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -7796,6 +7918,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -7864,6 +7987,7 @@
             "type": "array",
             "items": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -7882,6 +8006,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -7922,6 +8047,7 @@
         "properties": {
           "contextPackId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -7929,6 +8055,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -7984,6 +8111,7 @@
           },
           "targetId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -8036,6 +8164,7 @@
         "properties": {
           "feedbackId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -8044,6 +8173,7 @@
           },
           "targetId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -8099,6 +8229,7 @@
                 "type": "array",
                 "items": {
                   "type": "string",
+                  "format": "int64",
                   "pattern": "^[0-9]+$",
                   "x-sdkwork-int64-string": true
                 }
@@ -8112,6 +8243,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -8157,6 +8289,7 @@
         "properties": {
           "forgetRequestId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -8220,6 +8353,7 @@
             "type": "array",
             "items": {
               "type": "string",
+              "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
             }
@@ -8270,6 +8404,7 @@
         "properties": {
           "exportJobId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -8369,6 +8504,7 @@
           },
           "version": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -8405,6 +8541,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -8429,6 +8566,7 @@
         "properties": {
           "indexId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -8436,6 +8574,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -8462,6 +8601,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -8474,6 +8614,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -8520,6 +8661,7 @@
           },
           "version": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -8536,6 +8678,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -8551,6 +8694,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -8563,6 +8707,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -8592,6 +8737,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -8637,6 +8783,7 @@
         "properties": {
           "retrievalProfileId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -8644,6 +8791,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -8705,6 +8853,7 @@
           },
           "version": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -8724,6 +8873,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -8779,6 +8929,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -8823,6 +8974,7 @@
         "properties": {
           "implementationProfileId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -8883,6 +9035,7 @@
           },
           "version": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -8939,6 +9092,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -8983,6 +9137,7 @@
         "properties": {
           "providerBindingId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -9064,6 +9219,7 @@
           },
           "version": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -9139,6 +9295,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -9294,6 +9451,7 @@
         "properties": {
           "evalRunId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -9454,6 +9612,7 @@
         "properties": {
           "auditLogId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -9563,6 +9722,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -9608,11 +9768,13 @@
         "properties": {
           "sourceImplementationProfileId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "targetImplementationProfileId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -9637,6 +9799,7 @@
                 "type": "array",
                 "items": {
                   "type": "string",
+                  "format": "int64",
                   "pattern": "^[0-9]+$",
                   "x-sdkwork-int64-string": true
                 }
@@ -9678,11 +9841,13 @@
         "properties": {
           "subjectId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "tenantId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -9690,6 +9855,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -9718,6 +9884,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -9750,6 +9917,7 @@
           },
           "version": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -9767,6 +9935,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -9795,6 +9964,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -9826,6 +9996,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -9883,11 +10054,13 @@
         "properties": {
           "bindingId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "tenantId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -9895,6 +10068,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -9920,6 +10094,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -9932,6 +10107,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -9944,6 +10120,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -10011,6 +10188,7 @@
           },
           "version": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -10027,6 +10205,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -10052,6 +10231,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -10064,6 +10244,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -10076,6 +10257,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -10168,11 +10350,13 @@
         "properties": {
           "capabilityBindingId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "tenantId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -10190,6 +10374,7 @@
           },
           "targetId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -10251,6 +10436,7 @@
           },
           "version": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -10279,6 +10465,7 @@
           },
           "targetId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -10430,6 +10617,7 @@
           },
           "targetId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -10451,11 +10639,13 @@
         "properties": {
           "entityId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "spaceId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -10505,6 +10695,7 @@
           },
           "version": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -10520,6 +10711,7 @@
         "properties": {
           "spaceId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -10630,21 +10822,25 @@
         "properties": {
           "edgeId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "spaceId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "sourceEntityId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "targetEntityId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -10707,6 +10903,7 @@
           },
           "version": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -10723,16 +10920,19 @@
         "properties": {
           "spaceId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "sourceEntityId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "targetEntityId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -10872,11 +11072,13 @@
         "properties": {
           "policyId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "tenantId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -10920,6 +11122,7 @@
           },
           "version": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -11033,16 +11236,19 @@
         "properties": {
           "policyAssignmentId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "tenantId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "policyId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -11059,6 +11265,7 @@
           },
           "targetId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -11110,6 +11317,7 @@
           },
           "version": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           }
@@ -11126,6 +11334,7 @@
         "properties": {
           "policyId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -11142,6 +11351,7 @@
           },
           "targetId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -11255,11 +11465,13 @@
         "properties": {
           "readinessId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "tenantId": {
             "type": "string",
+            "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
           },
@@ -11267,6 +11479,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -11419,6 +11632,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "int64",
                 "pattern": "^[0-9]+$",
                 "x-sdkwork-int64-string": true
               },
@@ -11536,7 +11750,9 @@
           },
           "totalItems": {
             "type": "string",
-            "pattern": "^[0-9]+$"
+            "format": "int64",
+            "pattern": "^[0-9]+$",
+            "x-sdkwork-int64-string": true
           },
           "totalPages": {
             "type": "integer",

@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
+// Initialization state: `baselineStrategy` is `baseline-plus-migrations`, so each declared
+// engine owns exactly one consolidated baseline and migrations/ holds only post-baseline
+// deltas. The per-migration SQL files referenced here previously were folded into these
+// baselines by reset-database-initialization-state.mjs.
 const baselinePaths = [
-  "tests/fixtures/database/sqlite/ddl/baseline/0001_memory_baseline.sql",
   "database/ddl/baseline/postgres/0001_memory_baseline.sql",
-  "tests/fixtures/database/sqlite/migrations/0001_memory_schema.up.sql",
-  "database/migrations/postgres/0001_memory_schema.up.sql",
+  "database/ddl/baseline/sqlite/0001_memory_baseline.sql",
 ];
 
 const requiredTables = [

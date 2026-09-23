@@ -1,1 +1,0 @@
-{"version":3,"file":"memory-policy-assignment-patch.d.ts","sourceRoot":"","sources":["memory-policy-assignment-patch.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,2BAA2B;IAC1C,QAAQ,CAAC,EAAE,MAAM,CAAC;IAClB,eAAe,CAAC,EAAE,SAAS,GAAG,UAAU,GAAG,MAAM,GAAG,QAAQ,CAAC;IAC7D,MAAM,CAAC,EAAE,MAAM,CAAC;IAChB,SAAS,CAAC,EAAE,MAAM,GAAG,IAAI,CAAC;IAC1B,OAAO,CAAC,EAAE,MAAM,GAAG,IAAI,CAAC;CACzB"}

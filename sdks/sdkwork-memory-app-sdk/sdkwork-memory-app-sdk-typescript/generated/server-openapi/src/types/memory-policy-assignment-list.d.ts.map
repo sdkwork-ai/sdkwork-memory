@@ -1,1 +1,0 @@
-{"version":3,"file":"memory-policy-assignment-list.d.ts","sourceRoot":"","sources":["memory-policy-assignment-list.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,sBAAsB,EAAE,MAAM,4BAA4B,CAAC;AACzE,OAAO,KAAK,EAAE,QAAQ,EAAE,MAAM,aAAa,CAAC;AAE5C,MAAM,WAAW,0BAA0B;IACzC,KAAK,EAAE,sBAAsB,EAAE,CAAC;IAChC,QAAQ,EAAE,QAAQ,CAAC;CACpB"}

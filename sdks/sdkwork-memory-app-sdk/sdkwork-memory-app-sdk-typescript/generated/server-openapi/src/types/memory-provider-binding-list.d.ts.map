@@ -1,1 +1,0 @@
-{"version":3,"file":"memory-provider-binding-list.d.ts","sourceRoot":"","sources":["memory-provider-binding-list.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,qBAAqB,EAAE,MAAM,2BAA2B,CAAC;AACvE,OAAO,KAAK,EAAE,QAAQ,EAAE,MAAM,aAAa,CAAC;AAE5C,MAAM,WAAW,yBAAyB;IACxC,KAAK,EAAE,qBAAqB,EAAE,CAAC;IAC/B,QAAQ,EAAE,QAAQ,CAAC;CACpB"}

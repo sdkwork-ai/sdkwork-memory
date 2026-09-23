@@ -1,1 +1,0 @@
-{"version":3,"file":"memory-subject-list.d.ts","sourceRoot":"","sources":["memory-subject-list.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,aAAa,EAAE,MAAM,kBAAkB,CAAC;AACtD,OAAO,KAAK,EAAE,QAAQ,EAAE,MAAM,aAAa,CAAC;AAE5C,MAAM,WAAW,iBAAiB;IAChC,KAAK,EAAE,aAAa,EAAE,CAAC;IACvB,QAAQ,EAAE,QAAQ,CAAC;CACpB"}

@@ -3920,62 +3920,14 @@ impl NativeSqlMemoryStore {
     }
 
     async fn apply_sqlite_phase1_migration(&self) -> Result<(), NativeSqlStoreError> {
-        const MIGRATIONS: &[(&str, &str)] = &[
-            (
-                "0001",
-                include_str!("../../../tests/fixtures/database/sqlite/migrations/0001_memory_schema.up.sql"),
-            ),
-            (
-                "0002",
-                include_str!("../../../tests/fixtures/database/sqlite/migrations/0002_memory_indexes.up.sql"),
-            ),
-            (
-                "0003",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0003_memory_tenant_preference.up.sql"
-                ),
-            ),
-            (
-                "0004",
-                include_str!("../../../tests/fixtures/database/sqlite/migrations/0004_memory_learning_job.up.sql"),
-            ),
-            (
-                "0005",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0005_memory_record_fulltext_search.up.sql"
-                ),
-            ),
-            (
-                "0006",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0006_memory_eval_run_extend.up.sql"
-                ),
-            ),
-            (
-                "0007",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0007_memory_commercial_management.up.sql"
-                ),
-            ),
-            (
-                "0008",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0008_memory_fts_predicate.up.sql"
-                ),
-            ),
-            (
-                "0009",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0009_memory_outbox_delivery_lease.up.sql"
-                ),
-            ),
-            (
-                "0010",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0010_memory_job_execution_lease.up.sql"
-                ),
-            ),
-        ];
+        // Initialization state: mirrors apply_postgres_phase1_migration. The application-root
+        // module keeps the full DDL snapshot in the consolidated baseline
+        // (database/ddl/baseline/sqlite/0001_memory_baseline.sql); migrations/ is reserved for
+        // post-GA changes and is intentionally empty.
+        const MIGRATIONS: &[(&str, &str)] = &[(
+            "baseline",
+            include_str!("../../../database/ddl/baseline/sqlite/0001_memory_baseline.sql"),
+        )];
         self.apply_embedded_sql_migrations(MIGRATIONS).await
     }
 

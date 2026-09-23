@@ -5,7 +5,7 @@ import type { MemoryAuditLog, MemoryBinding, MemoryBindingRequest, MemoryCandida
 
 
 export interface MemoryCommercialReadinessRebuildParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryCommercialReadinessApi {
@@ -20,10 +20,10 @@ async retrieve(requestOptions?: ApiRequestOptions): Promise<MemoryCommercialRead
     return this.client.request<MemoryCommercialReadiness>(backendApiPath(`/memory/commercial_readiness`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 
-async rebuild(body: MemoryCommercialReadinessRequest, params?: MemoryCommercialReadinessRebuildParams, requestOptions?: ApiRequestOptions): Promise<MemoryCommercialReadiness> {
+async rebuild(body: MemoryCommercialReadinessRequest, params: MemoryCommercialReadinessRebuildParams, requestOptions?: ApiRequestOptions): Promise<MemoryCommercialReadiness> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -38,7 +38,7 @@ export interface MemoryPolicyAssignmentsListParams {
 }
 
 export interface MemoryPolicyAssignmentsCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryPolicyAssignmentsApi {
@@ -58,10 +58,10 @@ async list(params?: MemoryPolicyAssignmentsListParams, requestOptions?: ApiReque
     return this.client.request<{ items: MemoryPolicyAssignment[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/policy_assignments`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryPolicyAssignmentRequest, params?: MemoryPolicyAssignmentsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryPolicyAssignment> {
+async create(body: MemoryPolicyAssignmentRequest, params: MemoryPolicyAssignmentsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryPolicyAssignment> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -90,7 +90,7 @@ export interface MemoryPoliciesListParams {
 }
 
 export interface MemoryPoliciesCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryPoliciesApi {
@@ -106,16 +106,16 @@ async list(params?: MemoryPoliciesListParams, requestOptions?: ApiRequestOptions
       { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
-      { name: 'policyType', value: params?.policyType, style: 'form', explode: true, allowReserved: false },
+      { name: 'policy_type', value: params?.policyType, style: 'form', explode: true, allowReserved: false },
       { name: 'scope', value: params?.scope, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryPolicy[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/policies`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryPolicyRequest, params?: MemoryPoliciesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryPolicy> {
+async create(body: MemoryPolicyRequest, params: MemoryPoliciesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryPolicy> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -145,7 +145,7 @@ export interface MemoryEdgesListParams {
 }
 
 export interface MemoryEdgesCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryEdgesApi {
@@ -161,17 +161,17 @@ async list(params?: MemoryEdgesListParams, requestOptions?: ApiRequestOptions): 
       { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
-      { name: 'spaceId', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
-      { name: 'sourceEntityId', value: params?.sourceEntityId, style: 'form', explode: true, allowReserved: false },
-      { name: 'relationType', value: params?.relationType, style: 'form', explode: true, allowReserved: false },
+      { name: 'space_id', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
+      { name: 'source_entity_id', value: params?.sourceEntityId, style: 'form', explode: true, allowReserved: false },
+      { name: 'relation_type', value: params?.relationType, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryEdge[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/edges`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryEdgeRequest, params?: MemoryEdgesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryEdge> {
+async create(body: MemoryEdgeRequest, params: MemoryEdgesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryEdge> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -201,7 +201,7 @@ export interface MemoryEntitiesListParams {
 }
 
 export interface MemoryEntitiesCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryEntitiesApi {
@@ -217,17 +217,17 @@ async list(params?: MemoryEntitiesListParams, requestOptions?: ApiRequestOptions
       { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
-      { name: 'spaceId', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
-      { name: 'entityType', value: params?.entityType, style: 'form', explode: true, allowReserved: false },
+      { name: 'space_id', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
+      { name: 'entity_type', value: params?.entityType, style: 'form', explode: true, allowReserved: false },
       { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryEntity[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/entities`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryEntityRequest, params?: MemoryEntitiesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryEntity> {
+async create(body: MemoryEntityRequest, params: MemoryEntitiesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryEntity> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -244,7 +244,7 @@ async update(entityId: string, body: MemoryEntityPatch, requestOptions?: ApiRequ
 }
 
 export interface MemoryCapabilitiesResolveParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryCapabilitiesApi {
@@ -255,10 +255,10 @@ export class MemoryCapabilitiesApi {
   }
 
 
-async resolve(body: MemoryResolveCapabilitiesRequest, params?: MemoryCapabilitiesResolveParams, requestOptions?: ApiRequestOptions): Promise<MemoryResolvedCapabilityList> {
+async resolve(body: MemoryResolveCapabilitiesRequest, params: MemoryCapabilitiesResolveParams, requestOptions?: ApiRequestOptions): Promise<MemoryResolvedCapabilityList> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -273,7 +273,7 @@ export interface MemoryCapabilityBindingsListParams {
 }
 
 export interface MemoryCapabilityBindingsCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryCapabilityBindingsApi {
@@ -293,10 +293,10 @@ async list(params?: MemoryCapabilityBindingsListParams, requestOptions?: ApiRequ
     return this.client.request<{ items: MemoryCapabilityBinding[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/capability_bindings`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryCapabilityBindingRequest, params?: MemoryCapabilityBindingsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryCapabilityBinding> {
+async create(body: MemoryCapabilityBindingRequest, params: MemoryCapabilityBindingsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryCapabilityBinding> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -319,7 +319,7 @@ export interface MemoryBindingsListParams {
 }
 
 export interface MemoryBindingsCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryBindingsApi {
@@ -339,10 +339,10 @@ async list(params?: MemoryBindingsListParams, requestOptions?: ApiRequestOptions
     return this.client.request<{ items: MemoryBinding[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/bindings`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryBindingRequest, params?: MemoryBindingsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryBinding> {
+async create(body: MemoryBindingRequest, params: MemoryBindingsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryBinding> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -367,7 +367,7 @@ export interface MemorySubjectsListParams {
 }
 
 export interface MemorySubjectsCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemorySubjectsApi {
@@ -383,16 +383,16 @@ async list(params?: MemorySubjectsListParams, requestOptions?: ApiRequestOptions
       { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
-      { name: 'subjectType', value: params?.subjectType, style: 'form', explode: true, allowReserved: false },
+      { name: 'subject_type', value: params?.subjectType, style: 'form', explode: true, allowReserved: false },
       { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemorySubject[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/subjects`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemorySubjectRequest, params?: MemorySubjectsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemorySubject> {
+async create(body: MemorySubjectRequest, params: MemorySubjectsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemorySubject> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -418,7 +418,7 @@ export interface MemoryMigrationJobsListParams {
 }
 
 export interface MemoryMigrationJobsCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryMigrationJobsApi {
@@ -437,10 +437,10 @@ async list(params?: MemoryMigrationJobsListParams, requestOptions?: ApiRequestOp
     return this.client.request<{ items: MemoryLearningJob[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/migration_jobs`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryMigrationJobRequest, params?: MemoryMigrationJobsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryLearningJob> {
+async create(body: MemoryMigrationJobRequest, params: MemoryMigrationJobsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryLearningJob> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -458,7 +458,7 @@ export interface MemoryRetentionJobsListParams {
 }
 
 export interface MemoryRetentionJobsCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryRetentionJobsApi {
@@ -477,10 +477,10 @@ async list(params?: MemoryRetentionJobsListParams, requestOptions?: ApiRequestOp
     return this.client.request<{ items: MemoryLearningJob[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/retention_jobs`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryRetentionJobRequest, params?: MemoryRetentionJobsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryLearningJob> {
+async create(body: MemoryRetentionJobRequest, params: MemoryRetentionJobsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryLearningJob> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -551,7 +551,7 @@ export interface MemoryEvalRunsListParams {
 }
 
 export interface MemoryEvalRunsCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryEvalRunsApi {
@@ -571,10 +571,10 @@ async list(params?: MemoryEvalRunsListParams, requestOptions?: ApiRequestOptions
     return this.client.request<{ items: MemoryEvalRun[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/eval_runs`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryEvalRunRequest, params?: MemoryEvalRunsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryEvalRun> {
+async create(body: MemoryEvalRunRequest, params: MemoryEvalRunsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryEvalRun> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -606,7 +606,7 @@ export interface MemoryProviderBindingsListParams {
 }
 
 export interface MemoryProviderBindingsCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryProviderBindingsApi {
@@ -626,10 +626,10 @@ async list(params?: MemoryProviderBindingsListParams, requestOptions?: ApiReques
     return this.client.request<{ items: MemoryProviderBinding[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/provider_bindings`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryProviderBindingRequest, params?: MemoryProviderBindingsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryProviderBinding> {
+async create(body: MemoryProviderBindingRequest, params: MemoryProviderBindingsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryProviderBinding> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -648,7 +648,7 @@ export interface MemoryImplementationProfilesListParams {
 }
 
 export interface MemoryImplementationProfilesCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryImplementationProfilesApi {
@@ -668,10 +668,10 @@ async list(params?: MemoryImplementationProfilesListParams, requestOptions?: Api
     return this.client.request<{ items: MemoryImplementationProfile[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/implementation_profiles`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryImplementationProfileRequest, params?: MemoryImplementationProfilesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryImplementationProfile> {
+async create(body: MemoryImplementationProfileRequest, params: MemoryImplementationProfilesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryImplementationProfile> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -694,7 +694,7 @@ export interface MemoryRetrievalProfilesListParams {
 }
 
 export interface MemoryRetrievalProfilesCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryRetrievalProfilesApi {
@@ -714,10 +714,10 @@ async list(params?: MemoryRetrievalProfilesListParams, requestOptions?: ApiReque
     return this.client.request<{ items: MemoryRetrievalProfile[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/retrieval_profiles`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryRetrievalProfileRequest, params?: MemoryRetrievalProfilesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryRetrievalProfile> {
+async create(body: MemoryRetrievalProfileRequest, params: MemoryRetrievalProfilesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryRetrievalProfile> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -740,11 +740,11 @@ export interface MemoryIndexesListParams {
 }
 
 export interface MemoryIndexesCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export interface MemoryIndexesRebuildParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryIndexesApi {
@@ -764,10 +764,10 @@ async list(params?: MemoryIndexesListParams, requestOptions?: ApiRequestOptions)
     return this.client.request<{ items: MemoryIndex[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/indexes`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryIndexRequest, params?: MemoryIndexesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryIndex> {
+async create(body: MemoryIndexRequest, params: MemoryIndexesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryIndex> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -782,10 +782,10 @@ async update(indexId: string, body: MemoryIndexRequest, requestOptions?: ApiRequ
     return this.client.request<MemoryIndex>(backendApiPath(`/memory/indexes/${serializePathParameter(indexId, { name: 'indexId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
   }
 
-async rebuild(indexId: string, body: MemoryReviewRequest, params?: MemoryIndexesRebuildParams, requestOptions?: ApiRequestOptions): Promise<MemoryLearningJob> {
+async rebuild(indexId: string, body: MemoryReviewRequest, params: MemoryIndexesRebuildParams, requestOptions?: ApiRequestOptions): Promise<MemoryLearningJob> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -799,7 +799,7 @@ export interface MemoryConsolidationJobsListParams {
 }
 
 export interface MemoryConsolidationJobsCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryConsolidationJobsApi {
@@ -818,10 +818,10 @@ async list(params?: MemoryConsolidationJobsListParams, requestOptions?: ApiReque
     return this.client.request<{ items: MemoryLearningJob[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/consolidation_jobs`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryExtractionRequest, params?: MemoryConsolidationJobsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryLearningJob> {
+async create(body: MemoryExtractionRequest, params: MemoryConsolidationJobsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryLearningJob> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -840,7 +840,7 @@ export interface MemoryExtractionJobsListParams {
 }
 
 export interface MemoryExtractionJobsCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryExtractionJobsApi {
@@ -860,10 +860,10 @@ async list(params?: MemoryExtractionJobsListParams, requestOptions?: ApiRequestO
     return this.client.request<{ items: MemoryLearningJob[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/extraction_jobs`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryExtractionRequest, params?: MemoryExtractionJobsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryLearningJob> {
+async create(body: MemoryExtractionRequest, params: MemoryExtractionJobsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryLearningJob> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -882,11 +882,11 @@ export interface MemoryCandidatesListParams {
 }
 
 export interface MemoryCandidatesApproveParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export interface MemoryCandidatesRejectParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryCandidatesApi {
@@ -906,20 +906,20 @@ async list(params?: MemoryCandidatesListParams, requestOptions?: ApiRequestOptio
     return this.client.request<{ items: MemoryCandidate[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/candidates`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async approve(candidateId: string, body: MemoryReviewRequest, params?: MemoryCandidatesApproveParams, requestOptions?: ApiRequestOptions): Promise<MemoryCandidate> {
+async approve(candidateId: string, body: MemoryReviewRequest, params: MemoryCandidatesApproveParams, requestOptions?: ApiRequestOptions): Promise<MemoryCandidate> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
     return this.client.request<MemoryCandidate>(backendApiPath(`/memory/candidates/${serializePathParameter(candidateId, { name: 'candidateId', style: 'simple', explode: false })}/approve`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
-async reject(candidateId: string, body: MemoryReviewRequest, params?: MemoryCandidatesRejectParams, requestOptions?: ApiRequestOptions): Promise<MemoryCandidate> {
+async reject(candidateId: string, body: MemoryReviewRequest, params: MemoryCandidatesRejectParams, requestOptions?: ApiRequestOptions): Promise<MemoryCandidate> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -1009,7 +1009,7 @@ export interface MemoryUpdateParams {
 }
 
 export interface MemorySupersedeParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryApi {
@@ -1091,10 +1091,10 @@ async update(memoryId: string, body: MemoryRecordRequest, params: MemoryUpdatePa
     return this.client.request<MemoryRecord>(appendQueryString(backendApiPath(`/memory/memories/${serializePathParameter(memoryId, { name: 'memoryId', style: 'simple', explode: false })}`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
   }
 
-async supersede(memoryId: string, body: MemoryRecordRequest, params?: MemorySupersedeParams, requestOptions?: ApiRequestOptions): Promise<MemoryRecord> {
+async supersede(memoryId: string, body: MemoryRecordRequest, params: MemorySupersedeParams, requestOptions?: ApiRequestOptions): Promise<MemoryRecord> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );

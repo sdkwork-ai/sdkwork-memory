@@ -54,7 +54,7 @@
         "type": "ICON",
         "purpose": "PRIMARY",
         "url": "https://cdn.sdkwork.com/apps/sdkwork-memory/assets/icon-1024.png",
-        "platform": "APP",
+        "platform": "API",
         "locale": "en-US",
         "width": 1024,
         "height": 1024,
@@ -64,57 +64,37 @@
         "sortOrder": 0,
         "enabled": true,
         "metadata": {
-          "generatedPlaceholder": true
+          "hostedOn": "sdkwork-cdn",
+          "assetVersion": "0.1.0"
         }
       },
       "platform": [],
       "metadata": {
-        "generatedPlaceholder": true
+        "generatedBy": "tools/materialize_phase1_contracts.mjs",
+        "hostedOn": "sdkwork-cdn"
       }
     },
-    "screenshots": [
-      {
-        "id": "sdkwork-memory-web-screenshot",
-        "type": "SCREENSHOT",
-        "purpose": "CATALOG_SCREENSHOT",
-        "url": "https://cdn.sdkwork.com/apps/sdkwork-memory/media/web-screenshot.png",
-        "platform": "WEB",
-        "locale": "en-US",
-        "deviceClass": "BROWSER",
-        "displayType": "WEB_DESKTOP",
-        "width": 1920,
-        "height": 1080,
-        "format": "PNG",
-        "fileSizeBytes": 1048576,
-        "alphaChannel": false,
-        "caption": "SDKWork Memory product screenshot.",
-        "sortOrder": 0,
-        "enabled": true,
-        "metadata": {
-          "generatedPlaceholder": true,
-          "altText": "SDKWork Memory app screenshot."
-        }
-      }
-    ],
+    "screenshots": [],
     "previews": [
       {
         "id": "sdkwork-memory-catalog-preview",
         "type": "PREVIEW_IMAGE",
         "purpose": "CATALOG_PREVIEW",
         "url": "https://cdn.sdkwork.com/apps/sdkwork-memory/media/preview-cover.png",
-        "platform": "WEB",
+        "platform": "API",
         "locale": "en-US",
         "width": 1600,
         "height": 900,
         "format": "PNG",
         "fileSizeBytes": 786432,
         "alphaChannel": false,
-        "caption": "SDKWork Memory preview.",
+        "caption": "SDKWork Memory service preview.",
         "sortOrder": 0,
         "enabled": true,
         "metadata": {
-          "generatedPlaceholder": true,
-          "altText": "SDKWork Memory preview cover."
+          "hostedOn": "sdkwork-cdn",
+          "assetVersion": "0.1.0",
+          "altText": "SDKWork Memory service preview cover."
         }
       }
     ],
@@ -156,7 +136,7 @@
           "sourceType": "CONTAINER_IMAGE",
           "packageFormat": "DOCKER_IMAGE",
           "platform": "API",
-          "url": "https://registry.example.com/sdkwork/sdkwork-memory:v1@sha256:0000000000000000000000000000000000000000000000000000000000000001",
+          "url": "oci://registry.sdkwork.com/apps/sdkwork-memory:0.1.0-rc.1",
           "enabled": false,
           "architecture": "x64",
           "profileBinding": "fixed",
@@ -174,7 +154,7 @@
           "sourceType": "CONTAINER_IMAGE",
           "packageFormat": "DOCKER_IMAGE",
           "platform": "API",
-          "url": "https://registry.example.com/sdkwork/sdkwork-memory:v1@sha256:0000000000000000000000000000000000000000000000000000000000000001",
+          "url": "oci://registry.sdkwork.com/apps/sdkwork-memory:0.1.0-rc.1",
           "enabled": false,
           "architecture": "x64",
           "profileBinding": "fixed",
@@ -185,38 +165,6 @@
             "digestRequiredBeforeRelease": true,
             "releaseEvidenceState": "pending-ci"
           }
-        },
-        {
-          "id": "linux-x64-standalone-server-tar-gz",
-          "name": "Sdkwork Memory standalone server archive",
-          "sourceType": "BINARY_URL",
-          "packageFormat": "TAR_GZ",
-          "platform": "API",
-          "url": "https://cdn.sdkwork.com/apps/sdkwork-memory/STABLE/0.1.0/linux-x64-standalone-server-tar-gz-0.1.0.tar.gz",
-          "architecture": "x64",
-          "checksumAlgorithm": "SHA-256",
-          "checksum": "9189aad33ff00cc74d0d92675b93c02ba207340f850ac825a382f5fd650a1d44",
-          "deploymentProfile": "standalone",
-          "runtimeTarget": "server",
-          "profileBinding": "fixed",
-          "enabled": true,
-          "metadata": {}
-        },
-        {
-          "id": "linux-x64-cloud-server-tar-gz",
-          "name": "Sdkwork Memory cloud server archive",
-          "sourceType": "BINARY_URL",
-          "packageFormat": "TAR_GZ",
-          "platform": "API",
-          "url": "https://cdn.sdkwork.com/apps/sdkwork-memory/STABLE/0.1.0/linux-x64-cloud-server-tar-gz-0.1.0.tar.gz",
-          "architecture": "x64",
-          "checksumAlgorithm": "SHA-256",
-          "checksum": "e411a90879c5947b60fb5f4d6ad505897810833daa33fee06274ef456f112ce1",
-          "deploymentProfile": "cloud",
-          "runtimeTarget": "server",
-          "profileBinding": "fixed",
-          "enabled": true,
-          "metadata": {}
         }
       ],
       "metadata": {
@@ -231,32 +179,32 @@
     "currentVersion": "0.1.0",
     "defaultChannel": "DEV",
     "latest": {
-      "STABLE": "0.1.0",
       "DEV": "0.1.0"
     },
     "notes": [
       {
         "version": "0.1.0",
         "releaseChannel": "DEV",
-        "title": "SDKWork Memory 0.1.0",
-        "summary": "SDKWork Memory initialized standard release.",
-        "content": "Initial SDKWork App Standard v3 manifest for SDKWork Memory.",
+        "title": "SDKWork Memory 0.1.0 Internal Release Candidate",
+        "summary": "Internal validation candidate for the Memory service and PC operations surfaces; production publication remains blocked until immutable container, migration, PostgreSQL, load, recovery, and security evidence is complete.",
+        "content": "SDKWork Memory currently provides an embedding-optional native SQL baseline, tenant-scoped governance, isolated Console and Admin SDK boundaries, and draft Kubernetes assets. It is not approved for production publication.",
         "highlights": [
-          "SDKWork App Standard v3 configuration initialized",
-          "platform_app projection metadata standardized",
-          "Download package matrix normalized"
+          "Space-isolated memory access with fail-closed production auth",
+          "Privacy export and outbox flows under production hardening",
+          "Draft Kubernetes migration, autoscaling, disruption, and monitoring descriptors",
+          "Release evidence pipeline pending immutable OCI publication and signing"
         ],
         "packageIds": [
           "container-x64-standalone-container-oci",
-          "container-x64-cloud-container-oci",
-          "linux-x64-standalone-server-tar-gz",
-          "linux-x64-cloud-server-tar-gz"
+          "container-x64-cloud-container-oci"
         ],
-        "publishedAt": "2026-05-07T00:00:00Z",
         "current": true,
         "forceUpdate": false,
         "minSupportedVersion": "0.1.0",
-        "metadata": {}
+        "metadata": {
+          "draft": true,
+          "contractState": "release-candidate"
+        }
       }
     ]
   },

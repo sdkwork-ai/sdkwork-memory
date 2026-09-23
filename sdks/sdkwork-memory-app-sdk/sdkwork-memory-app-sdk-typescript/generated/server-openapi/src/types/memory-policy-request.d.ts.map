@@ -1,1 +1,0 @@
-{"version":3,"file":"memory-policy-request.d.ts","sourceRoot":"","sources":["memory-policy-request.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,mBAAmB;IAClC,UAAU,EAAE,MAAM,CAAC;IACnB,KAAK,EAAE,MAAM,CAAC;IACd,QAAQ,CAAC,EAAE,MAAM,GAAG,IAAI,CAAC;IACzB,MAAM,EAAE,MAAM,CAAC,MAAM,EAAE,OAAO,CAAC,GAAG,IAAI,CAAC;CACxC"}

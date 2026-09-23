@@ -141,9 +141,14 @@ test("backend TypeScript capability resolution returns the named page type", () 
     "utf8",
   );
 
+  // Pins the contract this test is named for: the request body type and the
+  // named page return type. Parameter arity is deliberately not pinned —
+  // `params` becomes required as soon as the operation carries a required
+  // parameter such as the Idempotency-Key header, and the generator appends a
+  // `requestOptions` argument to every method.
   assert.match(
     generatedApi,
-    /async resolve\(body: MemoryResolveCapabilitiesRequest, params\?: MemoryCapabilitiesResolveParams\): Promise<MemoryResolvedCapabilityList>/,
+    /async resolve\(body: MemoryResolveCapabilitiesRequest,[^)]*\): Promise<MemoryResolvedCapabilityList> \{/,
   );
 });
 

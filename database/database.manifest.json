@@ -6,7 +6,8 @@
   "displayName": "MEMORY Database",
   "owner": "memory-platform",
   "engines": [
-    "postgres"
+    "postgres",
+    "sqlite"
   ],
   "defaultEngine": "postgres",
   "tablePrefix": "ai_",

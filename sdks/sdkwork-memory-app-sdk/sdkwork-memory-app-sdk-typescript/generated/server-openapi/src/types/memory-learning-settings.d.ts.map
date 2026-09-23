@@ -1,1 +1,0 @@
-{"version":3,"file":"memory-learning-settings.d.ts","sourceRoot":"","sources":["memory-learning-settings.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,sBAAsB;IACrC,kBAAkB,EAAE,OAAO,CAAC;IAC5B,oBAAoB,EAAE,MAAM,CAAC;IAC7B,4BAA4B,EAAE,OAAO,CAAC;IACtC,uBAAuB,EAAE,MAAM,CAAC;IAChC,kBAAkB,CAAC,EAAE,MAAM,GAAG,IAAI,CAAC;IACnC,SAAS,EAAE,MAAM,CAAC;IAClB,OAAO,EAAE,MAAM,CAAC;CACjB"}

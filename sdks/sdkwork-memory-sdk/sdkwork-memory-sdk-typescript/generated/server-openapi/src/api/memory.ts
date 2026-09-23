@@ -14,7 +14,7 @@ export interface MemoryEdgesListParams {
 }
 
 export interface MemoryEdgesCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryEdgesApi {
@@ -30,17 +30,17 @@ async list(params?: MemoryEdgesListParams, requestOptions?: ApiRequestOptions): 
       { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
-      { name: 'spaceId', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
-      { name: 'sourceEntityId', value: params?.sourceEntityId, style: 'form', explode: true, allowReserved: false },
-      { name: 'relationType', value: params?.relationType, style: 'form', explode: true, allowReserved: false },
+      { name: 'space_id', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
+      { name: 'source_entity_id', value: params?.sourceEntityId, style: 'form', explode: true, allowReserved: false },
+      { name: 'relation_type', value: params?.relationType, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryEdge[]; pageInfo: PageInfo; }>(appendQueryString(customApiPath(`/memory/edges`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryEdgeRequest, params?: MemoryEdgesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryEdge> {
+async create(body: MemoryEdgeRequest, params: MemoryEdgesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryEdge> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -70,7 +70,7 @@ export interface MemoryEntitiesListParams {
 }
 
 export interface MemoryEntitiesCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryEntitiesApi {
@@ -86,17 +86,17 @@ async list(params?: MemoryEntitiesListParams, requestOptions?: ApiRequestOptions
       { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
-      { name: 'spaceId', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
-      { name: 'entityType', value: params?.entityType, style: 'form', explode: true, allowReserved: false },
+      { name: 'space_id', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
+      { name: 'entity_type', value: params?.entityType, style: 'form', explode: true, allowReserved: false },
       { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryEntity[]; pageInfo: PageInfo; }>(appendQueryString(customApiPath(`/memory/entities`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryEntityRequest, params?: MemoryEntitiesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryEntity> {
+async create(body: MemoryEntityRequest, params: MemoryEntitiesCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryEntity> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -156,7 +156,7 @@ async retrieve(candidateId: string, requestOptions?: ApiRequestOptions): Promise
 }
 
 export interface MemoryExtractionsCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryExtractionsApi {
@@ -167,10 +167,10 @@ export class MemoryExtractionsApi {
   }
 
 
-async create(body: MemoryExtractionRequest, params?: MemoryExtractionsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryLearningJob> {
+async create(body: MemoryExtractionRequest, params: MemoryExtractionsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryLearningJob> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -179,7 +179,7 @@ async create(body: MemoryExtractionRequest, params?: MemoryExtractionsCreatePara
 }
 
 export interface MemoryFeedbackCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryFeedbackApi {
@@ -190,10 +190,10 @@ export class MemoryFeedbackApi {
   }
 
 
-async create(body: MemoryFeedbackRequest, params?: MemoryFeedbackCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryFeedback> {
+async create(body: MemoryFeedbackRequest, params: MemoryFeedbackCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryFeedback> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -202,7 +202,7 @@ async create(body: MemoryFeedbackRequest, params?: MemoryFeedbackCreateParams, r
 }
 
 export interface MemoryContextPacksCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryContextPacksApi {
@@ -213,10 +213,10 @@ export class MemoryContextPacksApi {
   }
 
 
-async create(body: MemoryContextPackRequest, params?: MemoryContextPacksCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryContextPack> {
+async create(body: MemoryContextPackRequest, params: MemoryContextPacksCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryContextPack> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -229,7 +229,7 @@ async retrieve(contextPackId: string, requestOptions?: ApiRequestOptions): Promi
 }
 
 export interface MemoryRetrievalsCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export class MemoryRetrievalsApi {
@@ -240,10 +240,10 @@ export class MemoryRetrievalsApi {
   }
 
 
-async create(body: MemoryRetrievalRequest, params?: MemoryRetrievalsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryRetrievalResult> {
+async create(body: MemoryRetrievalRequest, params: MemoryRetrievalsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryRetrievalResult> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -256,7 +256,7 @@ async retrieve(retrievalId: string, requestOptions?: ApiRequestOptions): Promise
 }
 
 export interface MemoryEventsCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export interface MemoryEventsRetrieveParams {
@@ -271,10 +271,10 @@ export class MemoryEventsApi {
   }
 
 
-async create(body: MemoryEventRequest, params?: MemoryEventsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryEvent> {
+async create(body: MemoryEventRequest, params: MemoryEventsCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryEvent> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
@@ -312,7 +312,7 @@ export interface MemoryListParams {
 }
 
 export interface MemoryCreateParams {
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 export interface MemoryRetrieveParams {
@@ -367,10 +367,10 @@ async list(params: MemoryListParams, requestOptions?: ApiRequestOptions): Promis
     return this.client.request<{ items: MemoryRecord[]; pageInfo: PageInfo; }>(appendQueryString(customApiPath(`/memory/memories`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-async create(body: MemoryRecordRequest, params?: MemoryCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryRecord> {
+async create(body: MemoryRecordRequest, params: MemoryCreateParams, requestOptions?: ApiRequestOptions): Promise<MemoryRecord> {
     const requestHeaders = buildRequestHeaders(
       {
-        'Idempotency-Key': { value: params?.idempotencyKey, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );

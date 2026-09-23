@@ -1739,8 +1739,12 @@ serialization: { int64: string, decimal: string, time: iso8601_utc }
 `);
 }
 
+// API_SPEC section 13.6: int64 wire fields are strings carrying the int64 format
+// plus the marker, so generated TypeScript SDKs keep them as `string` and never
+// round ids past Number.MAX_SAFE_INTEGER.
 const idSchema = {
   type: "string",
+  format: "int64",
   pattern: "^[0-9]+$",
   "x-sdkwork-int64-string": true
 };
@@ -1812,11 +1816,27 @@ function requiredSpaceIdQueryParam() {
   return { name: "space_id", in: "query", required: true, schema: idSchema };
 }
 
+// PAGINATION_SPEC section 3.1 mandates a single page_size contract for every
+// list surface: default 20, max 200. Both list helpers share the factory so the
+// default can never drift between offset and cursor paging again.
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 200;
+
+function pageSizeSchema() {
+  return {
+    type: "integer",
+    format: "int32",
+    minimum: 1,
+    maximum: MAX_PAGE_SIZE,
+    default: DEFAULT_PAGE_SIZE
+  };
+}
+
 function listParams(extra = []) {
   return [
     { name: "q", in: "query", required: false, schema: { type: "string" } },
     { name: "cursor", in: "query", required: false, schema: { type: "string" } },
-    { name: "page_size", in: "query", required: false, schema: { type: "integer", format: "int32", minimum: 1, maximum: 200 } },
+    { name: "page_size", in: "query", required: false, schema: pageSizeSchema() },
     ...extra
   ];
 }
@@ -1824,7 +1844,7 @@ function listParams(extra = []) {
 function cursorListParams(extra = []) {
   return [
     { name: "cursor", in: "query", required: false, schema: { type: "string" } },
-    { name: "page_size", in: "query", required: false, schema: { type: "integer", format: "int32", minimum: 1, maximum: 200, default: 20 } },
+    { name: "page_size", in: "query", required: false, schema: pageSizeSchema() },
     ...extra
   ];
 }
@@ -1833,7 +1853,12 @@ function idempotencyParam() {
   return {
     name: "Idempotency-Key",
     in: "header",
-    required: false,
+    // Required, not optional: the header is only ever attached to operations
+    // already marked x-sdkwork-idempotent: true, and API_SPEC's operation-pattern
+    // gate rejects an optional Idempotency-Key (idempotency-header-required).
+    // A retry-safe mutation cannot let a client silently omit the key, or the
+    // dedupe contract degrades to best-effort.
+    required: true,
     schema: { type: "string", minLength: 1, maxLength: 128 },
     description: "Client retry idempotency key scoped by tenant, principal, method, and path."
   };
@@ -3197,11 +3222,11 @@ function writeOpenApi() {
   }));
 
   // Commercial graph management.
-  addPath(paths, `${P}/entities`, "get", openOperation({ method: "get", authority, operationId: "entities.list", permission: "memory.open.entities.read", auditEvent: "memory.open.entity.list", queryParams: listParams([{ name: "spaceId", in: "query", required: false, schema: idSchema }, { name: "entityType", in: "query", required: false, schema: { type: "string" } }, { name: "status", in: "query", required: false, schema: { type: "string" } }]), responseSchema: "MemoryEntityList" }));
+  addPath(paths, `${P}/entities`, "get", openOperation({ method: "get", authority, operationId: "entities.list", permission: "memory.open.entities.read", auditEvent: "memory.open.entity.list", queryParams: listParams([{ name: "space_id", in: "query", required: false, schema: idSchema }, { name: "entity_type", in: "query", required: false, schema: { type: "string" } }, { name: "status", in: "query", required: false, schema: { type: "string" } }]), responseSchema: "MemoryEntityList" }));
   addPath(paths, `${P}/entities`, "post", openOperation({ method: "post", authority, operationId: "entities.create", permission: "memory.open.entities.write", auditEvent: "memory.open.entity.created", requestSchema: "MemoryEntityRequest", responseSchema: "MemoryEntity", idempotent: true }));
   addPath(paths, `${P}/entities/{entityId}`, "get", openOperation({ method: "get", authority, operationId: "entities.retrieve", permission: "memory.open.entities.read", auditEvent: "memory.open.entity.read", pathParams: [pathParam("entityId")], responseSchema: "MemoryEntity" }));
   addPath(paths, `${P}/entities/{entityId}`, "patch", openOperation({ method: "patch", authority, operationId: "entities.update", permission: "memory.open.entities.write", auditEvent: "memory.open.entity.updated", pathParams: [pathParam("entityId")], requestSchema: "MemoryEntityPatch", responseSchema: "MemoryEntity" }));
-  addPath(paths, `${P}/edges`, "get", openOperation({ method: "get", authority, operationId: "edges.list", permission: "memory.open.entities.read", auditEvent: "memory.open.edge.list", queryParams: listParams([{ name: "spaceId", in: "query", required: false, schema: idSchema }, { name: "sourceEntityId", in: "query", required: false, schema: idSchema }, { name: "relationType", in: "query", required: false, schema: { type: "string" } }]), responseSchema: "MemoryEdgeList" }));
+  addPath(paths, `${P}/edges`, "get", openOperation({ method: "get", authority, operationId: "edges.list", permission: "memory.open.entities.read", auditEvent: "memory.open.edge.list", queryParams: listParams([{ name: "space_id", in: "query", required: false, schema: idSchema }, { name: "source_entity_id", in: "query", required: false, schema: idSchema }, { name: "relation_type", in: "query", required: false, schema: { type: "string" } }]), responseSchema: "MemoryEdgeList" }));
   addPath(paths, `${P}/edges`, "post", openOperation({ method: "post", authority, operationId: "edges.create", permission: "memory.open.entities.write", auditEvent: "memory.open.edge.created", requestSchema: "MemoryEdgeRequest", responseSchema: "MemoryEdge", idempotent: true }));
   addPath(paths, `${P}/edges/{edgeId}`, "get", openOperation({ method: "get", authority, operationId: "edges.retrieve", permission: "memory.open.entities.read", auditEvent: "memory.open.edge.read", pathParams: [pathParam("edgeId")], responseSchema: "MemoryEdge" }));
   addPath(paths, `${P}/edges/{edgeId}`, "patch", openOperation({ method: "patch", authority, operationId: "edges.update", permission: "memory.open.entities.write", auditEvent: "memory.open.edge.updated", pathParams: [pathParam("edgeId")], requestSchema: "MemoryEdgePatch", responseSchema: "MemoryEdge" }));
@@ -3265,7 +3290,7 @@ function writeAppOpenApi() {
   addPath(paths, `${P}/learning_settings`, "patch", operation({ method: "patch", authority, operationId: "learningSettings.update", permission: "memory.learningSettings.write", auditEvent: "memory.learning_settings.updated", requestSchema: "MemoryLearningSettingsRequest", responseSchema: "MemoryLearningSettings" }));
 
   // Commercial management.
-  addPath(paths, `${P}/entities`, "get", operation({ method: "get", authority, operationId: "entities.list", permission: "memory.app.entities.read", auditEvent: "memory.app.entity.list", queryParams: listParams([{ name: "spaceId", in: "query", required: false, schema: idSchema }, { name: "entityType", in: "query", required: false, schema: { type: "string" } }]), responseSchema: "MemoryEntityList" }));
+  addPath(paths, `${P}/entities`, "get", operation({ method: "get", authority, operationId: "entities.list", permission: "memory.app.entities.read", auditEvent: "memory.app.entity.list", queryParams: listParams([{ name: "space_id", in: "query", required: false, schema: idSchema }, { name: "entity_type", in: "query", required: false, schema: { type: "string" } }]), responseSchema: "MemoryEntityList" }));
   addPath(paths, `${P}/entities`, "post", operation({ method: "post", authority, operationId: "entities.create", permission: "memory.app.entities.write", auditEvent: "memory.app.entity.created", requestSchema: "MemoryEntityRequest", responseSchema: "MemoryEntity", idempotent: true }));
   addPath(paths, `${P}/entities/{entityId}`, "get", operation({ method: "get", authority, operationId: "entities.retrieve", permission: "memory.app.entities.read", auditEvent: "memory.app.entity.read", pathParams: [pathParam("entityId")], responseSchema: "MemoryEntity" }));
   addPath(paths, `${P}/entities/{entityId}`, "patch", operation({ method: "patch", authority, operationId: "entities.update", permission: "memory.app.entities.write", auditEvent: "memory.app.entity.updated", pathParams: [pathParam("entityId")], requestSchema: "MemoryEntityPatch", responseSchema: "MemoryEntity" }));
@@ -3335,7 +3360,7 @@ function writeBackendOpenApi() {
   addPath(paths, `${P}/migration_jobs/{migrationJobId}`, "get", operation({ method: "get", authority, operationId: "migrationJobs.retrieve", permission: "memory.backend.migrations.read", auditEvent: "memory.backend.migration_job.read", pathParams: [pathParam("migrationJobId")], responseSchema: "MemoryLearningJob" }));
 
   // Commercial subject, binding, and capability management.
-  addPath(paths, `${P}/subjects`, "get", operation({ method: "get", authority, operationId: "subjects.list", permission: "memory.backend.subjects.read", auditEvent: "memory.backend.subject.list", queryParams: listParams([{ name: "subjectType", in: "query", required: false, schema: { type: "string" } }, { name: "status", in: "query", required: false, schema: { type: "string" } }]), responseSchema: "MemorySubjectList" }));
+  addPath(paths, `${P}/subjects`, "get", operation({ method: "get", authority, operationId: "subjects.list", permission: "memory.backend.subjects.read", auditEvent: "memory.backend.subject.list", queryParams: listParams([{ name: "subject_type", in: "query", required: false, schema: { type: "string" } }, { name: "status", in: "query", required: false, schema: { type: "string" } }]), responseSchema: "MemorySubjectList" }));
   addPath(paths, `${P}/subjects`, "post", operation({ method: "post", authority, operationId: "subjects.create", permission: "memory.backend.subjects.write", auditEvent: "memory.backend.subject.created", requestSchema: "MemorySubjectRequest", responseSchema: "MemorySubject", idempotent: true }));
   addPath(paths, `${P}/subjects/{subjectId}`, "get", operation({ method: "get", authority, operationId: "subjects.retrieve", permission: "memory.backend.subjects.read", auditEvent: "memory.backend.subject.read", pathParams: [pathParam("subjectId")], responseSchema: "MemorySubject" }));
   addPath(paths, `${P}/subjects/{subjectId}`, "patch", operation({ method: "patch", authority, operationId: "subjects.update", permission: "memory.backend.subjects.write", auditEvent: "memory.backend.subject.updated", pathParams: [pathParam("subjectId")], requestSchema: "MemorySubjectPatch", responseSchema: "MemorySubject" }));
@@ -3351,16 +3376,16 @@ function writeBackendOpenApi() {
   addPath(paths, `${P}/capabilities/resolve`, "post", operation({ method: "post", authority, operationId: "capabilities.resolve", permission: "memory.backend.capabilityBindings.read", auditEvent: "memory.backend.capabilities.resolved", requestSchema: "MemoryResolveCapabilitiesRequest", responseSchema: "MemoryResolvedCapabilityListResponse", status: "200", idempotent: true }));
 
   // Commercial graph, policy, and readiness management.
-  addPath(paths, `${P}/entities`, "get", operation({ method: "get", authority, operationId: "entities.list", permission: "memory.backend.entities.read", auditEvent: "memory.backend.entity.list", queryParams: listParams([{ name: "spaceId", in: "query", required: false, schema: idSchema }, { name: "entityType", in: "query", required: false, schema: { type: "string" } }, { name: "status", in: "query", required: false, schema: { type: "string" } }]), responseSchema: "MemoryEntityList" }));
+  addPath(paths, `${P}/entities`, "get", operation({ method: "get", authority, operationId: "entities.list", permission: "memory.backend.entities.read", auditEvent: "memory.backend.entity.list", queryParams: listParams([{ name: "space_id", in: "query", required: false, schema: idSchema }, { name: "entity_type", in: "query", required: false, schema: { type: "string" } }, { name: "status", in: "query", required: false, schema: { type: "string" } }]), responseSchema: "MemoryEntityList" }));
   addPath(paths, `${P}/entities`, "post", operation({ method: "post", authority, operationId: "entities.create", permission: "memory.backend.entities.write", auditEvent: "memory.backend.entity.created", requestSchema: "MemoryEntityRequest", responseSchema: "MemoryEntity", idempotent: true }));
   addPath(paths, `${P}/entities/{entityId}`, "get", operation({ method: "get", authority, operationId: "entities.retrieve", permission: "memory.backend.entities.read", auditEvent: "memory.backend.entity.read", pathParams: [pathParam("entityId")], responseSchema: "MemoryEntity" }));
   addPath(paths, `${P}/entities/{entityId}`, "patch", operation({ method: "patch", authority, operationId: "entities.update", permission: "memory.backend.entities.write", auditEvent: "memory.backend.entity.updated", pathParams: [pathParam("entityId")], requestSchema: "MemoryEntityPatch", responseSchema: "MemoryEntity" }));
-  addPath(paths, `${P}/edges`, "get", operation({ method: "get", authority, operationId: "edges.list", permission: "memory.backend.entities.read", auditEvent: "memory.backend.edge.list", queryParams: listParams([{ name: "spaceId", in: "query", required: false, schema: idSchema }, { name: "sourceEntityId", in: "query", required: false, schema: idSchema }, { name: "relationType", in: "query", required: false, schema: { type: "string" } }]), responseSchema: "MemoryEdgeList" }));
+  addPath(paths, `${P}/edges`, "get", operation({ method: "get", authority, operationId: "edges.list", permission: "memory.backend.entities.read", auditEvent: "memory.backend.edge.list", queryParams: listParams([{ name: "space_id", in: "query", required: false, schema: idSchema }, { name: "source_entity_id", in: "query", required: false, schema: idSchema }, { name: "relation_type", in: "query", required: false, schema: { type: "string" } }]), responseSchema: "MemoryEdgeList" }));
   addPath(paths, `${P}/edges`, "post", operation({ method: "post", authority, operationId: "edges.create", permission: "memory.backend.edges.write", auditEvent: "memory.backend.edge.created", requestSchema: "MemoryEdgeRequest", responseSchema: "MemoryEdge", idempotent: true }));
   addPath(paths, `${P}/edges/{edgeId}`, "get", operation({ method: "get", authority, operationId: "edges.retrieve", permission: "memory.backend.entities.read", auditEvent: "memory.backend.edge.read", pathParams: [pathParam("edgeId")], responseSchema: "MemoryEdge" }));
   addPath(paths, `${P}/edges/{edgeId}`, "patch", operation({ method: "patch", authority, operationId: "edges.update", permission: "memory.backend.edges.write", auditEvent: "memory.backend.edge.updated", pathParams: [pathParam("edgeId")], requestSchema: "MemoryEdgePatch", responseSchema: "MemoryEdge" }));
   addPath(paths, `${P}/edges/{edgeId}`, "delete", operation({ method: "delete", authority, operationId: "edges.delete", permission: "memory.backend.edges.write", auditEvent: "memory.backend.edge.deleted", pathParams: [pathParam("edgeId")], responseSchema: "MemoryEdge", status: "204" }));
-  addPath(paths, `${P}/policies`, "get", operation({ method: "get", authority, operationId: "policies.list", permission: "memory.backend.policies.write", auditEvent: "memory.backend.policy.list", queryParams: listParams([{ name: "policyType", in: "query", required: false, schema: { type: "string" } }, { name: "scope", in: "query", required: false, schema: { type: "string" } }]), responseSchema: "MemoryPolicyList" }));
+  addPath(paths, `${P}/policies`, "get", operation({ method: "get", authority, operationId: "policies.list", permission: "memory.backend.policies.write", auditEvent: "memory.backend.policy.list", queryParams: listParams([{ name: "policy_type", in: "query", required: false, schema: { type: "string" } }, { name: "scope", in: "query", required: false, schema: { type: "string" } }]), responseSchema: "MemoryPolicyList" }));
   addPath(paths, `${P}/policies`, "post", operation({ method: "post", authority, operationId: "policies.create", permission: "memory.backend.policies.write", auditEvent: "memory.backend.policy.created", requestSchema: "MemoryPolicyRequest", responseSchema: "MemoryPolicy", idempotent: true }));
   addPath(paths, `${P}/policies/{policyId}`, "get", operation({ method: "get", authority, operationId: "policies.retrieve", permission: "memory.backend.policies.write", auditEvent: "memory.backend.policy.read", pathParams: [pathParam("policyId")], responseSchema: "MemoryPolicy" }));
   addPath(paths, `${P}/policies/{policyId}`, "patch", operation({ method: "patch", authority, operationId: "policies.update", permission: "memory.backend.policies.write", auditEvent: "memory.backend.policy.updated", pathParams: [pathParam("policyId")], requestSchema: "MemoryPolicyPatch", responseSchema: "MemoryPolicy" }));

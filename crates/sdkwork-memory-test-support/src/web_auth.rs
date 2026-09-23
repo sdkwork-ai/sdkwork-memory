@@ -50,6 +50,8 @@ pub fn memory_access_token(user_id: &str) -> String {
         "environment": "dev",
         "deployment_mode": "saas",
         "login_scope": "TENANT",
+        // token-claims-gate: legacy-fixture — constructs a pre-slimming credential so this
+        // test can assert the claim is no longer an authorization source.
         "permission_scope": ["memory.*"]
     }))
 }

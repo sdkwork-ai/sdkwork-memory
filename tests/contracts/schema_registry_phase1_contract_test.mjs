@@ -22,9 +22,12 @@ const phase1Tables = new Set([
   "ai_outbox_event",
 ]);
 
+// Initialization state: each declared engine owns exactly one consolidated baseline, so the
+// schema-registry indexes and tables must be materialized by that baseline rather than by the
+// per-version SQL files that reset-database-initialization-state.mjs folded into it.
 const migrationPaths = [
-  "tests/fixtures/database/sqlite/migrations/0001_memory_schema.up.sql",
-  "database/migrations/postgres/0001_memory_schema.up.sql",
+  "database/ddl/baseline/postgres/0001_memory_baseline.sql",
+  "database/ddl/baseline/sqlite/0001_memory_baseline.sql",
 ];
 
 function loadSchemaRegistryIndexes() {
@@ -71,16 +74,7 @@ function loadSchemaRegistryIndexes() {
 const requiredIndexes = loadSchemaRegistryIndexes();
 assert.ok(requiredIndexes.length > 0, "schema registry must declare phase1 indexes");
 
-const migrationGroups = [
-  [
-    "tests/fixtures/database/sqlite/migrations/0001_memory_schema.up.sql",
-    "tests/fixtures/database/sqlite/migrations/0002_memory_indexes.up.sql",
-  ],
-  [
-    "database/migrations/postgres/0001_memory_schema.up.sql",
-    "database/migrations/postgres/0002_memory_indexes.up.sql",
-  ],
-];
+const migrationGroups = migrationPaths.map((migrationPath) => [migrationPath]);
 
 for (const group of migrationGroups) {
   const combinedSql = group
@@ -123,7 +117,10 @@ for (const migrationPath of migrationPaths) {
   }
   assert.doesNotMatch(
     sql,
-    /vector|embedding\(/,
+    // Word-anchored: the native-sql profile legitimately uses PostgreSQL full-text search
+    // (`TSVECTOR`, `to_tsvector`), which an unanchored /vector/ substring match misreads as
+    // vector storage.
+    /\b(vector|embedding|embeddings|pgvector)\b/,
     `${migrationPath} must not require vector or embedding storage in Phase 1`,
   );
 }
@@ -133,9 +130,9 @@ const storeSource = fs.readFileSync(
   "utf8",
 );
 assert.ok(
-  storeSource.includes("tests/fixtures/database/sqlite/migrations/0002_memory_indexes.up.sql")
-    && storeSource.includes("database/migrations/postgres/0002_memory_indexes.up.sql"),
-  "native-sql store must apply phase1 index migration",
+  storeSource.includes("database/ddl/baseline/postgres/0001_memory_baseline.sql") &&
+    storeSource.includes("database/ddl/baseline/sqlite/0001_memory_baseline.sql"),
+  "native-sql store must consume the application-root consolidated baseline for both engines",
 );
 
 console.log(

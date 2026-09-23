@@ -1,1 +1,0 @@
-{"version":3,"file":"memory-provider-health.d.ts","sourceRoot":"","sources":["memory-provider-health.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,qBAAqB,EAAE,MAAM,2BAA2B,CAAC;AAEvE,MAAM,WAAW,oBAAoB;IACnC,MAAM,EAAE,SAAS,GAAG,UAAU,GAAG,WAAW,GAAG,SAAS,CAAC;IACzD,SAAS,EAAE,MAAM,CAAC;IAClB,SAAS,EAAE,qBAAqB,EAAE,CAAC;CACpC"}

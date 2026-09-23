@@ -220,19 +220,18 @@ assert(
 const adminTables = readText('plugins/sdkwork-memory-plugin-native-sql/src/admin_tables.rs');
 const nativeSqlStore = readText('plugins/sdkwork-memory-plugin-native-sql/src/store.rs');
 assert(
-  nativeSqlStore.includes('database/migrations/postgres/0002_memory_indexes.up.sql') &&
-    nativeSqlStore.includes('tests/fixtures/database/sqlite/migrations/0002_memory_indexes.up.sql'),
-  'native-sql compatibility bootstrap must consume canonical root index migrations',
+  nativeSqlStore.includes('database/ddl/baseline/postgres/0001_memory_baseline.sql') &&
+    nativeSqlStore.includes('database/ddl/baseline/sqlite/0001_memory_baseline.sql'),
+  'native-sql compatibility bootstrap must consume the consolidated application-root baseline for both engines',
 );
-assert(
-  fs.existsSync(
-    path.join(
-      repoRoot,
-      'tests/fixtures/database/sqlite/migrations/0002_memory_indexes.up.sql',
+for (const engine of ['postgres', 'sqlite']) {
+  assert(
+    fs.existsSync(
+      path.join(repoRoot, `database/ddl/baseline/${engine}/0001_memory_baseline.sql`),
     ),
-  ),
-  'canonical SQLite phase1 index migration must exist per DATABASE_SPEC',
-);
+    `consolidated ${engine} baseline must exist per DATABASE_FRAMEWORK_SPEC section 584`,
+  );
+}
 for (const [needle, message] of [
   ['implementation_profile_id', 'native-sql admin tables must persist index implementation_profile_id'],
   ['provider_binding_id', 'native-sql admin tables must persist index provider_binding_id'],
@@ -264,20 +263,20 @@ assert(
   'k8s readiness probe must target /readyz for database-backed readiness',
 );
 assert(
-  readText('crates/sdkwork-api-memory-standalone-gateway/src/bootstrap.rs').includes('bootstrap_memory_runtime_from_env'),
-  'standalone-gateway bootstrap must use unified memory runtime bootstrap',
+  readText('crates/sdkwork-api-memory-assembly/src/bootstrap.rs').includes('bootstrap_memory_runtime_from_env'),
+  'memory assembly bootstrap must use unified memory runtime bootstrap',
 );
 assert(
   /\.route\(\s*["']\/readyz["']/.test(
-    readText('crates/sdkwork-api-memory-standalone-gateway/src/bootstrap.rs'),
+    readText('crates/sdkwork-api-memory-assembly/src/bootstrap.rs'),
   ),
-  'standalone-gateway must expose /readyz readiness endpoint',
+  'memory assembly must expose the /readyz readiness endpoint for the thin gateway projection',
 );
 assert(
-  readText('crates/sdkwork-api-memory-standalone-gateway/src/readiness.rs').includes(
+  readText('crates/sdkwork-routes-memory-support/src/readiness.rs').includes(
     'memory_dependency_ready_check',
   ),
-  'standalone-gateway composite readiness must validate IAM and Redis dependencies',
+  'composite readiness must validate IAM and Redis dependencies',
 );
 assert(
   readText('plugins/sdkwork-memory-plugin-native-sql/src/store.rs').includes(
@@ -303,13 +302,22 @@ assert(
   ),
   'outbox publisher must deliver events through a dedicated adapter',
 );
-assert(
-  !readText('crates/sdkwork-api-memory-standalone-gateway/src/bootstrap.rs')
-    .split('async fn metrics')[1]
-    .split('async fn build_router')[0]
-    .includes('ready_check'),
-  'metrics endpoint must not depend on database readiness probes',
-);
+{
+  // The metrics handler lives in the assembly bootstrap, delimited by the next public
+  // entrypoint. Resolve the anchors explicitly so a future rename fails loudly here instead of
+  // degrading into a silent pass.
+  const assemblyBootstrap = readText('crates/sdkwork-api-memory-assembly/src/bootstrap.rs');
+  const metricsStart = assemblyBootstrap.indexOf('async fn metrics');
+  const metricsEnd = assemblyBootstrap.indexOf('pub async fn assemble_api_router_from_env');
+  assert(
+    metricsStart !== -1 && metricsEnd > metricsStart,
+    'memory assembly bootstrap must declare the metrics handler ahead of its router entrypoint',
+  );
+  assert(
+    !assemblyBootstrap.slice(metricsStart, metricsEnd).includes('ready_check'),
+    'metrics endpoint must not depend on database readiness probes',
+  );
+}
 assert(
   k8sDeployment.includes('startupProbe:'),
   'k8s deployment must define startupProbe before readiness/liveness',
@@ -319,8 +327,8 @@ assert(
   'k8s deployment must spread standalone-gateway replicas across nodes',
 );
 assert(
-  readText('crates/sdkwork-api-memory-standalone-gateway/src/bootstrap.rs').includes('route("/metrics"'),
-  'standalone-gateway must expose /metrics for Prometheus scraping',
+  readText('crates/sdkwork-api-memory-assembly/src/bootstrap.rs').includes('route("/metrics"'),
+  'memory assembly must expose /metrics for Prometheus scraping',
 );
 assert(
   readText('deployments/kubernetes/service.yaml').includes('prometheus.io/scrape'),
@@ -1132,36 +1140,63 @@ for (const relativePath of requiredSkeletonPaths) {
   );
 }
 
+// Initialization state: `baselineStrategy` is `baseline-plus-migrations`, so each declared
+// engine commits one consolidated baseline and migrations/ holds only post-baseline deltas.
+// Those deltas may legitimately be empty (DATABASE_FRAMEWORK_SPEC section 353). When a migration
+// is present, its declared reversibility must agree with whether it ships a down file
+// (DATABASE_SPEC section 586), so a down file is never required unconditionally.
 for (const engine of ['postgres', 'sqlite']) {
+  const baselinePath = path.join(
+    repoRoot,
+    `database/ddl/baseline/${engine}/0001_memory_baseline.sql`,
+  );
+  if (!fs.existsSync(baselinePath)) {
+    failures.push(`database/ddl/baseline/${engine}/0001_memory_baseline.sql must exist`);
+  }
+
   const migrationDir = path.join(repoRoot, 'database/migrations', engine);
   if (!fs.existsSync(migrationDir)) {
-    failures.push(`database/migrations/${engine}/ must exist`);
+    failures.push(`database/migrations/${engine}/ must exist as the post-baseline change venue`);
     continue;
   }
   const migrationSqlFiles = fs
     .readdirSync(migrationDir)
     .filter((name) => name.endsWith('.sql'))
     .sort();
-  assert(
-    migrationSqlFiles.some((name) => name.endsWith('.up.sql')),
-    `database/migrations/${engine}/ must own canonical migrations`,
-  );
   for (const upFile of migrationSqlFiles.filter((name) => name.endsWith('.up.sql'))) {
-    const downFile = upFile.replace(/\.up\.sql$/u, '.down.sql');
+    const upText = fs
+      .readFileSync(path.join(migrationDir, upFile), 'utf8')
+      .replace(/\r\n/gu, '\n');
+    const reversible = /^-- reversible: (true|false)[ \t]*$/mu.exec(upText)?.[1];
+    const hasDown = migrationSqlFiles.includes(upFile.replace(/\.up\.sql$/u, '.down.sql'));
     assert(
-      migrationSqlFiles.includes(downFile),
-      `database/migrations/${engine}/${upFile} must have paired ${downFile}`,
+      reversible === 'true' || reversible === 'false',
+      `database/migrations/${engine}/${upFile} must declare "-- reversible: true|false"`,
     );
+    if (reversible === 'true') {
+      assert(
+        hasDown,
+        `database/migrations/${engine}/${upFile} declares reversible: true and must ship its paired .down.sql`,
+      );
+    } else {
+      assert(
+        !hasDown,
+        `database/migrations/${engine}/${upFile} declares reversible: false and must NOT ship a misleading .down.sql`,
+      );
+    }
   }
+
   const pluginMigrationDir = path.join(
     repoRoot,
     'plugins/sdkwork-memory-plugin-native-sql/migrations',
     engine,
   );
-  assert(
-    fs.readdirSync(pluginMigrationDir).every((name) => !name.endsWith('.sql')),
-    `plugins/sdkwork-memory-plugin-native-sql/migrations/${engine} must not remain a second SQL authority`,
-  );
+  if (fs.existsSync(pluginMigrationDir)) {
+    assert(
+      fs.readdirSync(pluginMigrationDir).every((name) => !name.endsWith('.sql')),
+      `plugins/sdkwork-memory-plugin-native-sql/migrations/${engine} must not remain a second SQL authority`,
+    );
+  }
 }
 
 const forbiddenDirectUploadPatterns = [
