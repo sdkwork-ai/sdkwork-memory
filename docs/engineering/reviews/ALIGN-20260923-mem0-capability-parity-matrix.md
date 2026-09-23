@@ -1699,6 +1699,24 @@ provider 栈，开放 REST 方言，兼容 OpenAI/Azure/Ollama/vLLM/LiteLLM，�
 仍是后续的：批次 7（search-first-vector 插件的写入路径激活，需插件组合根接线）、
 批次 9（加法归一打分栈作为策略档位）——两者现在都有真实语义分可用，不再被 provider 阻断。
 
+
+**批次 16 补记（2026-09-24，`42ace4f`）—— 批次 9 关闭：加法归一打分栈成为可达策略档位**：
+- retrieval 新增 `score_candidates_additive`（lemmatized BM25 + 调用方实体加成 + 每候选语义分 →
+  `score_and_rank`），`HybridSignals`/`score_and_rank` 自此拥有生产构造路径——批次 6 的
+  「已实现未接线」缺陷正式消除。
+- `MemoryRetrievalStrategy` 新增 `AdditiveHybrid`（`additive_hybrid`）：显式选择语义策略的 opt-in
+  档位，profile 携带 vector/entity 权重；vector-signal 守护测试对其豁免并反向守护；profile 标签
+  覆盖双方言，可选策略契约更新为 4 个。
+- 契约 `MemoryRetrievalRequest` 新增 `threshold`（[0,1]，入口校验）与 `explain`（scoreDetails
+  七项分解），materializer 声明 + SDK 镜像，parity 门禁绿。
+- 端到端：explain 暴露 semanticScore=1.0、maxPossible=2.0；threshold=0.5 门掉正交候选——
+  「threshold 只门语义分、词法不可拯救」的上游语义被测试钉住。
+
+**§9 计数更新（批次 16 后）**：部分 7 项中 **3 项关闭**（#2 search 参数面的 threshold/explain、
+#3 over-fetch、#6 role 按义达成——连同批次 11/12 的 show_expired 与 metadata），剩余
+#1 add 参数面（infer/prompt）、#4 update 实体重链接、#5 时间锚点、#7 12 few-shot ——
+全部位于 LLM 抽取写入管线的激活线（批次 7）之内，该管线的端口依赖已由批次 J 备妥。
+
 ---
 
 ## 附：上游自身的缺陷（**不应复刻**，仅登记）
