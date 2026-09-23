@@ -136,3 +136,43 @@ node ../sdkwork-specs/tools/sync-agent-main-branch-standard.mjs --root . --check
 The first fails when the current branch is anything other than `main`, and reports a detached HEAD
 as `detached`. The second fails when this block is out of date.
 <!-- /SDKWORK-MAIN-BRANCH-STANDARD: v1 -->
+
+<!-- SDKWORK-PNPM-WORKSPACE-STANDARD: v1 -->
+## pnpm Workspace Dependency And Package Import
+
+Authority: `../sdkwork-specs/PNPM_WORKSPACE_DEPENDENCY_SPEC.md` (companion to
+`../sdkwork-specs/DEPENDENCY_MANAGEMENT_SPEC.md`).
+
+Sibling SDKWork repositories are consumed through a dual-track model that MUST stay consistent:
+
+- **Local development** (`pnpm dev`, `pnpm build`): pnpm workspace protocol. Each sibling
+  package is declared ONCE in this repository root `pnpm-workspace.yaml` `packages:` as a
+  `../sdkwork-*` relative path, and consumed with `workspace:*` in `package.json`. Never use
+  `file:`/`link:`/git-URL specifiers for SDKWork sibling packages in any environment.
+- **CI / release packaging**: git-repository dependency checkout. Every sibling referenced by the
+  local workspace MUST have a matching `dependencies[]` entry in `sdkwork.workflow.json` so CI
+  clones the sibling into the same `../sdkwork-*` relative layout (`GITHUB_WORKFLOW_SPEC.md`).
+  `package.json` is never rewritten for CI.
+
+Import rules for sibling SDKWork packages:
+
+- Import by package name only: `import { X } from "@sdkwork/package-name"`. The specifier MUST
+  equal the target package's `package.json` `name` exactly - no shortening, renaming, or alias.
+- Forbidden: relative imports that cross a package boundary into another SDKWork repository or
+  another workspace package's `src/` (for example `import ... from "../../sdkwork-appbase/.../src/..."`).
+- Consume only the public `exports` surface of a package; never deep-import sibling `src/` internals.
+- Every non-relative import in a workspace member MUST resolve to that member's own
+  `dependencies`/`devDependencies`/`peerDependencies` (import closure).
+- Vite aliases MUST NOT rename or redirect `@sdkwork/*` packages, MUST NOT be added to make a
+  resolution error pass, and are allowed only for documented bootstrap/SDK-generation entrypoints.
+- Fix a resolution failure by correcting the workspace declaration or the package `exports`,
+  not by adding an alias.
+
+Verification:
+
+```bash
+node ../sdkwork-specs/tools/verify-repo.mjs --root .
+node ../sdkwork-specs/tools/check-workspace-member-protocol.mjs --root .
+node ../sdkwork-specs/tools/check-dependency-list-completeness.mjs --root .
+```
+<!-- /SDKWORK-PNPM-WORKSPACE-STANDARD: v1 -->
