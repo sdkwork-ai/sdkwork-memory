@@ -1609,6 +1609,25 @@ open/app 两面 `POST .../memories/delete-all`（`memories.deleteAll`），backe
 三者同源于 §20.4 的 provider 阻断与结构决策；metadata_json 写入路径仍开放）；部分 6→**6**。
 provider-free 的用户可感对齐面在本轮**全部关闭**。
 
+**批次 12 补记（2026-09-24，`451573a`）**：
+- **`ai_record.metadata_json` 写入路径关闭（缺失残项）**。取证发现它与 expiresAt 同类：三面契约
+  `MemoryRecord`/`MemoryRecordRequest` 均声明 `metadata`，metadata filter 下推也在该列上求值，
+  但 canonical INSERT 从不写它 —— 调用方 metadata 被静默丢弃。修复覆盖 SPI 四结构 + 双 INSERT +
+  全部 detail SELECT + 原子 update + supersede 幂等比对 + 服务层序列化/回显；PATCH metadata 按
+  mem0 update 语义**浅合并**（incoming keys win）。至此 §14.4 登记的「filter 只能做加/不加差分
+  验证」残余缺口闭环：过滤器现在作用于调用方真实写入的元数据（有端到端测试钉住）。
+- **检索过取补齐 `max(60)` 下限（部分 #3 关闭）**。服务层此前只有 `top_k*4` 过取；现与
+  mem0 `internal_limit = max(limit*4, 60)` 一致，小 top_k 也构建足够的融合候选池。
+  仓内 `MAX_MEMORY_RETRIEVAL_CANDIDATES=200` 上限保留，作为上游没有的刻意成本上界。
+- **`role` 落库（部分 #6）判定更正为「按义已达成」**：mem0 把消息 `role`/`actor_id` 写进 payload
+  标量字段；本仓的身份与角色语义由 `ai_event`（actor_type/actor_id）与写入路径
+  `attributed_to`（插件，已对齐）承载，记录层不重复存 role 是本仓规范化的结果而非缺失。不改判定表行，
+  仅在此记录口径。
+- **实体 SPI 端口（缺失 #1 的剩余结构性项）明确不开动的理由**：实体/边的行为面（存储、CRUD、
+  provenance、三面 HTTP）已全部存在且经测试；SPI 端口化是把 commercial_api 对具体 store 的依赖
+  改为 trait 的治理性重构，无任何用户可感行为差异，且触及 920 行 commercial 面。留给专门的
+  结构批次，不与行为对齐混做。
+
 ---
 
 ## 附：上游自身的缺陷（**不应复刻**，仅登记）
