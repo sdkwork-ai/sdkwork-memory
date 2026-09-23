@@ -155,6 +155,14 @@ impl MemoryOpenApi for RecordingOpenApi {
         unimplemented!("not called in this test")
     }
 
+    async fn delete_all_memories(
+        &self,
+        _ctx: MemoryOpenApiRequestContext,
+        _request: sdkwork_memory_contract::DeleteAllMemoriesRequest,
+    ) -> MemoryServiceResult<sdkwork_memory_contract::DeleteAllMemoriesResult> {
+        unimplemented!("not called in this test")
+    }
+
     async fn create_retrieval(
         &self,
         _ctx: MemoryOpenApiRequestContext,

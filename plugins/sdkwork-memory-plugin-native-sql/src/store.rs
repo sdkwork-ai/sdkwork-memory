@@ -6,10 +6,11 @@ use sdkwork_memory_spi::{
     AppendMemoryAuditCommand, AppendMemoryEventCommand, AppendMemoryOutboxCommand,
     AppendMemoryRetrievalTraceCommand, ApproveMemoryCandidateCommand, CreateCanonicalMemoryCommand,
     CreateMemoryCandidateCommand, CreateMemoryRecordCommand, DecayMemoryHabitCommand,
-    DeleteCanonicalMemoryCommand, DeleteMemoryRecordCommand, ListMemoryCandidatesQuery,
-    ListMemoryRetrievalTracesQuery, ListPendingMemoryOutboxQuery, MarkMemoryOutboxFailedCommand,
-    MarkMemoryOutboxPublishedCommand, MemoryAuditRecord, MemoryAuditStorePort, MemoryCandidate,
-    MemoryCandidateDetail, MemoryCandidatePage, MemoryCandidatePromotion, MemoryCandidateStorePort,
+    DeleteAllCanonicalMemoryCommand, DeleteCanonicalMemoryCommand, DeleteMemoryRecordCommand,
+    ListMemoryCandidatesQuery, ListMemoryRetrievalTracesQuery, ListPendingMemoryOutboxQuery,
+    MarkMemoryOutboxFailedCommand, MarkMemoryOutboxPublishedCommand, MemoryAuditRecord,
+    MemoryAuditStorePort, MemoryBulkDeletionReceipt, MemoryCandidate, MemoryCandidateDetail,
+    MemoryCandidatePage, MemoryCandidatePromotion, MemoryCandidateStorePort,
     MemoryCandidateSummary, MemoryCanonicalRecord, MemoryContextPackSnapshot,
     MemoryDeletionReceipt, MemoryEvent, MemoryEventStorePort, MemoryHabit, MemoryHabitStorePort,
     MemoryMutationJournal, MemoryOutboxEvent, MemoryOutboxStorePort, MemoryRecord,
@@ -5444,6 +5445,15 @@ impl MemoryRecordStorePort for NativeSqlMemoryStore {
         command: DeleteCanonicalMemoryCommand,
     ) -> MemorySpiResult<MemoryDeletionReceipt> {
         self.delete_canonical_memory_atomic(&command)
+            .await
+            .map_err(|err| port_error("MemoryRecordStorePort", err))
+    }
+
+    async fn delete_all_canonical_atomic(
+        &self,
+        command: DeleteAllCanonicalMemoryCommand,
+    ) -> MemorySpiResult<MemoryBulkDeletionReceipt> {
+        self.delete_all_canonical_memory_atomic(&command)
             .await
             .map_err(|err| port_error("MemoryRecordStorePort", err))
     }

@@ -1,11 +1,12 @@
 use async_trait::async_trait;
 
 use crate::dto::{
-    ListCandidatesQuery, ListMemoriesQuery, MemoryCandidate, MemoryCandidateList,
-    MemoryCapabilities, MemoryContextPack, MemoryContextPackRequest, MemoryEvent,
-    MemoryEventRequest, MemoryExtractionRequest, MemoryFeedback, MemoryFeedbackRequest,
-    MemoryLearningJob, MemoryProviderHealth, MemoryRecord, MemoryRecordList, MemoryRecordPatch,
-    MemoryRecordRequest, MemoryRetrievalRequest, MemoryRetrievalResult,
+    DeleteAllMemoriesRequest, DeleteAllMemoriesResult, ListCandidatesQuery, ListMemoriesQuery,
+    MemoryCandidate, MemoryCandidateList, MemoryCapabilities, MemoryContextPack,
+    MemoryContextPackRequest, MemoryEvent, MemoryEventRequest, MemoryExtractionRequest,
+    MemoryFeedback, MemoryFeedbackRequest, MemoryLearningJob, MemoryProviderHealth, MemoryRecord,
+    MemoryRecordList, MemoryRecordPatch, MemoryRecordRequest, MemoryRetrievalRequest,
+    MemoryRetrievalResult,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -222,6 +223,14 @@ pub trait MemoryOpenApi: Send + Sync + 'static {
         memory_id: u64,
         space_id: u64,
     ) -> MemoryServiceResult<()>;
+
+    /// Bulk-delete every active record in the space (optionally narrowed to one
+    /// owner), the analogue of mem0's `delete_all`. Returns the deleted ids.
+    async fn delete_all_memories(
+        &self,
+        context: MemoryOpenApiRequestContext,
+        request: DeleteAllMemoriesRequest,
+    ) -> MemoryServiceResult<DeleteAllMemoriesResult>;
 
     async fn create_retrieval(
         &self,

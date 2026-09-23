@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use sdkwork_memory_contract::{
-    ListCandidatesQuery, ListMemoriesQuery, MemoryAppRequestContext, MemoryBackendRequestContext,
-    MemoryCandidate, MemoryCandidateList, MemoryCapabilities, MemoryContextPack,
-    MemoryContextPackRequest, MemoryEvent, MemoryEventRequest, MemoryExtractionRequest,
-    MemoryFeedback, MemoryFeedbackRequest, MemoryImplementationKind, MemoryLearningJob,
-    MemoryOpenApi, MemoryOpenApiRequestContext, MemoryProviderHealth, MemoryProviderHealthStatus,
-    MemoryProviderInterface, MemoryRecord, MemoryRecordList, MemoryRecordPatch,
-    MemoryRecordRequest, MemoryRetrievalHit, MemoryRetrievalRequest, MemoryRetrievalResult,
-    MemoryRetrievalTrace, MemoryRetrieverKind, MemoryServiceError, MemoryServiceErrorKind,
-    MemoryServiceResult, MemoryType,
+    DeleteAllMemoriesRequest, DeleteAllMemoriesResult, ListCandidatesQuery, ListMemoriesQuery,
+    MemoryAppRequestContext, MemoryBackendRequestContext, MemoryCandidate, MemoryCandidateList,
+    MemoryCapabilities, MemoryContextPack, MemoryContextPackRequest, MemoryEvent,
+    MemoryEventRequest, MemoryExtractionRequest, MemoryFeedback, MemoryFeedbackRequest,
+    MemoryImplementationKind, MemoryLearningJob, MemoryOpenApi, MemoryOpenApiRequestContext,
+    MemoryProviderHealth, MemoryProviderHealthStatus, MemoryProviderInterface, MemoryRecord,
+    MemoryRecordList, MemoryRecordPatch, MemoryRecordRequest, MemoryRetrievalHit,
+    MemoryRetrievalRequest, MemoryRetrievalResult, MemoryRetrievalTrace, MemoryRetrieverKind,
+    MemoryServiceError, MemoryServiceErrorKind, MemoryServiceResult, MemoryType,
 };
 use sdkwork_memory_plugin_native_sql::{
     build_native_sql_executable_runtime, native_sql_phase1_port_builders,
@@ -25,10 +25,11 @@ use sdkwork_memory_retrieval::{
 use sdkwork_memory_spi::parse_metadata_filter;
 use sdkwork_memory_spi::{
     AppendMemoryAuditCommand, AppendMemoryOutboxCommand, AppendMemoryRetrievalTraceCommand,
-    CreateCanonicalMemoryCommand, CreateMemoryCandidateCommand, DeleteCanonicalMemoryCommand,
-    ListMemoryCandidatesQuery, MemoryCanonicalRecord, MemoryCoreRuntime, MemoryDeploymentMode,
-    MemoryDriveExportUploader, MemoryImplementationKind as SpiMemoryImplementationKind,
-    MemoryMutationJournal, MemoryRetrievalHitDraft, MemoryRetrieverKind as SpiMemoryRetrieverKind,
+    CreateCanonicalMemoryCommand, CreateMemoryCandidateCommand, DeleteAllCanonicalMemoryCommand,
+    DeleteCanonicalMemoryCommand, ListMemoryCandidatesQuery, MemoryCanonicalRecord,
+    MemoryCoreRuntime, MemoryDeploymentMode, MemoryDriveExportUploader,
+    MemoryImplementationKind as SpiMemoryImplementationKind, MemoryMutationJournal,
+    MemoryRetrievalHitDraft, MemoryRetrieverKind as SpiMemoryRetrieverKind,
     MemoryRuntimeProfileMetadata, MemoryScopeContext, MemorySensitivityReadScope,
     RetrieveCanonicalMemoryQuery, RetrieveMemoryCandidateDetailQuery,
     RetrieveMemoryRetrievalTraceForTenantQuery, SearchMemoryCandidatesQuery,
@@ -1146,6 +1147,39 @@ impl MemoryOpenApi for OpenMemoryService {
             })
             .await?;
         Ok(())
+    }
+
+    #[tracing::instrument(
+        skip(self, context, request),
+        fields(
+            tenant_id = %context.tenant_id,
+            space_id = request.space_id,
+            otel_kind = "delete_all_memories"
+        )
+    )]
+    async fn delete_all_memories(
+        &self,
+        context: MemoryOpenApiRequestContext,
+        request: DeleteAllMemoriesRequest,
+    ) -> MemoryServiceResult<DeleteAllMemoriesResult> {
+        access::assert_actor_can_access_space_for_write(
+            &self.runtime_data_plane,
+            &context,
+            request.space_id,
+        )
+        .await?;
+        let scope = Self::scope(&context, request.space_id)?;
+        let user_id = request.user_id.and_then(|value| i64::try_from(value).ok());
+        let receipt = self
+            .runtime_data_plane
+            .delete_all_canonical_memory_atomic(DeleteAllCanonicalMemoryCommand { scope, user_id })
+            .await?;
+        let deleted_count = u64::try_from(receipt.deleted_ids.len())
+            .map_err(|_| MemoryServiceError::storage("bulk deletion count overflowed"))?;
+        Ok(DeleteAllMemoriesResult {
+            deleted_count,
+            deleted_memory_ids: receipt.deleted_ids,
+        })
     }
 
     #[tracing::instrument(

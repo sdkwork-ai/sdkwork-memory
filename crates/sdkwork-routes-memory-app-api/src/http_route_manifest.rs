@@ -85,6 +85,14 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     .with_required_permission("memory.records.write")
     .with_rate_limit_tier(RateLimitTier::AuthCritical),
     HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/memory/memories/delete-all",
+        "memory",
+        "memories.deleteAll",
+    )
+    .with_required_permission("memory.records.write")
+    .with_idempotent(true),
+    HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/memory/memories/{memoryId}/sources",
         "memory",

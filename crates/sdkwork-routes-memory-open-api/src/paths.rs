@@ -4,6 +4,7 @@ pub const CAPABILITIES: &str = "/mem/v3/api/memory/capabilities";
 pub const EVENTS: &str = "/mem/v3/api/memory/events";
 pub const EVENT: &str = "/mem/v3/api/memory/events/{eventId}";
 pub const MEMORIES: &str = "/mem/v3/api/memory/memories";
+pub const MEMORIES_DELETE_ALL: &str = "/mem/v3/api/memory/memories/delete-all";
 pub const MEMORY: &str = "/mem/v3/api/memory/memories/{memoryId}";
 pub const RETRIEVALS: &str = "/mem/v3/api/memory/retrievals";
 pub const RETRIEVAL: &str = "/mem/v3/api/memory/retrievals/{retrievalId}";

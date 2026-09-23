@@ -1,14 +1,15 @@
 use async_trait::async_trait;
 
 use crate::dto::{
-    ListCandidatesQuery, ListHabitsQuery, ListJobsQuery, ListMemoriesQuery, ListMemorySourcesQuery,
-    MemoryCandidate, MemoryCandidateList, MemoryContextPack, MemoryContextPackRequest, MemoryEvent,
-    MemoryEventRequest, MemoryExportJob, MemoryExportJobList, MemoryExportRequest,
-    MemoryExtractionRequest, MemoryFeedback, MemoryFeedbackRequest, MemoryForgetJob,
-    MemoryForgetJobList, MemoryForgetRequest, MemoryHabit, MemoryHabitList, MemoryHabitRequest,
-    MemoryLearningJob, MemoryLearningSettings, MemoryLearningSettingsPatch, MemoryRecord,
-    MemoryRecordList, MemoryRecordPatch, MemoryRecordRequest, MemoryRecordSourceList,
-    MemoryRetrievalRequest, MemoryRetrievalResult, MemoryReviewRequest,
+    DeleteAllMemoriesRequest, DeleteAllMemoriesResult, ListCandidatesQuery, ListHabitsQuery,
+    ListJobsQuery, ListMemoriesQuery, ListMemorySourcesQuery, MemoryCandidate, MemoryCandidateList,
+    MemoryContextPack, MemoryContextPackRequest, MemoryEvent, MemoryEventRequest, MemoryExportJob,
+    MemoryExportJobList, MemoryExportRequest, MemoryExtractionRequest, MemoryFeedback,
+    MemoryFeedbackRequest, MemoryForgetJob, MemoryForgetJobList, MemoryForgetRequest, MemoryHabit,
+    MemoryHabitList, MemoryHabitRequest, MemoryLearningJob, MemoryLearningSettings,
+    MemoryLearningSettingsPatch, MemoryRecord, MemoryRecordList, MemoryRecordPatch,
+    MemoryRecordRequest, MemoryRecordSourceList, MemoryRetrievalRequest, MemoryRetrievalResult,
+    MemoryReviewRequest,
 };
 use crate::ports::MemoryServiceResult;
 use crate::space::{ListSpacesQuery, MemorySpace, MemorySpaceList, MemorySpaceRequest};
@@ -94,6 +95,14 @@ pub trait MemoryAppApi: Send + Sync + 'static {
         memory_id: u64,
         space_id: u64,
     ) -> MemoryServiceResult<()>;
+
+    /// Bulk-delete every active record in the space (optionally narrowed to
+    /// one owner), the analogue of mem0's `delete_all`.
+    async fn delete_all_memories(
+        &self,
+        context: MemoryAppRequestContext,
+        request: DeleteAllMemoriesRequest,
+    ) -> MemoryServiceResult<DeleteAllMemoriesResult>;
 
     async fn list_memory_sources(
         &self,

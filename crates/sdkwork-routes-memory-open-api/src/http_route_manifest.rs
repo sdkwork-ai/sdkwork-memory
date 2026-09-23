@@ -67,6 +67,15 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     .with_rate_limit_tier(RateLimitTier::AuthCritical),
     HttpRoute::api_key(
         HttpMethod::Post,
+        "/mem/v3/api/memory/memories/delete-all",
+        "memory",
+        "memories.deleteAll",
+    )
+    .with_required_permission("memory.open.records.write")
+    .with_idempotent(true)
+    .with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    HttpRoute::api_key(
+        HttpMethod::Post,
         "/mem/v3/api/memory/retrievals",
         "memory",
         "retrievals.create",

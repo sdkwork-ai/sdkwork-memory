@@ -118,6 +118,16 @@ impl MemoryOpenApi for StubOpenApi {
         unimplemented!("stub — not called in route-mount test")
     }
 
+    async fn delete_all_memories(
+        &self,
+        _context: sdkwork_memory_contract::MemoryOpenApiRequestContext,
+        _request: sdkwork_memory_contract::DeleteAllMemoriesRequest,
+    ) -> sdkwork_memory_contract::MemoryServiceResult<
+        sdkwork_memory_contract::DeleteAllMemoriesResult,
+    > {
+        unimplemented!("stub — not called in route-mount test")
+    }
+
     async fn create_retrieval(
         &self,
         _context: sdkwork_memory_contract::MemoryOpenApiRequestContext,

@@ -311,6 +311,23 @@ pub struct ListMemoriesQuery {
     pub show_expired: Option<bool>,
 }
 
+/// Bulk-deletion request for the `delete_all` analogue: every active record in
+/// the space is deleted, optionally narrowed to one owner.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteAllMemoriesRequest {
+    pub space_id: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteAllMemoriesResult {
+    pub deleted_count: u64,
+    pub deleted_memory_ids: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryRetrievalRequest {

@@ -293,7 +293,7 @@ $appOpenApiCheck = @{
     RequiredOperationIds = @(
         "spaces.create", "spaces.list", "spaces.retrieve", "spaces.update",
         "events.create", "events.retrieve",
-        "memories.create", "memories.list", "memories.retrieve", "memories.update", "memories.delete", "memories.sources.list",
+        "memories.create", "memories.list", "memories.retrieve", "memories.update", "memories.delete", "memories.deleteAll", "memories.sources.list",
         "forgetRequests.create", "forgetRequests.retrieve",
         "extractions.create",
         "candidates.list", "candidates.retrieve", "candidates.approve", "candidates.reject",
@@ -322,7 +322,7 @@ $openApiCheck = @{
     RequiredOperationIds = @(
         "capabilities.retrieve",
         "events.create", "events.retrieve",
-        "memories.create", "memories.list", "memories.retrieve", "memories.update", "memories.delete",
+        "memories.create", "memories.list", "memories.retrieve", "memories.update", "memories.delete", "memories.deleteAll",
         "retrievals.create", "retrievals.retrieve",
         "contextPacks.create", "contextPacks.retrieve",
         "feedback.create",

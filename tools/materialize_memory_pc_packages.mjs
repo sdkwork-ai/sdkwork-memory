@@ -7,9 +7,36 @@ const appRoot = resolve(workspaceRoot, "apps", "sdkwork-memory-pc");
 
 const infrastructurePackages = [
   { id: "core", surface: "pc-runtime", dependencies: { "@sdkwork/auth-pc-react": "workspace:*", "@sdkwork/auth-runtime-pc-react": "workspace:*", "@sdkwork/iam-app-sdk": "workspace:*", "@sdkwork/memory-app-sdk": "workspace:*", "@sdkwork/memory-pc-commons": "workspace:*", "@sdkwork/sdk-common": "workspace:*" } },
-  { id: "commons", surface: "pc-shared", dependencies: { "@sdkwork/utils": "workspace:*", "lucide-react": "catalog:", "react": "catalog:", "react-router-dom": "^7.14.0" } },
+  {
+    id: "commons",
+    surface: "pc-shared",
+    // `./styles.css` is the package-owned presentation scope for every user-facing
+    // Memory console surface. It is imported by the standalone PC application and by
+    // host applications that embed the block, so hosts never restate Memory UI rules.
+    assetExports: { "./styles.css": "./src/styles/memory-console.css" },
+    dependencies: { "@sdkwork/utils": "workspace:*", "lucide-react": "catalog:", "react": "catalog:", "react-router-dom": "^7.14.0" },
+  },
   { id: "console-core", surface: "app-console", dependencies: { "@sdkwork/memory-app-sdk": "workspace:*", "@sdkwork/memory-pc-commons": "workspace:*", react: "catalog:" } },
-  { id: "console-shell", surface: "app-console", dependencies: { "@sdkwork/memory-pc-commons": "workspace:*", "@sdkwork/memory-pc-console-core": "workspace:*", react: "catalog:", "react-router-dom": "^7.14.0" } },
+  {
+    id: "console-shell",
+    surface: "app-console",
+    // The console shell owns "console route composition" (APP_PC_ARCHITECTURE_SPEC.md),
+    // so it also owns the canonical console module catalog (`MemoryConsoleModules.ts`).
+    // Keeping the catalog here means an embedding host imports one package to mount the
+    // whole Memory console instead of hardcoding the memory capability package list.
+    dependencies: {
+      "@sdkwork/memory-pc-commons": "workspace:*",
+      "@sdkwork/memory-pc-console-core": "workspace:*",
+      "@sdkwork/memory-pc-console-governance": "workspace:*",
+      "@sdkwork/memory-pc-console-knowledge": "workspace:*",
+      "@sdkwork/memory-pc-console-learning": "workspace:*",
+      "@sdkwork/memory-pc-console-memory": "workspace:*",
+      "@sdkwork/memory-pc-console-overview": "workspace:*",
+      "@sdkwork/memory-pc-console-retrieval": "workspace:*",
+      react: "catalog:",
+      "react-router-dom": "^7.14.0",
+    },
+  },
   { id: "admin-core", surface: "backend-admin", dependencies: { "@sdkwork/memory-backend-sdk": "workspace:*", "@sdkwork/memory-pc-commons": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:" } },
   { id: "admin-shell", surface: "backend-admin", dependencies: { "@sdkwork/memory-pc-admin-core": "workspace:*", "@sdkwork/memory-pc-commons": "workspace:*", react: "catalog:", "react-router-dom": "^7.14.0" } },
 ];
@@ -161,6 +188,7 @@ function materializePackage(definition) {
         import: "./src/index.ts",
         default: "./src/index.ts",
       },
+      ...(definition.assetExports ?? {}),
       ...(definition.id.endsWith("core") ? coreSubpathExports() : {}),
     },
     dependencies,

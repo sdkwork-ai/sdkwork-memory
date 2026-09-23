@@ -1,19 +1,20 @@
 use async_trait::async_trait;
 use sdkwork_memory_contract::ListSpacesQuery;
 use sdkwork_memory_contract::{
-    ListAdminResourcesQuery, ListAuditLogsQuery, ListCandidatesQuery, ListEventsQuery,
-    ListHabitsQuery, ListJobsQuery, ListMemoriesQuery, ListMemorySourcesQuery,
-    ListRetrievalTracesQuery, MemoryAppApi, MemoryAppRequestContext, MemoryAuditLog,
-    MemoryAuditLogList, MemoryBackendApi, MemoryBackendRequestContext, MemoryCandidate,
-    MemoryCandidateList, MemoryEvalRun, MemoryEvalRunList, MemoryEvalRunRequest, MemoryEventList,
-    MemoryExportJob, MemoryExportJobList, MemoryExportRequest, MemoryExtractionRequest,
-    MemoryForgetJob, MemoryForgetJobList, MemoryForgetRequest, MemoryHabit, MemoryHabitList,
-    MemoryHabitRequest, MemoryImplementationProfile, MemoryImplementationProfileList,
-    MemoryImplementationProfileRequest, MemoryIndex, MemoryIndexList, MemoryIndexRequest,
-    MemoryLearningJob, MemoryLearningJobList, MemoryLearningSettings, MemoryLearningSettingsPatch,
-    MemoryMigrationJobRequest, MemoryOpenApi, MemoryProviderBinding, MemoryProviderBindingList,
-    MemoryProviderBindingRequest, MemoryProviderHealth, MemoryRecordList, MemoryRecordRequest,
-    MemoryRecordSource, MemoryRecordSourceList, MemoryRetentionJobRequest, MemoryRetrievalProfile,
+    DeleteAllMemoriesRequest, DeleteAllMemoriesResult, ListAdminResourcesQuery, ListAuditLogsQuery,
+    ListCandidatesQuery, ListEventsQuery, ListHabitsQuery, ListJobsQuery, ListMemoriesQuery,
+    ListMemorySourcesQuery, ListRetrievalTracesQuery, MemoryAppApi, MemoryAppRequestContext,
+    MemoryAuditLog, MemoryAuditLogList, MemoryBackendApi, MemoryBackendRequestContext,
+    MemoryCandidate, MemoryCandidateList, MemoryEvalRun, MemoryEvalRunList, MemoryEvalRunRequest,
+    MemoryEventList, MemoryExportJob, MemoryExportJobList, MemoryExportRequest,
+    MemoryExtractionRequest, MemoryForgetJob, MemoryForgetJobList, MemoryForgetRequest,
+    MemoryHabit, MemoryHabitList, MemoryHabitRequest, MemoryImplementationProfile,
+    MemoryImplementationProfileList, MemoryImplementationProfileRequest, MemoryIndex,
+    MemoryIndexList, MemoryIndexRequest, MemoryLearningJob, MemoryLearningJobList,
+    MemoryLearningSettings, MemoryLearningSettingsPatch, MemoryMigrationJobRequest, MemoryOpenApi,
+    MemoryProviderBinding, MemoryProviderBindingList, MemoryProviderBindingRequest,
+    MemoryProviderHealth, MemoryRecordList, MemoryRecordRequest, MemoryRecordSource,
+    MemoryRecordSourceList, MemoryRetentionJobRequest, MemoryRetrievalProfile,
     MemoryRetrievalProfileList, MemoryRetrievalProfileRequest, MemoryRetrievalTrace,
     MemoryRetrievalTraceList, MemoryReviewRequest, MemoryServiceError, MemoryServiceResult,
     MemorySpace, MemorySpaceList, MemorySpaceRequest,
@@ -634,6 +635,14 @@ impl MemoryAppApi for OpenMemoryService {
     ) -> MemoryServiceResult<()> {
         MemoryOpenApi::delete_memory(self, Self::to_open_context(&context), memory_id, space_id)
             .await
+    }
+
+    async fn delete_all_memories(
+        &self,
+        context: MemoryAppRequestContext,
+        request: DeleteAllMemoriesRequest,
+    ) -> MemoryServiceResult<DeleteAllMemoriesResult> {
+        MemoryOpenApi::delete_all_memories(self, Self::to_open_context(&context), request).await
     }
 
     async fn list_memory_sources(

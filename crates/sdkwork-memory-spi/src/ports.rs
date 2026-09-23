@@ -155,6 +155,20 @@ pub struct DeleteCanonicalMemoryCommand {
     pub journal: MemoryMutationJournal,
 }
 
+/// Bulk-deletion scope for the `delete_all` analogue. `user_id` optionally
+/// narrows the sweep to one owner inside the space, mirroring the way mem0's
+/// `delete_all(user_id=...)` narrows by identity axis.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeleteAllCanonicalMemoryCommand {
+    pub scope: MemoryScopeContext,
+    pub user_id: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MemoryBulkDeletionReceipt {
+    pub deleted_ids: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RetrieveMemoryRecordQuery {
     pub scope: MemoryScopeContext,
@@ -878,6 +892,22 @@ pub trait MemoryRecordStorePort: Send + Sync {
         _command: DeleteCanonicalMemoryCommand,
     ) -> MemorySpiResult<MemoryDeletionReceipt> {
         Err(atomic_record_operation_required("delete_canonical_atomic"))
+    }
+
+    /// Bulk-delete every active canonical record in the scope (optionally
+    /// narrowed to one owner), the analogue of mem0's `delete_all`.
+    ///
+    /// Each deleted record gets its own outbox+audit journal entries inside the
+    /// same transaction; journal ids are derived deterministically from the
+    /// record id, so a repeat call over an already-cleared scope deletes
+    /// nothing and stays idempotent.
+    async fn delete_all_canonical_atomic(
+        &self,
+        _command: DeleteAllCanonicalMemoryCommand,
+    ) -> MemorySpiResult<MemoryBulkDeletionReceipt> {
+        Err(atomic_record_operation_required(
+            "delete_all_canonical_atomic",
+        ))
     }
 }
 

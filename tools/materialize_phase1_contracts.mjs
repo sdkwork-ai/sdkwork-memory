@@ -2223,6 +2223,7 @@ function baseSchemas() {
         filters: nullableJsonObject,
         topK: { type: "integer", format: "int32", minimum: 1, maximum: 100 },
         contextBudgetTokens: { type: "integer", format: "int32", minimum: 1 },
+        showExpired: { type: "boolean" },
         includeTrace: { type: "boolean" }
       }
     },
@@ -2255,6 +2256,22 @@ function baseSchemas() {
       }
     },
     MemoryRetrievalTraceList: pageSchema("MemoryRetrievalTrace"),
+    DeleteAllMemoriesRequest: {
+      type: "object",
+      required: ["spaceId"],
+      properties: {
+        spaceId: idSchema,
+        userId: nullableIdSchema
+      }
+    },
+    DeleteAllMemoriesResult: {
+      type: "object",
+      required: ["deletedCount", "deletedMemoryIds"],
+      properties: {
+        deletedCount: { type: "integer", format: "int64" },
+        deletedMemoryIds: { type: "array", items: { type: "string" } }
+      }
+    },
     MemoryRetrievalHit: {
       type: "object",
       required: ["hitId", "retrieverName", "resultRank", "status"],
@@ -3107,7 +3124,8 @@ function writeOpenApi() {
     queryParams: listParams([
       { name: "space_id", in: "query", required: true, schema: idSchema },
       { name: "memory_type", in: "query", schema: { type: "string" } },
-      { name: "external_subject_ref", in: "query", schema: { type: "string" } }
+      { name: "external_subject_ref", in: "query", schema: { type: "string" } },
+      { name: "show_expired", in: "query", schema: { type: "boolean" } }
     ]),
     responseSchema: "MemoryRecordList"
   }));
@@ -3152,6 +3170,16 @@ function writeOpenApi() {
     queryParams: [requiredSpaceIdQueryParam()],
     responseSchema: "MemoryRecord",
     status: "204"
+  }));
+  addPath(paths, `${P}/memories/delete-all`, "post", openOperation({
+    method: "post",
+    authority,
+    operationId: "memories.deleteAll",
+    permission: "memory.open.records.write",
+    auditEvent: "memory.open.record.deleted",
+    requestSchema: "DeleteAllMemoriesRequest",
+    responseSchema: "DeleteAllMemoriesResult",
+    idempotent: true
   }));
 
   addPath(paths, `${P}/retrievals`, "post", openOperation({
@@ -3277,11 +3305,12 @@ function writeAppOpenApi() {
   addPath(paths, `${P}/events`, "post", operation({ method: "post", authority, operationId: "events.create", permission: "memory.events.write", auditEvent: "memory.event.appended", requestSchema: "MemoryEventRequest", responseSchema: "MemoryEvent", idempotent: true }));
   addPath(paths, `${P}/events/{eventId}`, "get", operation({ method: "get", authority, operationId: "events.retrieve", permission: "memory.events.read", auditEvent: "memory.event.read", pathParams: [pathParam("eventId")], queryParams: [requiredSpaceIdQueryParam()], responseSchema: "MemoryEvent" }));
 
-  addPath(paths, `${P}/memories`, "get", operation({ method: "get", authority, operationId: "memories.list", permission: "memory.records.read", auditEvent: "memory.record.list", queryParams: listParams([{ name: "space_id", in: "query", required: true, schema: idSchema }, { name: "memory_type", in: "query", schema: { type: "string" } }]), responseSchema: "MemoryRecordList" }));
+  addPath(paths, `${P}/memories`, "get", operation({ method: "get", authority, operationId: "memories.list", permission: "memory.records.read", auditEvent: "memory.record.list", queryParams: listParams([{ name: "space_id", in: "query", required: true, schema: idSchema }, { name: "memory_type", in: "query", schema: { type: "string" } }, { name: "show_expired", in: "query", schema: { type: "boolean" } }]), responseSchema: "MemoryRecordList" }));
   addPath(paths, `${P}/memories`, "post", operation({ method: "post", authority, operationId: "memories.create", permission: "memory.records.write", auditEvent: "memory.record.created", requestSchema: "MemoryRecordRequest", responseSchema: "MemoryRecord", idempotent: true }));
   addPath(paths, `${P}/memories/{memoryId}`, "get", operation({ method: "get", authority, operationId: "memories.retrieve", permission: "memory.records.read", auditEvent: "memory.record.read", pathParams: [pathParam("memoryId")], queryParams: [requiredSpaceIdQueryParam()], responseSchema: "MemoryRecord" }));
   addPath(paths, `${P}/memories/{memoryId}`, "patch", operation({ method: "patch", authority, operationId: "memories.update", permission: "memory.records.write", auditEvent: "memory.record.updated", pathParams: [pathParam("memoryId")], queryParams: [requiredSpaceIdQueryParam()], requestSchema: "MemoryRecordRequest", responseSchema: "MemoryRecord" }));
   addPath(paths, `${P}/memories/{memoryId}`, "delete", operation({ method: "delete", authority, operationId: "memories.delete", permission: "memory.records.write", auditEvent: "memory.record.deleted", pathParams: [pathParam("memoryId")], queryParams: [requiredSpaceIdQueryParam()], responseSchema: "MemoryRecord", status: "204" }));
+addPath(paths, `${P}/memories/delete-all`, "post", operation({ method: "post", authority, operationId: "memories.deleteAll", permission: "memory.records.write", auditEvent: "memory.record.deleted", requestSchema: "DeleteAllMemoriesRequest", responseSchema: "DeleteAllMemoriesResult", idempotent: true }));
   addPath(paths, `${P}/memories/{memoryId}/sources`, "get", operation({ method: "get", authority, operationId: "memories.sources.list", permission: "memory.records.read", auditEvent: "memory.record.sources.list", pathParams: [pathParam("memoryId")], queryParams: listParams(), responseSchema: "MemoryRecordSourceList" }));
 
   addPath(paths, `${P}/forget_requests`, "get", operation({ method: "get", authority, operationId: "forgetRequests.list", permission: "memory.forget.read", auditEvent: "memory.forget.list", queryParams: cursorListParams(), responseSchema: "MemoryForgetJobList" }));
@@ -3908,7 +3937,7 @@ $appOpenApiCheck = @{
     RequiredOperationIds = @(
         "spaces.create", "spaces.list", "spaces.retrieve", "spaces.update",
         "events.create", "events.retrieve",
-        "memories.create", "memories.list", "memories.retrieve", "memories.update", "memories.delete", "memories.sources.list",
+        "memories.create", "memories.list", "memories.retrieve", "memories.update", "memories.delete", "memories.deleteAll", "memories.sources.list",
         "forgetRequests.create", "forgetRequests.retrieve",
         "extractions.create",
         "candidates.list", "candidates.retrieve", "candidates.approve", "candidates.reject",
@@ -3937,7 +3966,7 @@ $openApiCheck = @{
     RequiredOperationIds = @(
         "capabilities.retrieve",
         "events.create", "events.retrieve",
-        "memories.create", "memories.list", "memories.retrieve", "memories.update", "memories.delete",
+        "memories.create", "memories.list", "memories.retrieve", "memories.update", "memories.delete", "memories.deleteAll",
         "retrievals.create", "retrievals.retrieve",
         "contextPacks.create", "contextPacks.retrieve",
         "feedback.create",

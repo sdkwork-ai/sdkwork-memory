@@ -6,13 +6,14 @@ use sdkwork_memory_spi::{
     ApproveMemoryCandidateCommand, AssembleMemoryContextCommand, CountActiveMemoryRecordsQuery,
     CountUserOwnedMemorySpacesQuery, CreateCanonicalMemoryCommand, CreateMemoryCandidateCommand,
     CreateMemoryRecordCommand, CreateMemorySpaceCommand, DecayMemoryHabitCommand,
-    DeleteCanonicalMemoryCommand, DeleteMemoryRecordCommand, ExternalMemoryBridgePort,
-    ListMemoryCandidatesQuery, ListMemoryRetrievalTracesQuery, ListPendingMemoryOutboxQuery,
-    MarkMemoryOutboxFailedCommand, MarkMemoryOutboxPublishedCommand, MemoryAuditRecord,
-    MemoryCandidate, MemoryCandidateDetail, MemoryCandidatePage, MemoryCandidatePromotion,
-    MemoryCanonicalRecord, MemoryContextAssemblerPort, MemoryContextPackDraft, MemoryCoreRuntime,
-    MemoryDeletionReceipt, MemoryGovernanceAccessPort, MemoryHabit, MemoryOutboxEvent,
-    MemoryRecord, MemoryRecordQuotaAdmission, MemoryRetrieverPort, MemoryRetrieverResult,
+    DeleteAllCanonicalMemoryCommand, DeleteCanonicalMemoryCommand, DeleteMemoryRecordCommand,
+    ExternalMemoryBridgePort, ListMemoryCandidatesQuery, ListMemoryRetrievalTracesQuery,
+    ListPendingMemoryOutboxQuery, MarkMemoryOutboxFailedCommand, MarkMemoryOutboxPublishedCommand,
+    MemoryAuditRecord, MemoryBulkDeletionReceipt, MemoryCandidate, MemoryCandidateDetail,
+    MemoryCandidatePage, MemoryCandidatePromotion, MemoryCanonicalRecord,
+    MemoryContextAssemblerPort, MemoryContextPackDraft, MemoryCoreRuntime, MemoryDeletionReceipt,
+    MemoryGovernanceAccessPort, MemoryHabit, MemoryOutboxEvent, MemoryRecord,
+    MemoryRecordQuotaAdmission, MemoryRetrieverPort, MemoryRetrieverResult,
     MemoryRetrieverSearchResult, MemoryRuntimeProfileMetadata, MemorySpaceGovernanceFacts,
     MemorySpaceQuotaAdmission, MemorySpaceRecord, MemorySpaceStorePort, MemorySpiError,
     PromoteMemoryCandidateAtomicCommand, PromoteMemoryCandidateAtomicWithJournalCommand,
@@ -262,6 +263,16 @@ impl MemoryRuntimeDataPlane {
     ) -> MemoryServiceResult<MemoryDeletionReceipt> {
         self.require_record_store()?
             .delete_canonical_atomic(command)
+            .await
+            .map_err(map_memory_spi_error)
+    }
+
+    pub async fn delete_all_canonical_memory_atomic(
+        &self,
+        command: DeleteAllCanonicalMemoryCommand,
+    ) -> MemoryServiceResult<MemoryBulkDeletionReceipt> {
+        self.require_record_store()?
+            .delete_all_canonical_atomic(command)
             .await
             .map_err(map_memory_spi_error)
     }

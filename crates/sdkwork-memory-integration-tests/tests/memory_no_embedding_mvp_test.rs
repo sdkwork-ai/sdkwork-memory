@@ -1,7 +1,8 @@
 use sdkwork_intelligence_memory_service::OpenMemoryService;
 use sdkwork_memory_contract::{
-    ListMemoriesQuery, MemoryContextPackRequest, MemoryImplementationKind, MemoryOpenApi,
-    MemoryOpenApiRequestContext, MemoryRecordRequest, MemoryRetrievalRequest, MemoryType,
+    DeleteAllMemoriesRequest, ListMemoriesQuery, MemoryContextPackRequest,
+    MemoryImplementationKind, MemoryOpenApi, MemoryOpenApiRequestContext, MemoryRecordRequest,
+    MemoryRetrievalRequest, MemoryType,
 };
 
 fn open_context() -> MemoryOpenApiRequestContext {
@@ -406,4 +407,84 @@ async fn create_memory_rejects_unparsable_expires_at_instead_of_storing_it() {
         outcome.is_err(),
         "an unparsable expiresAt must fail validation instead of being stored"
     );
+}
+
+#[tokio::test]
+
+async fn delete_all_memories_sweeps_active_records_and_reports_the_ids() {
+    let store = sdkwork_memory_test_support::space_fixtures::new_seeded_in_memory_store().await;
+
+    let service = OpenMemoryService::new(store);
+
+    let context = open_context();
+
+    let request = |text: &str| MemoryRecordRequest {
+        space_id: 2,
+
+        scope: "user".to_string(),
+
+        memory_type: MemoryType::Semantic,
+
+        subject: None,
+
+        predicate: None,
+
+        object_text: Some(text.to_string()),
+
+        canonical_text: text.to_string(),
+
+        summary_text: None,
+
+        user_id: None,
+
+        language: None,
+
+        sensitivity_level: None,
+
+        expires_at: None,
+
+        metadata: None,
+
+        tags: None,
+    };
+
+    service
+        .create_memory(context.clone(), request("Sweep target one"))
+        .await
+        .expect("create one");
+
+    service
+        .create_memory(context.clone(), request("Sweep target two"))
+        .await
+        .expect("create two");
+
+    let result = service
+        .delete_all_memories(
+            context.clone(),
+            DeleteAllMemoriesRequest {
+                space_id: 2,
+                user_id: None,
+            },
+        )
+        .await
+        .expect("delete all");
+
+    assert_eq!(result.deleted_count, 2);
+
+    assert_eq!(result.deleted_memory_ids.len(), 2);
+
+    // The sweep is idempotent: a repeat deletes nothing and still succeeds.
+
+    let repeat = service
+        .delete_all_memories(
+            context,
+            DeleteAllMemoriesRequest {
+                space_id: 2,
+                user_id: None,
+            },
+        )
+        .await
+        .expect("repeat delete all");
+
+    assert_eq!(repeat.deleted_count, 0);
 }

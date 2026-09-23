@@ -259,6 +259,28 @@
       "rateLimitTier": "authCritical"
     },
     {
+      "method": "POST",
+      "path": "/app/v3/api/memory/memories/delete-all",
+      "operationId": "memories.deleteAll",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory.app"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api"
+    },
+    {
       "method": "GET",
       "path": "/app/v3/api/memory/memories/{memoryId}/sources",
       "operationId": "memories.sources.list",

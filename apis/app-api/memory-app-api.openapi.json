@@ -935,13 +935,11 @@
             }
           },
           {
-            "name": "showExpired",
+            "name": "show_expired",
             "in": "query",
-            "required": false,
             "schema": {
               "type": "boolean"
-            },
-            "description": "When true, records whose expiresAt has passed stay visible in the listing. Defaults to false, mirroring mem0 show_expired semantics."
+            }
           }
         ],
         "responses": {
@@ -1619,6 +1617,127 @@
         "x-sdkwork-audit-event": "memory.record.deleted",
         "x-sdkwork-idempotent": false,
         "x-sdkwork-rate-limit-tier": "authCritical"
+      }
+    },
+    "/app/v3/api/memory/memories/delete-all": {
+      "post": {
+        "operationId": "memories.deleteAll",
+        "tags": [
+          "memory"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Client retry idempotency key scoped by tenant, principal, method, and path."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SdkWorkCommandResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Problem detail",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem detail",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Problem detail",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Problem detail",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Problem detail",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem detail",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-owner": "sdkwork-memory",
+        "x-sdkwork-api-authority": "sdkwork-memory.app",
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-domain": "intelligence",
+        "x-sdkwork-resource": "memories",
+        "x-sdkwork-permission": "memory.records.write",
+        "x-sdkwork-tenant-scope": "tenant",
+        "x-sdkwork-data-scope": "owner",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-audit-event": "memory.record.deleted",
+        "x-sdkwork-idempotent": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteAllMemoriesRequest"
+              }
+            }
+          }
+        }
       }
     },
     "/app/v3/api/memory/memories/{memoryId}/sources": {
@@ -7731,15 +7850,7 @@
             "minimum": 1
           },
           "showExpired": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "When true, records whose expiresAt has passed stay retrievable. Defaults to false, mirroring mem0 show_expired semantics."
+            "type": "boolean"
           },
           "includeTrace": {
             "type": "boolean"
@@ -7907,6 +8018,52 @@
           },
           "pageInfo": {
             "$ref": "#/components/schemas/PageInfo"
+          }
+        }
+      },
+      "DeleteAllMemoriesRequest": {
+        "type": "object",
+        "required": [
+          "spaceId"
+        ],
+        "properties": {
+          "spaceId": {
+            "type": "string",
+            "format": "int64",
+            "pattern": "^[0-9]+$",
+            "x-sdkwork-int64-string": true
+          },
+          "userId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "int64",
+                "pattern": "^[0-9]+$",
+                "x-sdkwork-int64-string": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "DeleteAllMemoriesResult": {
+        "type": "object",
+        "required": [
+          "deletedCount",
+          "deletedMemoryIds"
+        ],
+        "properties": {
+          "deletedCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "deletedMemoryIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },

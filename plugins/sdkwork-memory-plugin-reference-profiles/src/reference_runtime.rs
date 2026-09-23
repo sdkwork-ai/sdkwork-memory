@@ -8,18 +8,18 @@ use sdkwork_memory_spi::{
     AppendMemoryRetrievalTraceCommand, ApproveMemoryCandidateCommand, AssembleMemoryContextCommand,
     CountActiveMemoryRecordsQuery, CountUserOwnedMemorySpacesQuery, CreateCanonicalMemoryCommand,
     CreateMemoryCandidateCommand, CreateMemoryRecordCommand, CreateMemorySpaceCommand,
-    DecayMemoryHabitCommand, DeleteCanonicalMemoryCommand, DeleteMemoryRecordCommand,
-    ExternalMemoryBridgePort, ExternalMemoryDeleteCommand, ExternalMemoryDeleteReceipt,
-    ExternalMemoryExportCommand, ExternalMemoryExportResult, ExternalMemoryImportCommand,
-    ExternalMemoryImportResult, ExternalMemoryShadowReadCommand, ExternalMemoryShadowReadResult,
-    ListMemoryCandidatesQuery, ListMemoryRetrievalTracesQuery, ListPendingMemoryOutboxQuery,
-    MarkMemoryOutboxFailedCommand, MarkMemoryOutboxPublishedCommand, MemoryAuditRecord,
-    MemoryAuditStorePort, MemoryCandidate, MemoryCandidateDetail, MemoryCandidatePage,
-    MemoryCandidatePromotion, MemoryCandidateStorePort, MemoryCandidateSummary,
-    MemoryCanonicalRecord, MemoryContextAssemblerPort, MemoryContextPackDraft,
-    MemoryDeletionReceipt, MemoryEvalRunResult, MemoryEvaluationPort, MemoryEvent,
-    MemoryEventStorePort, MemoryGovernanceAccessPort, MemoryGovernanceActor, MemoryHabit,
-    MemoryHabitStorePort, MemoryIndexPort, MemoryIndexReceipt, MemoryMutationJournal,
+    DecayMemoryHabitCommand, DeleteAllCanonicalMemoryCommand, DeleteCanonicalMemoryCommand,
+    DeleteMemoryRecordCommand, ExternalMemoryBridgePort, ExternalMemoryDeleteCommand,
+    ExternalMemoryDeleteReceipt, ExternalMemoryExportCommand, ExternalMemoryExportResult,
+    ExternalMemoryImportCommand, ExternalMemoryImportResult, ExternalMemoryShadowReadCommand,
+    ExternalMemoryShadowReadResult, ListMemoryCandidatesQuery, ListMemoryRetrievalTracesQuery,
+    ListPendingMemoryOutboxQuery, MarkMemoryOutboxFailedCommand, MarkMemoryOutboxPublishedCommand,
+    MemoryAuditRecord, MemoryAuditStorePort, MemoryBulkDeletionReceipt, MemoryCandidate,
+    MemoryCandidateDetail, MemoryCandidatePage, MemoryCandidatePromotion, MemoryCandidateStorePort,
+    MemoryCandidateSummary, MemoryCanonicalRecord, MemoryContextAssemblerPort,
+    MemoryContextPackDraft, MemoryDeletionReceipt, MemoryEvalRunResult, MemoryEvaluationPort,
+    MemoryEvent, MemoryEventStorePort, MemoryGovernanceAccessPort, MemoryGovernanceActor,
+    MemoryHabit, MemoryHabitStorePort, MemoryIndexPort, MemoryIndexReceipt, MemoryMutationJournal,
     MemoryOutboxEvent, MemoryOutboxStorePort, MemoryPluginPorts, MemoryRecord,
     MemoryRecordQuotaAdmission, MemoryRecordStorePort, MemoryRetrievalEventCandidate,
     MemoryRetrievalRecordCandidate, MemoryRetrievalTrace, MemoryRetrievalTraceStorePort,
@@ -686,6 +686,65 @@ impl MemoryRecordStorePort for ReferenceMemoryRuntime {
             deleted: true,
             already_deleted: false,
         })
+    }
+
+    async fn delete_all_canonical_atomic(
+        &self,
+        command: DeleteAllCanonicalMemoryCommand,
+    ) -> MemorySpiResult<MemoryBulkDeletionReceipt> {
+        let matches: Vec<(MemoryScopeContext, String)> = {
+            let records = self.records.lock().map_err(lock_error)?;
+            records
+                .iter()
+                .filter(|(record_key, state)| {
+                    record_key.matches_scope(&command.scope)
+                        && !state.deleted
+                        && command
+                            .user_id
+                            .is_none_or(|user_id| state.user_id() == Some(user_id))
+                })
+                .map(|(record_key, _)| {
+                    (
+                        MemoryScopeContext {
+                            tenant_id: record_key.tenant_id,
+                            space_id: record_key.space_id,
+                            organization_id: None,
+                            user_id: None,
+                        },
+                        record_key.id.clone(),
+                    )
+                })
+                .collect()
+        };
+        let mut deleted_ids = Vec::with_capacity(matches.len());
+        for (scope, memory_id) in matches {
+            let journal = MemoryMutationJournal {
+                outbox_id: format!("outbox-memory-record-deleted-all-{memory_id}"),
+                aggregate_type: "memory_record".to_string(),
+                aggregate_id: memory_id.clone(),
+                event_type: "memory.record.deleted".to_string(),
+                event_version: "1.0".to_string(),
+                payload_json: format!(r#"{{"memoryId":"{memory_id}"}}"#),
+                audit_id: format!("audit-memory-record-deleted-all-{memory_id}"),
+                audit_action: "memory.record.delete".to_string(),
+                audit_resource_type: "memory_record".to_string(),
+                audit_resource_id: memory_id.clone(),
+                audit_result: "accepted".to_string(),
+            };
+            let receipt = MemoryRecordStorePort::delete_canonical_atomic(
+                self,
+                DeleteCanonicalMemoryCommand {
+                    scope,
+                    memory_id: memory_id.clone(),
+                    journal,
+                },
+            )
+            .await?;
+            if receipt.deleted {
+                deleted_ids.push(memory_id);
+            }
+        }
+        Ok(MemoryBulkDeletionReceipt { deleted_ids })
     }
 }
 
@@ -1812,6 +1871,12 @@ impl MemoryRecordState {
             canonical: None,
             deleted: false,
         }
+    }
+
+    fn user_id(&self) -> Option<i64> {
+        self.canonical
+            .as_ref()
+            .and_then(|canonical| canonical.user_id)
     }
 
     fn active_canonical(canonical: MemoryCanonicalRecord) -> Self {

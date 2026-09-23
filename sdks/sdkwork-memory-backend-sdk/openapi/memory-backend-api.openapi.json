@@ -484,15 +484,6 @@
               "maximum": 200,
               "default": 20
             }
-          },
-          {
-            "name": "showExpired",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean"
-            },
-            "description": "When true, records whose expiresAt has passed stay visible in the listing. Defaults to false, mirroring mem0 show_expired semantics."
           }
         ],
         "responses": {
@@ -13334,15 +13325,7 @@
             "minimum": 1
           },
           "showExpired": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "When true, records whose expiresAt has passed stay retrievable. Defaults to false, mirroring mem0 show_expired semantics."
+            "type": "boolean"
           },
           "includeTrace": {
             "type": "boolean"
@@ -13510,6 +13493,52 @@
           },
           "pageInfo": {
             "$ref": "#/components/schemas/PageInfo"
+          }
+        }
+      },
+      "DeleteAllMemoriesRequest": {
+        "type": "object",
+        "required": [
+          "spaceId"
+        ],
+        "properties": {
+          "spaceId": {
+            "type": "string",
+            "format": "int64",
+            "pattern": "^[0-9]+$",
+            "x-sdkwork-int64-string": true
+          },
+          "userId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "int64",
+                "pattern": "^[0-9]+$",
+                "x-sdkwork-int64-string": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "DeleteAllMemoriesResult": {
+        "type": "object",
+        "required": [
+          "deletedCount",
+          "deletedMemoryIds"
+        ],
+        "properties": {
+          "deletedCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "deletedMemoryIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },

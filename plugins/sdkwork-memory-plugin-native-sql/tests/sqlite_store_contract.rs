@@ -16,18 +16,19 @@ use sdkwork_memory_spi::{
     AppendMemoryAuditCommand, AppendMemoryEventCommand, AppendMemoryOutboxCommand,
     AppendMemoryRetrievalTraceCommand, ApproveMemoryCandidateCommand, CreateCanonicalMemoryCommand,
     CreateMemoryCandidateCommand, CreateMemoryRecordCommand, CreateMemorySpaceCommand,
-    DecayMemoryHabitCommand, DeleteCanonicalMemoryCommand, DeleteMemoryRecordCommand,
-    ListMemoryRetrievalTracesQuery, ListPendingMemoryOutboxQuery, MarkMemoryOutboxFailedCommand,
-    MarkMemoryOutboxPublishedCommand, MemoryAuditStorePort, MemoryCandidateStorePort,
-    MemoryContextPackSnapshot, MemoryEventStorePort, MemoryHabitStorePort, MemoryMutationJournal,
-    MemoryOutboxStorePort, MemoryRecordQuotaAdmission, MemoryRecordStorePort,
-    MemoryRetrievalHitDraft, MemoryRetrievalTraceStorePort, MemoryRetrieverKind,
-    MemoryRetrieverPort, MemoryScopeContext, MemorySensitivityReadScope, MemorySpaceQuotaAdmission,
-    MemorySpaceStorePort, MemorySpiError, PromoteMemoryCandidateAtomicWithJournalCommand,
-    PromoteMemoryHabitCommand, RejectMemoryCandidateCommand, RetrieveCanonicalMemoryQuery,
-    RetrieveMemoryAuditQuery, RetrieveMemoryCandidateDetailQuery, RetrieveMemoryCandidateQuery,
-    RetrieveMemoryEventQuery, RetrieveMemoryHabitQuery, RetrieveMemoryOutboxQuery,
-    RetrieveMemoryRecordQuery, RetrieveMemoryRetrievalTraceQuery, SearchMemoryCandidatesQuery,
+    DecayMemoryHabitCommand, DeleteAllCanonicalMemoryCommand, DeleteCanonicalMemoryCommand,
+    DeleteMemoryRecordCommand, ListMemoryRetrievalTracesQuery, ListPendingMemoryOutboxQuery,
+    MarkMemoryOutboxFailedCommand, MarkMemoryOutboxPublishedCommand, MemoryAuditStorePort,
+    MemoryCandidateStorePort, MemoryContextPackSnapshot, MemoryEventStorePort,
+    MemoryHabitStorePort, MemoryMutationJournal, MemoryOutboxStorePort, MemoryRecordQuotaAdmission,
+    MemoryRecordStorePort, MemoryRetrievalHitDraft, MemoryRetrievalTraceStorePort,
+    MemoryRetrieverKind, MemoryRetrieverPort, MemoryScopeContext, MemorySensitivityReadScope,
+    MemorySpaceQuotaAdmission, MemorySpaceStorePort, MemorySpiError,
+    PromoteMemoryCandidateAtomicWithJournalCommand, PromoteMemoryHabitCommand,
+    RejectMemoryCandidateCommand, RetrieveCanonicalMemoryQuery, RetrieveMemoryAuditQuery,
+    RetrieveMemoryCandidateDetailQuery, RetrieveMemoryCandidateQuery, RetrieveMemoryEventQuery,
+    RetrieveMemoryHabitQuery, RetrieveMemoryOutboxQuery, RetrieveMemoryRecordQuery,
+    RetrieveMemoryRetrievalTraceQuery, SearchMemoryCandidatesQuery,
     SupersedeCanonicalMemoryAtomicCommand, UpdateCanonicalMemoryCommand, UpsertMemoryHabitCommand,
     MAX_MEMORY_RETRIEVAL_CANDIDATES,
 };
@@ -5299,4 +5300,111 @@ async fn sqlite_retrieval_and_listing_hide_expired_records_unless_asked() {
         3,
         "show_expired=true must list all three records"
     );
+}
+
+#[tokio::test]
+
+async fn sqlite_delete_all_sweeps_the_scope_with_journals_and_stays_idempotent() {
+    let store = new_contract_store().await;
+
+    let scope = MemoryScopeContext::for_test(1, 1);
+
+    for memory_id in ["sweep-one", "sweep-two", "sweep-three"] {
+        MemoryRecordStorePort::create_canonical_atomic(
+            &store,
+            CreateCanonicalMemoryCommand {
+                scope: scope.clone(),
+
+                memory_id: memory_id.to_string(),
+
+                scope_label: "user".to_string(),
+
+                memory_type: "semantic".to_string(),
+
+                subject: Some("account".to_string()),
+
+                predicate: Some("prefers".to_string()),
+
+                object_text: format!("sweep record {memory_id}"),
+
+                canonical_text: format!("Sweep record {memory_id}"),
+
+                sensitivity_level: "internal".to_string(),
+
+                expires_at: None,
+
+                journal: mutation_journal(memory_id, &format!("{memory_id}-created")),
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    let receipt = MemoryRecordStorePort::delete_all_canonical_atomic(
+        &store,
+        DeleteAllCanonicalMemoryCommand {
+            scope: scope.clone(),
+            user_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let mut deleted = receipt.deleted_ids.clone();
+
+    deleted.sort();
+
+    assert_eq!(
+        deleted,
+        vec![
+            "sweep-one".to_string(),
+            "sweep-three".to_string(),
+            "sweep-two".to_string()
+        ],
+        "delete_all must sweep the active records of the scope"
+    );
+
+    let outbox_count: i64 = sqlx::query_scalar(
+
+        "SELECT COUNT(*) FROM ai_outbox_event WHERE tenant_id = 1 AND event_type = 'memory.record.deleted'",
+
+    )
+
+    .fetch_one(store.pool())
+
+    .await
+
+    .unwrap();
+
+    assert_eq!(outbox_count, 3, "each deletion must journal its own event");
+
+    // Repeat sweep: everything is already deleted, so nothing is deleted again
+
+    // and no duplicate journal rows appear (deterministic journal ids).
+
+    let second = MemoryRecordStorePort::delete_all_canonical_atomic(
+        &store,
+        DeleteAllCanonicalMemoryCommand {
+            scope,
+            user_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert!(second.deleted_ids.is_empty());
+
+    let outbox_after: i64 = sqlx::query_scalar(
+
+        "SELECT COUNT(*) FROM ai_outbox_event WHERE tenant_id = 1 AND event_type = 'memory.record.deleted'",
+
+    )
+
+    .fetch_one(store.pool())
+
+    .await
+
+    .unwrap();
+
+    assert_eq!(outbox_after, 3);
 }

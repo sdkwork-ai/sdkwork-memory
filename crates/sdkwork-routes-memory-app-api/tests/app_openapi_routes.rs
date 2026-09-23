@@ -152,6 +152,13 @@ impl MemoryAppApi for StubAppApi {
     ) -> MemoryServiceResult<()> {
         unimplemented!("stub -- not called in route-mount test")
     }
+    async fn delete_all_memories(
+        &self,
+        _context: MemoryAppRequestContext,
+        _request: sdkwork_memory_contract::DeleteAllMemoriesRequest,
+    ) -> MemoryServiceResult<sdkwork_memory_contract::DeleteAllMemoriesResult> {
+        unimplemented!("stub -- not called in route-mount test")
+    }
 
     async fn list_memory_sources(
         &self,

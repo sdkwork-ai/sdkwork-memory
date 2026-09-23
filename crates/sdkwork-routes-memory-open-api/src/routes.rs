@@ -7,9 +7,10 @@ use axum::{
 };
 use sdkwork_intelligence_memory_service::OpenMemoryService;
 use sdkwork_memory_contract::{
-    ListCandidatesQuery, ListMemoriesQuery, MemoryContextPackRequest, MemoryEventRequest,
-    MemoryExtractionRequest, MemoryFeedbackRequest, MemoryOpenApi, MemoryOpenApiRequestContext,
-    MemoryRecordPatch, MemoryRecordRequest, MemoryRetrievalRequest, MemorySpaceScopeQuery,
+    DeleteAllMemoriesRequest, ListCandidatesQuery, ListMemoriesQuery, MemoryContextPackRequest,
+    MemoryEventRequest, MemoryExtractionRequest, MemoryFeedbackRequest, MemoryOpenApi,
+    MemoryOpenApiRequestContext, MemoryRecordPatch, MemoryRecordRequest, MemoryRetrievalRequest,
+    MemorySpaceScopeQuery,
 };
 use sdkwork_routes_memory_support::{
     created_resource_json, no_content_json, ok_page_json, ok_resource_json, MemoryQuery as Query,
@@ -58,6 +59,7 @@ fn build_open_router(state: OpenState) -> Router {
         .route(paths::EVENTS, post(create_event))
         .route(paths::EVENT, get(retrieve_event))
         .route(paths::MEMORIES, get(list_memories).post(create_memory))
+        .route(paths::MEMORIES_DELETE_ALL, post(delete_all_memories))
         .route(
             paths::MEMORY,
             get(retrieve_memory)
@@ -171,6 +173,15 @@ async fn delete_memory(
             .delete_memory(context, memory_id, scope.space_id)
             .await,
     )
+}
+
+async fn delete_all_memories(
+    Extension(state): Extension<OpenState>,
+    context: Option<Extension<MemoryOpenApiRequestContext>>,
+    Json(request): Json<DeleteAllMemoriesRequest>,
+) -> Result<Response, ApiProblem> {
+    let context = require_context(context)?;
+    ok_resource_json(state.api.delete_all_memories(context, request).await)
 }
 
 async fn create_retrieval(

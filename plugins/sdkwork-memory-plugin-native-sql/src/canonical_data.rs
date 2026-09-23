@@ -2,9 +2,10 @@
 
 use crate::sqlx_compat as sqlx;
 use sdkwork_memory_spi::{
-    CreateCanonicalMemoryCommand, DeleteCanonicalMemoryCommand, MemoryCanonicalRecord,
-    MemoryDeletionReceipt, MemoryMutationJournal, MemoryRecordQuotaAdmission, MemoryScopeContext,
-    SupersedeCanonicalMemoryAtomicCommand, UpdateCanonicalMemoryCommand,
+    CreateCanonicalMemoryCommand, DeleteAllCanonicalMemoryCommand, DeleteCanonicalMemoryCommand,
+    MemoryBulkDeletionReceipt, MemoryCanonicalRecord, MemoryDeletionReceipt, MemoryMutationJournal,
+    MemoryRecordQuotaAdmission, MemoryScopeContext, SupersedeCanonicalMemoryAtomicCommand,
+    UpdateCanonicalMemoryCommand,
 };
 use serde_json::Value;
 use sqlx::{any::AnyRow, Row};
@@ -411,6 +412,69 @@ impl NativeSqlMemoryStore {
             deleted: true,
             already_deleted: false,
         })
+    }
+
+    pub async fn delete_all_canonical_memory_atomic(
+        &self,
+        command: &DeleteAllCanonicalMemoryCommand,
+    ) -> Result<MemoryBulkDeletionReceipt, NativeSqlStoreError> {
+        let mut tx = self.begin_tx().await?;
+        self.lock_space_on_tx(&mut tx, &command.scope).await?;
+        let rows = if let Some(user_id) = command.user_id {
+            sqlx::query(
+                r#"
+                SELECT uuid FROM ai_record
+                WHERE tenant_id = ? AND space_id = ? AND user_id = ? AND status <> 'deleted'
+                "#,
+            )
+            .bind(command.scope.tenant_id)
+            .bind(command.scope.space_id)
+            .bind(user_id)
+            .fetch_all(&mut *tx)
+            .await?
+        } else {
+            sqlx::query(
+                r#"
+                SELECT uuid FROM ai_record
+                WHERE tenant_id = ? AND space_id = ? AND status <> 'deleted'
+                "#,
+            )
+            .bind(command.scope.tenant_id)
+            .bind(command.scope.space_id)
+            .fetch_all(&mut *tx)
+            .await?
+        };
+        let mut deleted_ids = Vec::with_capacity(rows.len());
+        for row in rows {
+            let memory_id: String = row.get("uuid");
+            let journal = MemoryMutationJournal {
+                outbox_id: format!("outbox-memory-record-deleted-all-{memory_id}"),
+                aggregate_type: "memory_record".to_string(),
+                aggregate_id: memory_id.clone(),
+                event_type: "memory.record.deleted".to_string(),
+                event_version: "1.0".to_string(),
+                payload_json: serde_json::json!({
+                    "memoryId": memory_id,
+                    "spaceId": command.scope.space_id,
+                })
+                .to_string(),
+                audit_id: format!("audit-memory-record-deleted-all-{memory_id}"),
+                audit_action: "memory.record.delete".to_string(),
+                audit_resource_type: "memory_record".to_string(),
+                audit_resource_id: memory_id.clone(),
+                audit_result: "accepted".to_string(),
+            };
+            let deleted =
+                Self::mark_record_deleted_on_tx(&mut tx, &command.scope, &memory_id).await?;
+            if deleted {
+                append_journal_on_tx(self, &mut tx, &command.scope, &journal).await?;
+                remove_record_fts_on_tx(self.dialect(), &mut tx, &command.scope, &memory_id)
+                    .await?;
+                deleted_ids.push(memory_id);
+            }
+        }
+        tx.commit().await.map_err(NativeSqlStoreError::from)?;
+        Ok(MemoryBulkDeletionReceipt { deleted_ids })
     }
 
     pub async fn retrieve_canonical_memory(
