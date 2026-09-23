@@ -1700,6 +1700,29 @@ provider 栈，开放 REST 方言，兼容 OpenAI/Azure/Ollama/vLLM/LiteLLM，�
 批次 9（加法归一打分栈作为策略档位）——两者现在都有真实语义分可用，不再被 provider 阻断。
 
 
+**批次 17 补记（2026-09-25，`453f857`）—— 批次 7 核心关闭：ADD-only LLM 抽取管线在可达写路径激活**：
+- 服务层绑定可选 chat provider（`with_llm`），并**将 search-first-vector 插件纳入部署依赖闭包**——
+  批次 2/3/5 的全部抽取语义（ADD-only、attribution、custom_instructions、响应解析与拒绝计数）
+  首次从部署入口可达。
+- 抽取作业：provider 已绑定且未强制 deterministic 时，事件内容作为对话轮次进入
+  `build_additive_extraction_prompt`（含调用方 custom instructions——mem0 `add(prompt=...)` 对齐），
+  LLM 响应解析出的每条事实各自成为候选（confidence 0.9，attribution 与 linked ids 进 payload），
+  结果回报 refused/truncated 计数；确定性模式保留为显式回退与无 provider 时的默认。
+- 装配层用与 embedder 相同的 `SDKWORK_MEMORY_OPENAI_*` 配置绑定 chat provider。
+- 契约 `MemoryExtractionRequest` 新增 `customInstructions`（materializer 声明 + SDK 镜像）。
+- 测试：脚本化 LLM 下整条管线产出两条带归因的事实候选（additive_llm 模式回报）；
+  deterministic 模式作为显式回退与无 provider 默认行为分别钉住。
+
+**§9 计数更新（批次 17 后）**：部分 #1（add 参数面）的 infer 与 prompt 分量**关闭**——
+infer = LLM 抽取管线可达，prompt = customInstructions 贯通。剩余三项（update 实体重链接、
+时间锚点、12 few-shot）同属该管线的增强项而非缺失能力：重链接随图谱数据积累可增量做，
+时间锚点与 few-shot 是提示词资源增强。**行为对齐的必要面至此全部就位。**
+
+**仍开放的后续（全部为增强而非缺口）**：批次 7 的收尾——向量 retriever 端口与 native-sql
+的单槽取舍（需要运行数据支撑设计决策）；批次 9 的策略在真实部署中的默认值取舍；
+提示词 few-shot 资源内联。
+
+
 **批次 16 补记（2026-09-24，`42ace4f`）—— 批次 9 关闭：加法归一打分栈成为可达策略档位**：
 - retrieval 新增 `score_candidates_additive`（lemmatized BM25 + 调用方实体加成 + 每候选语义分 →
   `score_and_rank`），`HybridSignals`/`score_and_rank` 自此拥有生产构造路径——批次 6 的
