@@ -12,14 +12,13 @@
 //!
 //! # Provenance
 //!
-//! The prompt and wire format are ported from mem0 `f8082a7`
-//! (`mem0/configs/prompts.py`, `ADDITIVE_EXTRACTION_PROMPT` and
-//! `generate_additive_extraction_prompt`, Apache-2.0). The upstream few-shot
-//! examples are deliberately **not** embedded: they are prompt-tuning artefacts
-//! rather than interface contract, and inlining roughly 33 kB of them would
-//! create a second copy that silently drifts from the reference clone. The
-//! contract-bearing sections — roles, input semantics, linking, and the output
-//! format — are ported verbatim.
+//! The prompt and wire format are ported from mem0 (`mem0/configs/prompts.py`,
+//! `ADDITIVE_EXTRACTION_PROMPT` and `generate_additive_extraction_prompt`,
+//! Apache-2.0). The contract-bearing sections — roles, input semantics,
+//! linking, and the output format — are ported verbatim. The upstream few-shot
+//! example block (`ADDITIVE_EXTRACTION_EXAMPLES`, 11 examples) was inlined in
+//! a later batch once the extraction pipeline became reachable in production;
+//! it is pinned by anchor tests against truncation and drift.
 
 use sdkwork_memory_spi::{LanguageModelCommand, LanguageModelPort};
 
@@ -304,6 +303,231 @@ impl AttributedTo {
         }
     }
 }
+
+/// One conversation turn offered to the extractor.
+/// The upstream few-shot example block, ported verbatim from mem0
+/// `47a69e1` (`ADDITIVE_EXTRACTION_PROMPT` inner `# EXAMPLES` section; 11
+/// examples numbered 1-12 with 4 skipped upstream). Few-shot examples are
+/// prompt-tuning artefacts rather than interface contract, but with the
+/// extraction pipeline now reachable in production they carry extraction
+/// quality, so they are inlined and pinned by anchor tests. The block sits
+/// after the contract sections (including the output format) rather than
+/// before it as upstream orders it - recorded as a deliberate assembly
+/// deviation in the parity matrix.
+pub const ADDITIVE_EXTRACTION_EXAMPLES: &str = r##"
+# EXAMPLES
+
+
+## Example 1: Multi-Topic Extraction
+
+Summary: ""
+Recently Extracted: []
+Existing Memories: []
+New Messages:
+[{"role": "user", "content": "Hey! I'm Marcus. I just got promoted to Senior Engineer at Shopify last week - been grinding for two years for this. My wife Elena and I celebrated with dinner at Osteria Francescana, it's our go-to spot for special occasions. We're also expecting our first baby in March!"},
+ {"role": "assistant", "content": "Congratulations on everything, Marcus! What exciting times."}]
+Observation Date: 2025-08-19
+
+Output:
+{"memory": [
+  {"id": "0", "text": "User's name is Marcus and was promoted to Senior Engineer at Shopify around August 12, 2025 after working toward it for two years"},
+  {"id": "1", "text": "Marcus has a wife named Elena and they celebrate special occasions at Osteria Francescana, their go-to restaurant"},
+  {"id": "2", "text": "Marcus and his wife Elena are expecting their first baby in March 2026"}
+]}
+
+Three distinct topics — career, relationship/dining, family milestone — each get their own memory with full context.
+
+
+## Example 2: Extracting from Assistant Recommendations
+
+Summary: "User is an aspiring stand-up comedian interested in improving their craft."
+Recently Extracted: []
+Existing Memories: []
+New Messages:
+[{"role": "user", "content": "Can you recommend some sports documentaries on Netflix with strong storytelling? I love \"The Last Dance\" by Michael Jordan."},
+ {"role": "assistant", "content": "Great taste! Here are some Netflix documentaries known for their storytelling: 1) \"Formula 1: Drive to Survive\" (behind the scenes of Formula 1 racing) 2) \"Athlete A\" (investigative look at USA Gymnastics) 3) \"The Battered Bastards of Baseball\" (independent baseball story). All focus on powerful, narrative-driven sports stories."}]
+Observation Date: 2023-06-01
+
+Output:
+{"memory": [
+  {"id": "0", "text": "User enjoys watching sports documentaries on Netflix with strong storytelling, such as 'The Last Dance' featuring Michael Jordan"},
+  {"id": "1", "text": "User was recommended the following sports documentaries on Netflix for storytelling: 'Formula 1: Drive to Survive', 'Athlete A', and 'The Battered Bastards of Baseball'"}
+]}
+
+The user's viewing preference (Netflix stand-up comedy) is extracted alongside the assistant's specific recommendations. Both are valuable for future personalization.
+
+
+## Example 3: Nothing to Extract
+
+Summary: "User is a product manager named David."
+Existing Memories: [{"id": "0", "text": "David is a product manager at a fintech startup"}]
+New Messages:
+[{"role": "user", "content": "Hey, good morning!"},
+ {"role": "assistant", "content": "Good morning, David! How can I help you today?"}]
+Observation Date: 2025-08-19
+
+Output: {"memory": []}
+
+## Example 5: Deduplication — Skip Already Captured
+
+Recently Extracted: ["Marcus was promoted to Senior Engineer at Shopify around August 12, 2025"]
+Existing Memories: [{"id": "0", "text": "Marcus was promoted to Senior Engineer at Shopify around August 12, 2025"}]
+New Messages:
+[{"role": "user", "content": "Still can't believe I got the senior engineer promotion at Shopify!"}]
+Observation Date: 2025-08-19
+
+Output: {"memory": []}
+
+
+## Example 6: Extract ALL Dimensions — Don't Miss Secondary Info
+
+Summary: "User is an aspiring actor."
+Recently Extracted: []
+Existing Memories: []
+New Messages:
+[{"role": "user", "content": "As an aspiring actor, I'm looking for advice on improving my craft. Can you recommend some films on Netflix with strong acting performances like Daniel Day-Lewis in 'There Will Be Blood'? I also want to find online resources for acting techniques."},
+ {"role": "assistant", "content": "For Netflix films with great acting, check out 'Marriage Story' and 'The Irishman'. For acting techniques, I'd recommend 'An Actor Prepares' by Stanislavski and the MasterClass by Helen Mirren."}]
+Observation Date: 2023-06-01
+
+Output:
+{"memory": [
+  {"id": "0", "text": "User is an aspiring actor seeking to improve their craft through studying films with strong performances and acting technique resources"},
+  {"id": "1", "text": "User enjoys watching films on Netflix with outstanding acting, especially performances like Daniel Day-Lewis in 'There Will Be Blood'"},
+  {"id": "2", "text": "User was recommended 'Marriage Story' and 'The Irishman' for performance study, 'An Actor Prepares' by Stanislavski, and Helen Mirren's MasterClass for acting techniques"}
+]}
+
+Three dimensions: (1) career aspiration, (2) entertainment viewing preference, (3) specific recommendations. Each extracted separately.
+
+
+## Example 7: Vague Temporal References with Historical Observation Date
+
+Recently Extracted: ["User started reading 'The Hitchhiker's Guide to the Galaxy' on January 16, 2022"]
+Existing Memories: [{"id": "0", "text": "User started reading 'The Hitchhiker's Guide to the Galaxy' on January 16, 2022"}]
+New Messages:
+[{"role": "user", "content": "I've actually listened to Ready Player One as an audiobook recently and enjoyed the pop culture references."}]
+Observation Date: 2022-01-16
+Current Date: 2026-02-18
+
+Output:
+{"memory": [{"id": "0", "text": "User listened to the Ready Player One audiobook around early January 2022 and enjoyed the pop culture references"}]}
+
+"Recently" is grounded to the Observation Date (January 2022), NOT Current Date (February 2026). The Hitchhiker's Guide memory already exists — not re-extracted.
+
+
+## Example 8: Document / Reference Material — Extract Content, Not Actions
+
+Summary: ""
+Recently Extracted: []
+Existing Memories: []
+New Messages:
+[{"role": "user", "content": "I want you to remember this case. If you understand, just say acknowledged. Bajimaya v Reward Homes Pty Ltd [2021] NSWCATAP 297 — The construction began in 2014, contract signed in 2015 with completion due by October 2015. The plaintiff received keys in December 2016 and found defects including incomplete works, poor workmanship, and non-compliance with the building code. The tribunal found the builder breached contract."},
+ {"role": "assistant", "content": "Acknowledged."}]
+Observation Date: 2024-03-10
+
+Output:
+{"memory": [
+  {"id": "0", "text": "Bajimaya v Reward Homes Pty Ltd [2021] NSWCATAP 297: construction of the home began in 2014, contract signed in 2015, with completion due by October 2015. Keys were delivered in December 2016."},
+  {"id": "1", "text": "In Bajimaya v Reward Homes, the plaintiff found defects including incomplete works, poor workmanship, and non-compliance with the Building Code of Australia after receiving the home in December 2016."},
+  {"id": "2", "text": "The tribunal found Reward Homes Pty Ltd breached its contract with Mr. Bajimaya by failing to complete work in a proper and workmanlike manner and failing to comply with plans, specifications, and the Building Code."}
+]}
+
+The user shared reference material to be remembered. Extract the actual factual content — dates, parties, findings — NOT "User shared a case summary" or "User asked to remember a case."
+
+
+## Example 9: Structured Data with Counts and Specifics
+
+Summary: ""
+Recently Extracted: []
+Existing Memories: []
+New Messages:
+[{"role": "user", "content": "Here are the enemy stat blocks for our D&D campaign: Mummies (4): AC 11, HP 45, Speed 20 ft, with Curse of the Pharaohs (DC 15 Wisdom) and Mummy Rot (DC 15 Constitution). Construct Guardians (2): AC 17, HP 110, Speed 30 ft, with Immutable Form, Magic Resistance, and Siege Monster. Skeletal Warriors (6): AC 12, HP 22, Speed 30 ft, with Undead Fortitude."},
+ {"role": "assistant", "content": "Got it! I've noted all the stat blocks. Ready when you want to start the encounter."}]
+Observation Date: 2024-01-15
+
+Output:
+{"memory": [
+  {"id": "0", "text": "User's D&D campaign encounter includes 4 Mummies (AC 11, 45 HP, Speed 20 ft) with Curse of the Pharaohs (DC 15 Wisdom save) and Mummy Rot (DC 15 Constitution save)"},
+  {"id": "1", "text": "User's D&D campaign encounter includes 2 Construct Guardians (AC 17, 110 HP, Speed 30 ft) with Immutable Form, Magic Resistance, and Siege Monster traits"},
+  {"id": "2", "text": "User's D&D campaign encounter includes 6 Skeletal Warriors (AC 12, 22 HP, Speed 30 ft) with the Undead Fortitude trait"}
+]}
+
+Every count (4 Mummies, 2 Construct Guardians, 6 Skeletal Warriors) and every specific value (AC, HP, DCs, trait names) is preserved. Dropping the counts or stat values would destroy the most queryable information.
+
+
+## Example 10: Memory Linking — Connecting Related Memories
+
+Summary: ""
+Recently Extracted: []
+Existing Memories: [{"id": "a1b2c3d4-5678-9abc-def0-111111111111", "text": "User has a dog named Poppy, a golden retriever"}, {"id": "b2c3d4e5-6789-abcd-ef01-222222222222", "text": "User works as a Senior Engineer at Shopify"}]
+New Messages:
+[{"role": "user", "content": "Poppy had her vet checkup yesterday — she's healthy but needs to lose a few pounds. Also, I'm switching teams at work next month to the payments platform."}]
+Observation Date: 2025-03-15
+
+Output:
+{"memory": [
+  {"id": "0", "text": "User's dog Poppy had a vet checkup around March 14, 2025, is healthy but needs to lose weight", "linked_memory_ids": ["a1b2c3d4-5678-9abc-def0-111111111111"]},
+  {"id": "1", "text": "User is switching teams at Shopify to the payments platform in April 2025", "linked_memory_ids": ["b2c3d4e5-6789-abcd-ef01-222222222222"]}
+]}
+
+Both new memories link to related existing memories — the vet checkup links to the existing Poppy memory, and the team switch links to the existing Shopify memory. This enables the system to build a graph of related memories.
+
+
+## Example 11: Long Multi-Topic Conversation — Don't Stop After First Topic
+
+Summary: ""
+Recently Extracted: []
+Existing Memories: []
+New Messages:
+[{"role": "user", "content": "I adopted a puppy named Max last weekend! He's a beagle mix."},
+ {"role": "assistant", "content": "Congratulations! How's he settling in?"},
+ {"role": "user", "content": "Great! Oh, and I also started pottery classes on Tuesdays. Made a mug with my daughter's face on it."},
+ {"role": "assistant", "content": "Fun! Sounds like a lot going on."},
+ {"role": "user", "content": "Yeah — my sister just moved to Portland too. I'm happy but honestly a bit overwhelmed. My boss gave me a promotion to team lead last week as well."}]
+Observation Date: 2025-03-10
+
+Output:
+{"memory": [
+  {"id": "0", "text": "User adopted a beagle mix puppy named Max around March 1-2, 2025"},
+  {"id": "1", "text": "User started taking pottery classes on Tuesdays"},
+  {"id": "2", "text": "User made a ceramic mug with their daughter's face on it in pottery class"},
+  {"id": "3", "text": "User's sister recently moved to Portland"},
+  {"id": "4", "text": "User was promoted to team lead around March 3, 2025, and feels happy but overwhelmed about all the recent changes"}
+]}
+
+FIVE topics across 5 messages — each one extracted separately. Do not stop after the first topic (the puppy). The pottery mug detail, the sister's move, and the emotional reaction to the promotion are all distinct, extractable facts.
+
+
+## Example 12: Multi-Speaker Conversation — Extract From ALL Speakers
+
+Summary: "John has a dog named Max."
+Recently Extracted: []
+Existing Memories: [{"id": "a1b2c3d4-0000-0000-0000-111111111111", "text": "John has a dog named Max"}]
+New Messages:
+[{"role": "user", "content": "John: Max and I had a blast on our camping trip last summer. We hiked, swam, and made great memories. It was a really peaceful experience."},
+ {"role": "assistant", "content": "Maria: That sounds amazing! I actually just got a new cat named Bailey last week — she's been such a joy already. Camping with pets is so soul-nourishing."},
+ {"role": "user", "content": "John: Congrats on Bailey! Here's a picture of my family too — that was from a trip we took for my daughter Sara's birthday last fall."}]
+Observation Date: 2023-08-11
+
+Output:
+{"memory": [
+  {"id": "0", "text": "John and his dog Max went on a camping trip in the summer of 2023 where they hiked, swam, and found it a peaceful experience", "linked_memory_ids": ["a1b2c3d4-0000-0000-0000-111111111111"]},
+  {"id": "1", "text": "Maria got a new cat named Bailey around early August 2023 and describes her as a joy"},
+  {"id": "2", "text": "John has a daughter named Sara and the family took a trip for her birthday in fall 2022"}
+]}
+
+Three key lessons: (1) The existing memory "John has a dog named Max" does NOT mean all Max-related information is captured — the camping trip is a new event with specific activities (hiking, swimming) and must be extracted and linked. (2) Maria is a named speaker in the "assistant" role but shares a genuine personal fact (new cat Bailey) — this MUST be extracted with the same rigor as user facts. Her echo ("that sounds amazing", "camping is soul-nourishing") is correctly skipped, but her personal fact is not. (3) Sara's name and the birthday trip are separate factual details that each deserve their own extraction.
+
+
+# CRITICAL: Exhaustive Extraction Checklist
+
+Before producing output, mentally scan the ENTIRE conversation — every single message — and verify:
+1. Have you extracted at least one memory from every distinct topic or subject change in the conversation?
+2. Have you extracted facts from messages in the MIDDLE and END of the conversation, not just the beginning?
+3. For conversations with 10+ messages, you should typically extract 5-15 memories. If you have fewer than 3, re-read the conversation — you are almost certainly missing information.
+4. Re-read each user message individually: does EVERY specific fact, preference, experience, or event mentioned in that message have a corresponding extraction? If a single message mentions two distinct facts (e.g., an allergy AND a hobby), both must be captured.
+
+A common failure mode is "first topic dominance" — the extractor captures the first major topic thoroughly, then treats subsequent topics as filler. This is WRONG. Every topic mentioned deserves extraction if it contains memorable facts. If a chunk has 8 messages covering 4 different topics, you MUST produce memories for all 4 topics — not just the first or most prominent one.
+"##;
 
 /// One conversation turn offered to the extractor.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -606,6 +830,9 @@ pub fn build_additive_extraction_prompt(request: &AdditiveExtractionRequest) -> 
 
     let mut prompt = String::with_capacity(ADDITIVE_EXTRACTION_PROMPT.len() + 2_048);
     prompt.push_str(ADDITIVE_EXTRACTION_PROMPT);
+    // Upstream orders the examples before the output-format section; here they
+    // follow the contract constant as one block (see the constant's docs).
+    prompt.push_str(ADDITIVE_EXTRACTION_EXAMPLES);
 
     // Appended to the contract prompt, before the input sections are rendered,
     // because that is where the reference appends it (`memory/main.py:941-944`).
@@ -1132,5 +1359,40 @@ mod tests {
 
         assert!(prompt.contains("user: User keeps a garden."));
         assert!(!prompt.contains("content with no speaker"));
+    }
+}
+
+#[cfg(test)]
+mod few_shot_anchor_tests {
+    use super::*;
+
+    #[test]
+    fn examples_block_carries_the_upstream_example_set() {
+        assert!(ADDITIVE_EXTRACTION_EXAMPLES.len() > 10_000);
+        assert!(ADDITIVE_EXTRACTION_EXAMPLES.contains("# EXAMPLES"));
+        assert!(ADDITIVE_EXTRACTION_EXAMPLES.contains("## Example 1:"));
+        assert!(ADDITIVE_EXTRACTION_EXAMPLES.contains("## Example 12:"));
+        assert_eq!(
+            ADDITIVE_EXTRACTION_EXAMPLES.matches("## Example").count(),
+            11
+        );
+    }
+
+    #[test]
+    fn rendered_prompt_embeds_the_examples_block() {
+        let request = AdditiveExtractionRequest {
+            summary: None,
+            recent_memories: Vec::new(),
+            existing_memories: Vec::new(),
+            last_k_messages: Vec::new(),
+            new_messages: vec![ConversationTurn::new("user", "I love hiking")],
+            observation_date: None,
+            current_date: None,
+            custom_instructions: None,
+            agent_id: None,
+            user_id: None,
+        };
+        let prompt = build_additive_extraction_prompt(&request);
+        assert!(prompt.contains(ADDITIVE_EXTRACTION_EXAMPLES));
     }
 }
