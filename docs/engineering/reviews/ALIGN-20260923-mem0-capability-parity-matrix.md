@@ -1628,6 +1628,33 @@ provider-free 的用户可感对齐面在本轮**全部关闭**。
   改为 trait 的治理性重构，无任何用户可感行为差异，且触及 920 行 commercial 面。留给专门的
   结构批次，不与行为对齐混做。
 
+
+**批次 13 补记（2026-09-24，`9213c5e`）—— 实体加权能力在可达栈闭合（对 §20.4 一次判定的重要修正）**：
+§20.4 把「批次 4 ③ 实体 → 候选匹配 → `entity_boosts` 接进检索」判为 provider 阻断，取证依据是
+`score_and_rank` 的 `SemanticCandidate.semantic_score` 为必需 `f64` 且先过阈值门 —— 该结论**只覆盖
+加法归一栈**。批次 6 已确证服务实际消费的是活栈 RRF 编排器，而活栈没有任何语义分依赖。本批次因此把
+实体信号接入**活栈**而非死栈：
+
+- retrieval 新增 `EntityBoostInput`（与 `VectorSimilarityInput` 同契约：本 crate 不抽取不嵌入，由
+  调用方传入）与 `orchestrate_retrieval_candidates_with_entity_boosts`；旧函数逐字节委托，默认行为不变。
+- native-sql 新增 `list_entity_memory_links`：把带 provenance 的边摊平为（实体 canonical_name,
+  记忆 uuid）对。
+- 服务层：每检索一次 `select_query_entities`（确定性抽取，`MAX_QUERY_ENTITIES` 截断，对齐上游
+  `[:8]`）→ 归一化文本精确匹配存储实体名（**替代**向量相似度门，similarity 记 1.0 —— 与 §0.5 的
+  确定性近似口径一致）→ 移植的 `entity_boosts` 算术（`ENTITY_BOOST_WEIGHT` + hub 衰减 + 每记忆取 max）。
+- 信号 profile 门控（`entity` 默认权重 0，与 vector 同姿态：图谱数据需管理员录入，默认零保证既有
+  profile 排名字节不变）；`entity` 有意**不**进入 `SUPPORTED_RETRIEVERS` 召回词表——它是召回后的
+  重排信号，不是召回通道；词表加入 `entity` 仅用于 profile 校验放行。
+- 端到端测试钉住排名翻转：词法更强的竞争记忆在默认 profile 下领先；entity 加权 profile 下，
+  图关联记忆升到第一。
+
+**§9 计数更新（批次 13 后）**：缺失 6 项中 **5 项已关闭**（#6 过期过滤、#5 delete_all、#2 归属写入、
+#3 查询侧实体选择、#4 实体加权喂打分），唯一剩余缺失 = **实体 SPI 端口**（结构性治理，见批次 12 的
+不开动理由）。部分 7 项中 2 项关闭（#3 over-fetch、#2 的 show_expired 分量）、1 项按义达成（#6 role），
+剩余 4 项（add 的 infer/prompt、search 的 threshold/explain、update 实体重链接、时间锚点）全部依赖
+provider 适配器或不可达插件的激活，属同一条用户决策线。**至此，不引入 provider 适配器前提下，
+本仓能关闭的行为对齐面已全部关闭。**
+
 ---
 
 ## 附：上游自身的缺陷（**不应复刻**，仅登记）
