@@ -18,9 +18,11 @@ use sdkwork_memory_plugin_native_sql::{
     NATIVE_SQL_PLUGIN_ID,
 };
 use sdkwork_memory_retrieval::{
-    build_context_pack_from_hits, fuse_retrieval_candidates_with_policy,
-    orchestrate_retrieval_candidates, MemoryRetrievalStrategy, RetrievalCandidate,
-    RetrievalEventInput, RetrievalFusionPolicy, RetrievalRecordInput,
+    build_context_pack_from_hits, entity_boosts, extract_entities,
+    fuse_retrieval_candidates_with_policy, normalize_entity_text,
+    orchestrate_retrieval_candidates_with_entity_boosts, select_query_entities, EntityBoostInput,
+    LinkedEntityMatch, MemoryRetrievalStrategy, RetrievalCandidate, RetrievalEventInput,
+    RetrievalFusionPolicy, RetrievalRecordInput,
 };
 use sdkwork_memory_spi::parse_metadata_filter;
 use sdkwork_memory_spi::{
@@ -1357,6 +1359,10 @@ impl MemoryOpenApi for OpenMemoryService {
         let candidate_limit = ((effective_top_k as u32).saturating_mul(4).max(60))
             .clamp(1, MAX_MEMORY_RETRIEVAL_CANDIDATES);
 
+        // mem0 extracts query entities once per search and caps them; the
+        // deterministic extractor here stands in for the spaCy/NER pipeline.
+        let query_entities = select_query_entities(&extract_entities(&request.query));
+
         let memory_type_filter = request.memory_types.as_ref().map(|types| {
             types
                 .iter()
@@ -1491,10 +1497,46 @@ impl MemoryOpenApi for OpenMemoryService {
                     created_at: event.created_at.clone(),
                 })
                 .collect::<Vec<_>>();
-            let orchestrated = orchestrate_retrieval_candidates(
+            // Entity-boost signal: a candidate memory whose provenance edge
+            // ties it to an entity that matches a query entity gets a boost on
+            // mem0's arithmetic (similarity 1.0 for an exact normalized-text
+            // match against the stored canonical name, then the hub-decay
+            // weight inside `entity_boosts`). No entity graph data means an
+            // empty signal, so lexical rankings stay byte-identical.
+            let entity_boost_inputs = if query_entities.is_empty() {
+                Vec::new()
+            } else {
+                let links = self
+                    .store
+                    .list_entity_memory_links(scope.tenant_id, scope.space_id)
+                    .await
+                    .map_err(Self::map_store_error)?;
+                let mut matches: Vec<LinkedEntityMatch> = Vec::with_capacity(query_entities.len());
+                for query_entity in &query_entities {
+                    let normalized = normalize_entity_text(&query_entity.text);
+                    let mut memory_ids = links
+                        .iter()
+                        .filter(|link| normalize_entity_text(&link.entity_name) == normalized)
+                        .map(|link| link.memory_id.clone())
+                        .collect::<Vec<_>>();
+                    memory_ids.sort();
+                    memory_ids.dedup();
+                    matches.push(LinkedEntityMatch {
+                        similarity: 1.0,
+                        memory_ids,
+                    });
+                }
+                entity_boosts(&matches)
+                    .into_iter()
+                    .map(|(memory_id, boost)| EntityBoostInput { memory_id, boost })
+                    .collect()
+            };
+            let orchestrated = orchestrate_retrieval_candidates_with_entity_boosts(
                 &request.query,
                 &record_inputs,
                 &event_inputs,
+                &[],
+                &entity_boost_inputs,
                 profile_retrievers.as_ref(),
                 candidate_limit as usize,
             );

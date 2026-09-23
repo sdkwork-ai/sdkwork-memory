@@ -130,6 +130,20 @@ pub struct VectorSimilarityInput {
     pub similarity: f64,
 }
 
+/// A per-memory entity boost, supplied by the caller.
+///
+/// Mirrors [`VectorSimilarityInput`]'s contract: this crate never extracts
+/// entities from stored graph data. The caller resolves query entities against
+/// its entity store and passes the resulting boost for each memory. Values are
+/// expected on mem0's scale — `similarity * ENTITY_BOOST_WEIGHT * hub decay`,
+/// i.e. within `[0, 0.5]` — which already sits inside the `[0, 1]` signal scale
+/// the rest of fusion uses, so no rescaling is applied.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EntityBoostInput {
+    pub memory_id: String,
+    pub boost: f64,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct OrchestratedCandidate {
     pub record: RetrievalRecordInput,
@@ -493,7 +507,15 @@ pub fn orchestrate_retrieval_candidates(
     profile: Option<&Value>,
     top_k: usize,
 ) -> Vec<OrchestratedCandidate> {
-    orchestrate_retrieval_candidates_with_vector(query, records, events, &[], profile, top_k)
+    orchestrate_retrieval_candidates_with_entity_boosts(
+        query,
+        records,
+        events,
+        &[],
+        &[],
+        profile,
+        top_k,
+    )
 }
 
 /// Orchestrate every retrieval signal, optionally including a vector-similarity signal.
@@ -513,6 +535,35 @@ pub fn orchestrate_retrieval_candidates_with_vector(
     records: &[RetrievalRecordInput],
     events: &[RetrievalEventInput],
     vector_similarities: &[VectorSimilarityInput],
+    profile: Option<&Value>,
+    top_k: usize,
+) -> Vec<OrchestratedCandidate> {
+    orchestrate_retrieval_candidates_with_entity_boosts(
+        query,
+        records,
+        events,
+        vector_similarities,
+        &[],
+        profile,
+        top_k,
+    )
+}
+
+/// Orchestrate every retrieval signal, including optional vector-similarity and
+/// entity-boost signals.
+///
+/// See [`VectorSimilarityInput`] and [`EntityBoostInput`] for the caller
+/// contracts. The entity signal follows the same opt-in discipline as vector:
+/// it contributes only when the profile grants `entity` a positive weight, so a
+/// profile written before entity ranking existed cannot silently start
+/// rescoring. With no entity graph data seeded, the caller passes an empty
+/// slice and the signal vanishes regardless of weight.
+pub fn orchestrate_retrieval_candidates_with_entity_boosts(
+    query: &str,
+    records: &[RetrievalRecordInput],
+    events: &[RetrievalEventInput],
+    vector_similarities: &[VectorSimilarityInput],
+    entity_boosts: &[EntityBoostInput],
     profile: Option<&Value>,
     top_k: usize,
 ) -> Vec<OrchestratedCandidate> {
@@ -624,6 +675,32 @@ pub fn orchestrate_retrieval_candidates_with_vector(
         );
     }
 
+    let entity_weight = retriever_weight(profile, "entity", 0.0);
+    if entity_weight > 0.0 {
+        let records_by_id = records
+            .iter()
+            .map(|record| (record.memory_id.as_str(), record))
+            .collect::<HashMap<&str, &RetrievalRecordInput>>();
+        append_ranked_signal(
+            &mut output,
+            "entity",
+            entity_weight,
+            entity_boosts.iter().filter_map(|input| {
+                let record = records_by_id.get(input.memory_id.as_str())?;
+                // Boosts already arrive on mem0's [0, 0.5] scale, inside the
+                // common [0, 1] signal scale; only clamp away non-finite or
+                // negative caller noise.
+                let score = if input.boost.is_finite() && input.boost > 0.0 {
+                    input.boost.min(1.0)
+                } else {
+                    return None;
+                };
+                Some(((*record).clone(), score))
+            }),
+            top_k,
+        );
+    }
+
     output
 }
 
@@ -640,6 +717,85 @@ mod tests {
             canonical_text: text.to_string(),
             created_at: sdkwork_utils_rust::format_datetime(sdkwork_utils_rust::now(), None),
         }
+    }
+
+    #[test]
+    fn entity_signal_stays_silent_without_profile_opt_in() {
+        let records = vec![record("1", "unrelated body text")];
+        let boosts = [EntityBoostInput {
+            memory_id: "1".to_string(),
+            boost: 0.5,
+        }];
+        // No `entity` key in the profile: the signal must not fire, exactly
+        // like vector, so pre-existing profiles keep byte-identical rankings.
+        let with_data = orchestrate_retrieval_candidates_with_entity_boosts(
+            "unrelated",
+            &records,
+            &[],
+            &[],
+            &boosts,
+            Some(&serde_json::json!({ "keyword": { "weight": 1.0 } })),
+            5,
+        );
+        let without_data = orchestrate_retrieval_candidates(
+            "unrelated",
+            &records,
+            &[],
+            Some(&serde_json::json!({ "keyword": { "weight": 1.0 } })),
+            5,
+        );
+        assert!(!with_data.is_empty());
+        assert!(with_data
+            .iter()
+            .all(|candidate| candidate.retriever_name != "entity"));
+        assert_eq!(with_data.len(), without_data.len());
+    }
+
+    #[test]
+    fn entity_boost_promotes_the_linked_memory_through_fusion() {
+        // Two candidates; the query lexically matches candidate A only, but
+        // candidate B carries an entity boost. With the entity signal granted,
+        // B must surface; without any boost data it must not.
+        let records = vec![
+            record("lexical", "gantt chart planning"),
+            record("entity-linked", "weekly standup notes"),
+        ];
+        let profile = serde_json::json!({
+            "keyword": { "weight": 1.0 },
+            "entity": { "weight": 0.8 }
+        });
+
+        let without = orchestrate_retrieval_candidates_with_entity_boosts(
+            "gantt chart",
+            &records,
+            &[],
+            &[],
+            &[],
+            Some(&profile),
+            5,
+        );
+        assert!(without
+            .iter()
+            .all(|candidate| candidate.record.memory_id != "entity-linked"));
+
+        let with = orchestrate_retrieval_candidates_with_entity_boosts(
+            "gantt chart",
+            &records,
+            &[],
+            &[],
+            &[EntityBoostInput {
+                memory_id: "entity-linked".to_string(),
+                boost: 0.5,
+            }],
+            Some(&profile),
+            5,
+        );
+        assert!(
+            with.iter()
+                .any(|candidate| candidate.record.memory_id == "entity-linked"
+                    && candidate.retriever_name == "entity"),
+            "the entity signal must rank the linked memory on its own"
+        );
     }
 
     #[test]

@@ -46,6 +46,15 @@ pub struct NativeSqlEdgeRow {
     pub version: i64,
 }
 
+/// One entity-to-memory provenance link, flattened for retrieval ranking:
+/// each edge endpoint contributes its own (entity name, provenance memory)
+/// pair. `entity_name` is the canonical name; matching happens on it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NativeSqlEntityMemoryLink {
+    pub entity_name: String,
+    pub memory_id: String,
+}
+
 pub struct InsertEntityCommand<'a> {
     pub id: i64,
     pub uuid: &'a str,
@@ -464,6 +473,48 @@ impl NativeSqlMemoryStore {
         .execute(self.pool())
         .await?;
         Ok(result.rows_affected() > 0)
+    }
+
+    /// Entity-to-memory provenance links for one space, flattened per edge
+    /// endpoint. Only edges carrying a provenance memory contribute; this is
+    /// the data feed for the retrieval `entity` ranking signal.
+    pub async fn list_entity_memory_links(
+        &self,
+        tenant_id: i64,
+        space_id: i64,
+    ) -> Result<Vec<NativeSqlEntityMemoryLink>, NativeSqlStoreError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT src.canonical_name AS src_name,
+                   tgt.canonical_name AS tgt_name,
+                   r.uuid             AS memory_uuid
+            FROM ai_edge e
+            JOIN ai_entity src
+              ON src.id = e.source_entity_id AND src.tenant_id = e.tenant_id
+            JOIN ai_entity tgt
+              ON tgt.id = e.target_entity_id AND tgt.tenant_id = e.tenant_id
+            JOIN ai_record r
+              ON r.id = e.source_memory_id AND r.tenant_id = e.tenant_id
+            WHERE e.tenant_id = ? AND e.space_id = ? AND e.status <> 'deleted'
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(space_id)
+        .fetch_all(self.pool())
+        .await?;
+        let mut links = Vec::with_capacity(rows.len() * 2);
+        for row in rows {
+            let memory_id: String = row.get("memory_uuid");
+            links.push(NativeSqlEntityMemoryLink {
+                entity_name: row.get("src_name"),
+                memory_id: memory_id.clone(),
+            });
+            links.push(NativeSqlEntityMemoryLink {
+                entity_name: row.get("tgt_name"),
+                memory_id,
+            });
+        }
+        Ok(links)
     }
 
     pub async fn insert_edge(&self, cmd: InsertEdgeCommand<'_>) -> Result<(), NativeSqlStoreError> {

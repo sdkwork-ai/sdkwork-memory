@@ -4,7 +4,11 @@ use sdkwork_memory_contract::{MemoryServiceError, MemoryServiceResult};
 use sdkwork_memory_retrieval::MemoryRetrievalStrategy;
 use sdkwork_memory_retrieval::RetrievalFusionPolicy;
 
-const SUPPORTED_RETRIEVERS: &[&str] = &["keyword", "dictionary", "sql", "time", "event"];
+// `entity` ranks memories whose provenance edges tie them to entities that
+// match the query; it runs on in-repo graph data, so unlike `vector` it is
+// provider-free. `vector` stays out of the vocabulary until an embedding
+// provider can actually supply scores (parity matrix §20.4).
+const SUPPORTED_RETRIEVERS: &[&str] = &["keyword", "dictionary", "sql", "time", "event", "entity"];
 
 pub fn validate_retrieval_limits(
     top_k: i32,

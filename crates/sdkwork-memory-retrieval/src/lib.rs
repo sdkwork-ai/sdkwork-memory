@@ -22,9 +22,11 @@ pub use lemmatization::{is_stopword, lemmatize_for_bm25, lemmatize_token};
 pub use retrieval::{
     dictionary_match_score, event_match_score, fuse_retrieval_candidates,
     fuse_retrieval_candidates_with_policy, keyword_match_score, orchestrate_retrieval_candidates,
+    orchestrate_retrieval_candidates_with_entity_boosts,
     orchestrate_retrieval_candidates_with_vector, sql_structured_match_score, time_recency_score,
-    FusedRetrievalHit, MemoryRetrievalStrategy, OrchestratedCandidate, RetrievalCandidate,
-    RetrievalEventInput, RetrievalFusionPolicy, RetrievalRecordInput, VectorSimilarityInput,
+    EntityBoostInput, FusedRetrievalHit, MemoryRetrievalStrategy, OrchestratedCandidate,
+    RetrievalCandidate, RetrievalEventInput, RetrievalFusionPolicy, RetrievalRecordInput,
+    VectorSimilarityInput,
 };
 pub use scoring::{
     internal_fetch_limit, max_possible_score, score_and_rank, validate_threshold, HybridSignals,

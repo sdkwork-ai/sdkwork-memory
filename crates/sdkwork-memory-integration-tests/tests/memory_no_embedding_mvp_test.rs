@@ -611,3 +611,238 @@ async fn metadata_is_persisted_merged_and_filterable() {
         "a metadata filter must hit records whose metadata was written by the caller"
     );
 }
+
+#[tokio::test]
+
+async fn entity_provenance_boost_surfaces_graph_linked_memories() {
+    let store = sdkwork_memory_test_support::space_fixtures::new_seeded_in_memory_store().await;
+
+    let pool = store.pool().clone();
+
+    let service = OpenMemoryService::new(store);
+
+    let context = open_context();
+
+    // The candidate memory deliberately shares no lexical token with the
+
+    // query below; only the entity signal can surface it.
+
+    let memory = service
+        .create_memory(
+            context.clone(),
+            MemoryRecordRequest {
+                space_id: 2,
+
+                scope: "user".to_string(),
+
+                memory_type: MemoryType::Semantic,
+
+                subject: None,
+
+                predicate: None,
+
+                object_text: Some("weekly crew sync".to_string()),
+
+                canonical_text: "Crew sync notes mention Kanata".to_string(),
+
+                summary_text: None,
+
+                user_id: None,
+
+                language: None,
+
+                sensitivity_level: None,
+
+                expires_at: None,
+
+                metadata: None,
+
+                tags: None,
+            },
+        )
+        .await
+        .expect("create provenance memory");
+
+    let entity_a = service
+        .create_entity(
+            context.clone(),
+            sdkwork_memory_contract::CreateEntityCommand {
+                tenant_id: 100_001,
+
+                space_id: 2,
+
+                entity_type: "tool".to_string(),
+
+                canonical_name: "Kanata".to_string(),
+
+                aliases: None,
+
+                attributes: None,
+
+                sensitivity_level: "internal".to_string(),
+            },
+        )
+        .await
+        .expect("create entity a");
+
+    let entity_b = service
+        .create_entity(
+            context.clone(),
+            sdkwork_memory_contract::CreateEntityCommand {
+                tenant_id: 100_001,
+
+                space_id: 2,
+
+                entity_type: "tool".to_string(),
+
+                canonical_name: "Remap".to_string(),
+
+                aliases: None,
+
+                attributes: None,
+
+                sensitivity_level: "internal".to_string(),
+            },
+        )
+        .await
+        .expect("create entity b");
+
+    let edge = service
+        .create_edge(
+            context.clone(),
+            sdkwork_memory_contract::CreateEdgeCommand {
+                tenant_id: 100_001,
+
+                space_id: 2,
+
+                source_entity_id: entity_a.entity_id.clone(),
+
+                target_entity_id: entity_b.entity_id.clone(),
+
+                relation_type: "co_occurs_with".to_string(),
+
+                source_memory_id: Some(memory.memory_id.to_string()),
+
+                weight: None,
+
+                valid_from: None,
+
+                valid_to: None,
+
+                metadata: None,
+            },
+        )
+        .await
+        .expect("create provenance edge");
+
+    assert_eq!(
+        edge.source_memory_id.as_deref(),
+        Some(memory.memory_id.to_string())
+            .as_deref()
+            .map(|s| s as &str)
+            .or(edge.source_memory_id.as_deref())
+    );
+
+    // A lexically stronger rival: its text matches the query more directly,
+    // so under the default profile it outranks the graph-linked memory.
+    let rival = service
+        .create_memory(
+            context.clone(),
+            MemoryRecordRequest {
+                space_id: 2,
+                scope: "user".to_string(),
+                memory_type: MemoryType::Semantic,
+                subject: None,
+                predicate: None,
+                object_text: Some("Kanata keyboard firmware".to_string()),
+                canonical_text: "Kanata is keyboard firmware".to_string(),
+                summary_text: None,
+                user_id: None,
+                language: None,
+                sensitivity_level: None,
+                expires_at: None,
+                metadata: None,
+                tags: None,
+            },
+        )
+        .await
+        .expect("create lexical rival");
+
+    // A retrieval profile that grants the entity signal a positive weight.
+
+    sqlx::query(
+        r#"
+
+        INSERT INTO ai_retrieval_profile (
+          id, uuid, tenant_id, space_id, name, strategy, retrievers_json,
+          fusion_policy_json, rerank_policy_json,
+          top_k, context_budget_tokens, status, created_at, updated_at, version
+        )
+
+        VALUES (5001, '5001', 100001, NULL, 'entity-aware', 'custom_weighted_rrf',
+
+                '{ "keyword": { "weight": 1.0 }, "entity": { "weight": 0.9 } }',
+
+                NULL, NULL, 5, 512, 'active',
+
+                '2026-09-24T00:00:00.000Z', '2026-09-24T00:00:00.000Z', 1)
+
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed entity-aware profile");
+
+    let request = |retrieval_profile_id: Option<u64>| MemoryRetrievalRequest {
+        query: "Kanata".to_string(),
+
+        space_ids: vec![2],
+
+        actor_id: None,
+
+        retrieval_profile_id,
+
+        memory_types: None,
+
+        filters: None,
+
+        top_k: 5,
+
+        context_budget_tokens: 512,
+
+        show_expired: None,
+
+        include_trace: None,
+    };
+
+    let with_entity = service
+        .create_retrieval(context.clone(), request(Some(5001)))
+        .await
+        .expect("entity-aware retrieval");
+
+    let rank_in =
+        |hits: &[sdkwork_memory_contract::MemoryRetrievalHit], target: u64| -> Option<usize> {
+            hits.iter()
+                .position(|hit| hit.memory.as_ref().is_some_and(|m| m.memory_id == target))
+        };
+
+    // With the entity signal granted, the graph-linked memory outranks the
+    // lexically stronger rival; under the default profile it cannot.
+    let with_rank = rank_in(&with_entity.hits, memory.memory_id);
+    assert_eq!(
+        with_rank,
+        Some(0),
+        "the entity signal must promote the graph-linked memory to the top"
+    );
+
+    let without_entity = service
+        .create_retrieval(context, request(None))
+        .await
+        .expect("default retrieval");
+    let without_rank = rank_in(&without_entity.hits, memory.memory_id);
+    assert_ne!(
+        without_rank,
+        Some(0),
+        "without the entity profile the lexically stronger memory must lead"
+    );
+}
