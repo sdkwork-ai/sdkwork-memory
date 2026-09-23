@@ -20,18 +20,24 @@ use sdkwork_memory_contract::{
     UpdateSubjectCommand,
 };
 use sdkwork_memory_plugin_native_sql::{
-    InsertCommercialReadinessCommand, InsertEdgeCommand as StoreInsertEdgeCommand,
-    InsertEntityCommand as StoreInsertEntityCommand,
+    InsertCommercialReadinessCommand,
     InsertPolicyAssignmentCommand as StoreInsertPolicyAssignmentCommand,
     InsertPolicyCommand as StoreInsertPolicyCommand, InsertSubjectCommand, NativeSqlBindingRow,
-    NativeSqlCapabilityBindingRow, NativeSqlCommercialReadinessRow, NativeSqlEdgeRow,
-    NativeSqlEntityRow, NativeSqlPolicyAssignmentRow, NativeSqlPolicyRow, NativeSqlSubjectRow,
-    UpdateEdgeCommand as StoreUpdateEdgeCommand, UpdateEntityCommand as StoreUpdateEntityCommand,
+    NativeSqlCapabilityBindingRow, NativeSqlCommercialReadinessRow, NativeSqlPolicyAssignmentRow,
+    NativeSqlPolicyRow, NativeSqlSubjectRow,
     UpdatePolicyAssignmentCommand as StoreUpdatePolicyAssignmentCommand,
     UpdatePolicyCommand as StoreUpdatePolicyCommand,
     UpdateSubjectCommand as StoreUpdateSubjectCommand,
 };
-use sdkwork_memory_spi::{MemoryMutationJournal, MemoryScopeContext};
+use sdkwork_memory_spi::{
+    CreateGraphEdgeCommand, CreateGraphEntityCommand, DeleteGraphEdgeCommand, GraphEdgeRecord,
+    GraphEntityRecord, ListGraphEdgesQuery, ListGraphEntitiesQuery, MemoryMutationJournal,
+    MemoryScopeContext, MemorySensitivityReadScope as SpiMemorySensitivityReadScope,
+    RetrieveCanonicalMemoryQuery, RetrieveGraphEdgeQuery, RetrieveGraphEntityQuery,
+    UpdateGraphEdgeCommand, UpdateGraphEntityCommand,
+};
+
+use crate::store_error::map_memory_spi_error;
 
 use crate::access;
 use crate::platform;
@@ -573,24 +579,19 @@ impl super::open_api::OpenMemoryService {
 
         let scope = commercial_mutation_scope(&context, tenant_id, space_id);
         let journal = commercial_mutation_journal("entity", &uuid, "created")?;
-        self.store
-            .insert_entity_with_journal(
-                StoreInsertEntityCommand {
-                    id: id as i64,
-                    uuid: &uuid,
-                    tenant_id,
-                    space_id,
-                    entity_type: &cmd.entity_type,
-                    canonical_name: &cmd.canonical_name,
-                    aliases_json: aliases_json.as_deref(),
-                    attributes_json: attributes_json.as_deref(),
-                    sensitivity_level: &cmd.sensitivity_level,
-                },
-                &scope,
-                &journal,
-            )
+        self.graph
+            .create_entity(CreateGraphEntityCommand {
+                scope,
+                entity_id: uuid.clone(),
+                entity_type: cmd.entity_type,
+                canonical_name: cmd.canonical_name,
+                aliases_json,
+                attributes_json,
+                sensitivity_level: cmd.sensitivity_level,
+                journal,
+            })
             .await
-            .map_err(Self::map_store_error)?;
+            .map_err(map_memory_spi_error)?;
 
         self.retrieve_entity(context, tenant_id as u64, &uuid).await
     }
@@ -602,24 +603,27 @@ impl super::open_api::OpenMemoryService {
         entity_id: &str,
     ) -> MemoryServiceResult<MemoryEntity> {
         let tenant_id_i64 = platform::tenant_id_i64(tenant_id)?;
-        let row = self
-            .store
-            .retrieve_entity(tenant_id_i64, entity_id)
+        let record = self
+            .graph
+            .retrieve_entity(RetrieveGraphEntityQuery {
+                tenant_id: tenant_id_i64,
+                entity_id: entity_id.to_string(),
+            })
             .await
-            .map_err(Self::map_store_error)?
+            .map_err(map_memory_spi_error)?
             .ok_or_else(|| MemoryServiceError::not_found("entity not found"))?;
-        let space_id = u64::try_from(row.space_id.max(0))
+        let space_id = u64::try_from(record.space_id.max(0))
             .map_err(|_| MemoryServiceError::storage("space id must be non-negative"))?;
         let authorization =
             access::authorize_actor_for_space_access(&self.runtime_data_plane, &context, space_id)
                 .await?;
         access::assert_actor_may_read_entity_sensitivity(
             &context,
-            &row.sensitivity_level,
+            &record.sensitivity_level,
             authorization.actor_is_space_owner,
         )
         .await?;
-        Ok(map_entity_row_to_dto(row))
+        Ok(map_graph_entity_to_dto(record))
     }
 
     pub async fn list_entities(
@@ -654,25 +658,25 @@ impl super::open_api::OpenMemoryService {
                 SENSITIVITY_READ_PUBLIC
             }
         };
-        let rows = self
-            .store
-            .list_entities(
+        let records = self
+            .graph
+            .list_entities(ListGraphEntitiesQuery {
                 tenant_id,
-                space_filter.map(|value| value as i64),
-                query.entity_type.as_deref(),
-                query.status.as_deref(),
-                query.cursor.as_deref(),
+                space_id: space_filter.map(|value| value as i64),
+                entity_type: query.entity_type,
+                status: query.status,
                 page_size,
-                sensitivity_scope,
-            )
+                cursor: query.cursor,
+                sensitivity_read_scope: sensitivity_read_scope_from_i32(sensitivity_scope),
+            })
             .await
-            .map_err(Self::map_store_error)?;
+            .map_err(map_memory_spi_error)?;
 
-        let has_more = rows.len() as i32 > page_size;
-        let items: Vec<_> = rows
+        let has_more = records.len() as i32 > page_size;
+        let items: Vec<_> = records
             .into_iter()
             .take(page_size as usize)
-            .map(map_entity_row_to_dto)
+            .map(map_graph_entity_to_dto)
             .collect();
         let next_cursor = if has_more {
             items.last().map(|item| item.entity_id.clone())
@@ -727,22 +731,19 @@ impl super::open_api::OpenMemoryService {
         );
         let journal = commercial_mutation_journal("entity", entity_id, "updated")?;
         let updated = self
-            .store
-            .update_entity_with_journal(
-                tenant_id_i64,
-                entity_id,
-                StoreUpdateEntityCommand {
-                    canonical_name: cmd.canonical_name.as_deref(),
-                    aliases_json: aliases_json.as_deref(),
-                    attributes_json: attributes_json.as_deref(),
-                    sensitivity_level: cmd.sensitivity_level.as_deref(),
-                    status: cmd.status.as_deref(),
-                },
-                &scope,
-                &journal,
-            )
+            .graph
+            .update_entity(UpdateGraphEntityCommand {
+                scope,
+                entity_id: entity_id.to_string(),
+                canonical_name: cmd.canonical_name,
+                aliases_json,
+                attributes_json,
+                sensitivity_level: cmd.sensitivity_level,
+                status: cmd.status,
+                journal,
+            })
             .await
-            .map_err(Self::map_store_error)?;
+            .map_err(map_memory_spi_error)?;
 
         if !updated {
             return Err(MemoryServiceError::not_found("entity not found"));
@@ -772,16 +773,23 @@ impl super::open_api::OpenMemoryService {
             return Err(MemoryServiceError::validation("relationType is required"));
         }
 
-        let source_entity_id = self
-            .store
-            .resolve_entity_internal_id_in_space(tenant_id, &cmd.source_entity_id, Some(space_id))
-            .await
-            .map_err(Self::map_store_error)?;
-        let target_entity_id = self
-            .store
-            .resolve_entity_internal_id_in_space(tenant_id, &cmd.target_entity_id, Some(space_id))
-            .await
-            .map_err(Self::map_store_error)?;
+        // The caller names the provenance memory by its uuid; an unknown uuid
+        // is a validation error, not a silently dangling provenance link.
+        if let Some(memory_uuid) = cmd.source_memory_id.as_deref() {
+            let exists = self
+                .runtime_data_plane
+                .retrieve_canonical_memory(RetrieveCanonicalMemoryQuery {
+                    scope: commercial_mutation_scope(&context, tenant_id, space_id),
+                    memory_id: memory_uuid.to_string(),
+                })
+                .await?
+                .is_some();
+            if !exists {
+                return Err(MemoryServiceError::validation(format!(
+                    "sourceMemoryId {memory_uuid} does not reference an existing memory"
+                )));
+            }
+        }
 
         let id = platform::next_numeric_id()?;
         let uuid = id.to_string();
@@ -789,45 +797,22 @@ impl super::open_api::OpenMemoryService {
 
         let scope = commercial_mutation_scope(&context, tenant_id, space_id);
         let journal = commercial_mutation_journal("edge", &uuid, "created")?;
-        // The caller names the provenance memory by its uuid; the column stores
-        // the internal record id. An unknown uuid is a validation error, not a
-        // silently dangling provenance link.
-        let source_record_id = match cmd.source_memory_id.as_deref() {
-            None => None,
-            Some(memory_uuid) => {
-                let record_id = self
-                    .store
-                    .lookup_record_row_id(&scope, memory_uuid)
-                    .await
-                    .map_err(Self::map_store_error)?;
-                Some(record_id.ok_or_else(|| {
-                    MemoryServiceError::validation(format!(
-                        "sourceMemoryId {memory_uuid} does not reference an existing memory"
-                    ))
-                })?)
-            }
-        };
-        self.store
-            .insert_edge_with_journal(
-                StoreInsertEdgeCommand {
-                    id: id as i64,
-                    uuid: &uuid,
-                    tenant_id,
-                    space_id,
-                    source_entity_id,
-                    target_entity_id,
-                    relation_type: &cmd.relation_type,
-                    source_record_id,
-                    weight: cmd.weight,
-                    valid_from: cmd.valid_from.as_deref(),
-                    valid_to: cmd.valid_to.as_deref(),
-                    metadata_json: metadata_json.as_deref(),
-                },
-                &scope,
-                &journal,
-            )
+        self.graph
+            .create_edge(CreateGraphEdgeCommand {
+                scope,
+                edge_id: uuid.clone(),
+                source_entity_id: cmd.source_entity_id,
+                target_entity_id: cmd.target_entity_id,
+                relation_type: cmd.relation_type,
+                source_memory_id: cmd.source_memory_id,
+                weight: cmd.weight,
+                valid_from: cmd.valid_from,
+                valid_to: cmd.valid_to,
+                metadata_json,
+                journal,
+            })
             .await
-            .map_err(Self::map_store_error)?;
+            .map_err(map_memory_spi_error)?;
 
         self.retrieve_edge(context, tenant_id as u64, &uuid).await
     }
@@ -839,16 +824,19 @@ impl super::open_api::OpenMemoryService {
         edge_id: &str,
     ) -> MemoryServiceResult<MemoryEdge> {
         let tenant_id_i64 = platform::tenant_id_i64(tenant_id)?;
-        let row = self
-            .store
-            .retrieve_edge(tenant_id_i64, edge_id)
+        let record = self
+            .graph
+            .retrieve_edge(RetrieveGraphEdgeQuery {
+                tenant_id: tenant_id_i64,
+                edge_id: edge_id.to_string(),
+            })
             .await
-            .map_err(Self::map_store_error)?
+            .map_err(map_memory_spi_error)?
             .ok_or_else(|| MemoryServiceError::not_found("edge not found"))?;
-        let space_id = u64::try_from(row.space_id.max(0))
+        let space_id = u64::try_from(record.space_id.max(0))
             .map_err(|_| MemoryServiceError::storage("space id must be non-negative"))?;
         access::assert_actor_can_access_space(&self.runtime_data_plane, &context, space_id).await?;
-        Ok(map_edge_row_to_dto(row))
+        Ok(map_graph_edge_to_dto(record))
     }
 
     pub async fn list_edges(
@@ -863,24 +851,25 @@ impl super::open_api::OpenMemoryService {
                 .await?;
         }
         let page_size = platform::validated_page_size(query.page_size)?;
-        let rows = self
-            .store
-            .list_edges(
+        let records = self
+            .graph
+            .list_edges(ListGraphEdgesQuery {
                 tenant_id,
-                space_filter.map(|value| value as i64),
-                query.relation_type.as_deref(),
-                query.source_entity_id.as_deref(),
-                query.cursor.as_deref(),
+                space_id: space_filter.map(|value| value as i64),
+                relation_type: query.relation_type,
+                source_entity_id: query.source_entity_id,
                 page_size,
-            )
+                cursor: query.cursor,
+                sensitivity_read_scope: SpiMemorySensitivityReadScope::Owner,
+            })
             .await
-            .map_err(Self::map_store_error)?;
+            .map_err(map_memory_spi_error)?;
 
-        let has_more = rows.len() as i32 > page_size;
-        let items: Vec<_> = rows
+        let has_more = records.len() as i32 > page_size;
+        let items: Vec<_> = records
             .into_iter()
             .take(page_size as usize)
-            .map(map_edge_row_to_dto)
+            .map(map_graph_edge_to_dto)
             .collect();
         let next_cursor = if has_more {
             items.last().map(|item| item.edge_id.clone())
@@ -920,23 +909,20 @@ impl super::open_api::OpenMemoryService {
         );
         let journal = commercial_mutation_journal("edge", edge_id, "updated")?;
         let updated = self
-            .store
-            .update_edge_with_journal(
-                tenant_id_i64,
-                edge_id,
-                StoreUpdateEdgeCommand {
-                    relation_type: cmd.relation_type.as_deref(),
-                    weight: cmd.weight,
-                    status: cmd.status.as_deref(),
-                    valid_from: cmd.valid_from.as_deref(),
-                    valid_to: cmd.valid_to.as_deref(),
-                    metadata_json: metadata_json.as_deref(),
-                },
-                &scope,
-                &journal,
-            )
+            .graph
+            .update_edge(UpdateGraphEdgeCommand {
+                scope,
+                edge_id: edge_id.to_string(),
+                relation_type: cmd.relation_type,
+                weight: cmd.weight,
+                status: cmd.status,
+                valid_from: cmd.valid_from,
+                valid_to: cmd.valid_to,
+                metadata_json,
+                journal,
+            })
             .await
-            .map_err(Self::map_store_error)?;
+            .map_err(map_memory_spi_error)?;
 
         if !updated {
             return Err(MemoryServiceError::not_found("edge not found"));
@@ -967,14 +953,14 @@ impl super::open_api::OpenMemoryService {
             platform::space_id_i64(existing.space_id)?,
         );
         let journal = commercial_mutation_journal("edge", edge_id, "deleted")?;
-        let deleted = self
-            .store
-            .delete_edge_with_journal(tenant_id_i64, edge_id, &scope, &journal)
+        self.graph
+            .delete_edge(DeleteGraphEdgeCommand {
+                scope,
+                edge_id: edge_id.to_string(),
+                journal,
+            })
             .await
-            .map_err(Self::map_store_error)?;
-        if !deleted {
-            return Err(MemoryServiceError::not_found("edge not found"));
-        }
+            .map_err(map_memory_spi_error)?;
         Ok(())
     }
 
@@ -1318,15 +1304,15 @@ impl super::open_api::OpenMemoryService {
             .await
             .map_err(Self::map_store_error)?;
         let entity_count = self
-            .store
+            .graph
             .count_entities_for_tenant(tenant_id)
             .await
-            .map_err(Self::map_store_error)?;
+            .map_err(map_memory_spi_error)?;
         let edge_count = self
-            .store
+            .graph
             .count_edges_for_tenant(tenant_id)
             .await
-            .map_err(Self::map_store_error)?;
+            .map_err(map_memory_spi_error)?;
         let policy_count = self
             .store
             .count_policies_for_tenant(tenant_id)
@@ -1746,9 +1732,19 @@ fn optional_json_array(values: Option<Vec<String>>) -> MemoryServiceResult<Optio
     }
 }
 
-fn map_entity_row_to_dto(row: NativeSqlEntityRow) -> MemoryEntity {
+/// The access layer scores read scope numerically; the graph port carries the
+/// SPI enum, so translate at the boundary.
+fn sensitivity_read_scope_from_i32(value: i32) -> SpiMemorySensitivityReadScope {
+    match value {
+        0 => SpiMemorySensitivityReadScope::Public,
+        1 => SpiMemorySensitivityReadScope::Elevated,
+        _ => SpiMemorySensitivityReadScope::Owner,
+    }
+}
+
+fn map_graph_entity_to_dto(row: GraphEntityRecord) -> MemoryEntity {
     MemoryEntity {
-        entity_id: row.uuid,
+        entity_id: row.entity_id,
         space_id: row.space_id as u64,
         entity_type: row.entity_type,
         canonical_name: row.canonical_name,
@@ -1768,14 +1764,14 @@ fn map_entity_row_to_dto(row: NativeSqlEntityRow) -> MemoryEntity {
     }
 }
 
-fn map_edge_row_to_dto(row: NativeSqlEdgeRow) -> MemoryEdge {
+fn map_graph_edge_to_dto(row: GraphEdgeRecord) -> MemoryEdge {
     MemoryEdge {
-        edge_id: row.uuid,
+        edge_id: row.edge_id,
         space_id: row.space_id as u64,
-        source_entity_id: row.source_entity_uuid,
-        target_entity_id: row.target_entity_uuid,
+        source_entity_id: row.source_entity_id,
+        target_entity_id: row.target_entity_id,
         relation_type: row.relation_type,
-        source_memory_id: row.source_memory_uuid,
+        source_memory_id: row.source_memory_id,
         weight: row.weight,
         status: row.status,
         valid_from: row.valid_from,

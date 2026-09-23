@@ -1,7 +1,13 @@
 //! Graph entity and edge store methods for commercial memory management.
 
 use crate::sqlx_compat as sqlx;
-use sdkwork_memory_spi::{MemoryMutationJournal, MemoryScopeContext};
+use sdkwork_memory_spi::{
+    CreateGraphEdgeCommand, CreateGraphEntityCommand, DeleteGraphEdgeCommand, EntityMemoryLink,
+    GraphEdgeRecord, GraphEntityRecord, ListGraphEdgesQuery, ListGraphEntitiesQuery,
+    MemoryGraphPort, MemoryMutationJournal, MemoryScopeContext, MemorySensitivityReadScope,
+    RetrieveGraphEdgeQuery, RetrieveGraphEntityQuery, UpdateGraphEdgeCommand,
+    UpdateGraphEntityCommand,
+};
 use sdkwork_utils_rust::MAX_LIST_PAGE_SIZE;
 use sqlx::Row;
 
@@ -807,5 +813,294 @@ fn map_edge_row(row: sqlx::any::AnyRow) -> NativeSqlEdgeRow {
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
         version: row.get("version"),
+    }
+}
+
+/// Map the SPI read-scope enum onto the store numeric sensitivity tiers.
+fn sensitivity_scope_to_i32(scope: MemorySensitivityReadScope) -> i32 {
+    match scope {
+        MemorySensitivityReadScope::Public => crate::store::SENSITIVITY_READ_PUBLIC,
+        MemorySensitivityReadScope::Elevated => crate::store::SENSITIVITY_READ_ELEVATED,
+        MemorySensitivityReadScope::Owner => crate::store::SENSITIVITY_READ_OWNER,
+    }
+}
+
+fn graph_entity_record(row: NativeSqlEntityRow) -> GraphEntityRecord {
+    GraphEntityRecord {
+        tenant_id: row.tenant_id,
+        space_id: row.space_id,
+        entity_id: row.uuid,
+        entity_type: row.entity_type,
+        canonical_name: row.canonical_name,
+        aliases_json: row.aliases_json,
+        attributes_json: row.attributes_json,
+        sensitivity_level: row.sensitivity_level,
+        status: row.status,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        version: row.version,
+    }
+}
+
+fn graph_edge_record(row: NativeSqlEdgeRow) -> GraphEdgeRecord {
+    GraphEdgeRecord {
+        tenant_id: row.tenant_id,
+        space_id: row.space_id,
+        edge_id: row.uuid,
+        source_entity_id: row.source_entity_uuid,
+        target_entity_id: row.target_entity_uuid,
+        relation_type: row.relation_type,
+        source_memory_id: row.source_memory_uuid,
+        weight: row.weight,
+        status: row.status,
+        valid_from: row.valid_from,
+        valid_to: row.valid_to,
+        metadata_json: row.metadata_json,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        version: row.version,
+    }
+}
+
+#[async_trait::async_trait]
+impl MemoryGraphPort for NativeSqlMemoryStore {
+    async fn create_entity(
+        &self,
+        command: CreateGraphEntityCommand,
+    ) -> sdkwork_memory_spi::MemorySpiResult<()> {
+        let journal = command.journal;
+        self.insert_entity_with_journal(
+            InsertEntityCommand {
+                id: self
+                    .next_row_id()
+                    .map_err(|err| crate::store::port_error("MemoryGraphPort", err))?,
+                uuid: &command.entity_id,
+                tenant_id: command.scope.tenant_id,
+                space_id: command.scope.space_id,
+                entity_type: &command.entity_type,
+                canonical_name: &command.canonical_name,
+                aliases_json: command.aliases_json.as_deref(),
+                attributes_json: command.attributes_json.as_deref(),
+                sensitivity_level: &command.sensitivity_level,
+            },
+            &command.scope,
+            &journal,
+        )
+        .await
+        .map_err(|err| crate::store::port_error("MemoryGraphPort", err))
+    }
+
+    async fn update_entity(
+        &self,
+        command: UpdateGraphEntityCommand,
+    ) -> sdkwork_memory_spi::MemorySpiResult<bool> {
+        let journal = command.journal;
+        self.update_entity_with_journal(
+            command.scope.tenant_id,
+            &command.entity_id,
+            UpdateEntityCommand {
+                canonical_name: command.canonical_name.as_deref(),
+                aliases_json: command.aliases_json.as_deref(),
+                attributes_json: command.attributes_json.as_deref(),
+                sensitivity_level: command.sensitivity_level.as_deref(),
+                status: command.status.as_deref(),
+            },
+            &command.scope,
+            &journal,
+        )
+        .await
+        .map_err(|err| crate::store::port_error("MemoryGraphPort", err))
+    }
+
+    async fn retrieve_entity(
+        &self,
+        query: RetrieveGraphEntityQuery,
+    ) -> sdkwork_memory_spi::MemorySpiResult<Option<GraphEntityRecord>> {
+        self.retrieve_entity(query.tenant_id, &query.entity_id)
+            .await
+            .map(|row| row.map(graph_entity_record))
+            .map_err(|err| crate::store::port_error("MemoryGraphPort", err))
+    }
+
+    async fn list_entities(
+        &self,
+        query: ListGraphEntitiesQuery,
+    ) -> sdkwork_memory_spi::MemorySpiResult<Vec<GraphEntityRecord>> {
+        self.list_entities(
+            query.tenant_id,
+            query.space_id,
+            query.entity_type.as_deref(),
+            query.status.as_deref(),
+            query.cursor.as_deref(),
+            query.page_size,
+            sensitivity_scope_to_i32(query.sensitivity_read_scope),
+        )
+        .await
+        .map(|rows| rows.into_iter().map(graph_entity_record).collect())
+        .map_err(|err| crate::store::port_error("MemoryGraphPort", err))
+    }
+
+    async fn count_entities_for_tenant(
+        &self,
+        tenant_id: i64,
+    ) -> sdkwork_memory_spi::MemorySpiResult<i64> {
+        self.count_entities_for_tenant(tenant_id)
+            .await
+            .map_err(|err| crate::store::port_error("MemoryGraphPort", err))
+    }
+
+    async fn create_edge(
+        &self,
+        command: CreateGraphEdgeCommand,
+    ) -> sdkwork_memory_spi::MemorySpiResult<()> {
+        let scope = command.scope.clone();
+        let source_entity_id = self
+            .resolve_entity_internal_id_in_space(
+                command.scope.tenant_id,
+                &command.source_entity_id,
+                Some(command.scope.space_id),
+            )
+            .await
+            .map_err(|err| crate::store::port_error("MemoryGraphPort", err))?;
+        let target_entity_id = self
+            .resolve_entity_internal_id_in_space(
+                command.scope.tenant_id,
+                &command.target_entity_id,
+                Some(command.scope.space_id),
+            )
+            .await
+            .map_err(|err| crate::store::port_error("MemoryGraphPort", err))?;
+        let source_record_id = match command.source_memory_id.as_deref() {
+            None => None,
+            Some(memory_uuid) => Some(
+                self.lookup_record_row_id(&scope, memory_uuid)
+                    .await
+                    .map_err(|err| crate::store::port_error("MemoryGraphPort", err))?
+                    .ok_or_else(|| {
+                        crate::store::port_error(
+                            "MemoryGraphPort",
+                            NativeSqlStoreError::InvariantViolation {
+                                message: format!("provenance memory {memory_uuid} not found"),
+                            },
+                        )
+                    })?,
+            ),
+        };
+        let journal = command.journal;
+        self.insert_edge_with_journal(
+            InsertEdgeCommand {
+                id: self
+                    .next_row_id()
+                    .map_err(|err| crate::store::port_error("MemoryGraphPort", err))?,
+                uuid: &command.edge_id,
+                tenant_id: command.scope.tenant_id,
+                space_id: command.scope.space_id,
+                source_entity_id,
+                target_entity_id,
+                relation_type: &command.relation_type,
+                source_record_id,
+                weight: command.weight,
+                valid_from: command.valid_from.as_deref(),
+                valid_to: command.valid_to.as_deref(),
+                metadata_json: command.metadata_json.as_deref(),
+            },
+            &scope,
+            &journal,
+        )
+        .await
+        .map_err(|err| crate::store::port_error("MemoryGraphPort", err))
+    }
+
+    async fn update_edge(
+        &self,
+        command: UpdateGraphEdgeCommand,
+    ) -> sdkwork_memory_spi::MemorySpiResult<bool> {
+        let journal = command.journal;
+        self.update_edge_with_journal(
+            command.scope.tenant_id,
+            &command.edge_id,
+            UpdateEdgeCommand {
+                relation_type: command.relation_type.as_deref(),
+                weight: command.weight,
+                status: command.status.as_deref(),
+                valid_from: command.valid_from.as_deref(),
+                valid_to: command.valid_to.as_deref(),
+                metadata_json: command.metadata_json.as_deref(),
+            },
+            &command.scope,
+            &journal,
+        )
+        .await
+        .map_err(|err| crate::store::port_error("MemoryGraphPort", err))
+    }
+
+    async fn delete_edge(
+        &self,
+        command: DeleteGraphEdgeCommand,
+    ) -> sdkwork_memory_spi::MemorySpiResult<()> {
+        let journal = command.journal;
+        self.delete_edge_with_journal(
+            command.scope.tenant_id,
+            &command.edge_id,
+            &command.scope,
+            &journal,
+        )
+        .await
+        .map(|_deleted| ())
+        .map_err(|err| crate::store::port_error("MemoryGraphPort", err))
+    }
+
+    async fn retrieve_edge(
+        &self,
+        query: RetrieveGraphEdgeQuery,
+    ) -> sdkwork_memory_spi::MemorySpiResult<Option<GraphEdgeRecord>> {
+        self.retrieve_edge(query.tenant_id, &query.edge_id)
+            .await
+            .map(|row| row.map(graph_edge_record))
+            .map_err(|err| crate::store::port_error("MemoryGraphPort", err))
+    }
+
+    async fn list_edges(
+        &self,
+        query: ListGraphEdgesQuery,
+    ) -> sdkwork_memory_spi::MemorySpiResult<Vec<GraphEdgeRecord>> {
+        self.list_edges(
+            query.tenant_id,
+            query.space_id,
+            query.relation_type.as_deref(),
+            query.source_entity_id.as_deref(),
+            query.cursor.as_deref(),
+            query.page_size,
+        )
+        .await
+        .map(|rows| rows.into_iter().map(graph_edge_record).collect())
+        .map_err(|err| crate::store::port_error("MemoryGraphPort", err))
+    }
+
+    async fn count_edges_for_tenant(
+        &self,
+        tenant_id: i64,
+    ) -> sdkwork_memory_spi::MemorySpiResult<i64> {
+        self.count_edges_for_tenant(tenant_id)
+            .await
+            .map_err(|err| crate::store::port_error("MemoryGraphPort", err))
+    }
+
+    async fn entity_memory_links(
+        &self,
+        scope: MemoryScopeContext,
+    ) -> sdkwork_memory_spi::MemorySpiResult<Vec<EntityMemoryLink>> {
+        self.list_entity_memory_links(scope.tenant_id, scope.space_id)
+            .await
+            .map(|links| {
+                links
+                    .into_iter()
+                    .map(|link| EntityMemoryLink {
+                        entity_name: link.entity_name,
+                        memory_id: link.memory_id,
+                    })
+                    .collect()
+            })
+            .map_err(|err| crate::store::port_error("MemoryGraphPort", err))
     }
 }

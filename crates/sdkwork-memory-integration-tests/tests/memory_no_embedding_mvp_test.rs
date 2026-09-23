@@ -745,7 +745,7 @@ async fn entity_provenance_boost_surfaces_graph_linked_memories() {
 
     // A lexically stronger rival: its text matches the query more directly,
     // so under the default profile it outranks the graph-linked memory.
-    let rival = service
+    let _rival = service
         .create_memory(
             context.clone(),
             MemoryRecordRequest {

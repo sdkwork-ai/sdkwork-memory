@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::store_error::map_memory_spi_error;
 use async_trait::async_trait;
 use sdkwork_memory_contract::{
     DeleteAllMemoriesRequest, DeleteAllMemoriesResult, ListCandidatesQuery, ListMemoriesQuery,
@@ -29,7 +30,7 @@ use sdkwork_memory_spi::{
     AppendMemoryAuditCommand, AppendMemoryOutboxCommand, AppendMemoryRetrievalTraceCommand,
     CreateCanonicalMemoryCommand, CreateMemoryCandidateCommand, DeleteAllCanonicalMemoryCommand,
     DeleteCanonicalMemoryCommand, ListMemoryCandidatesQuery, MemoryCanonicalRecord,
-    MemoryCoreRuntime, MemoryDeploymentMode, MemoryDriveExportUploader,
+    MemoryCoreRuntime, MemoryDeploymentMode, MemoryDriveExportUploader, MemoryGraphPort,
     MemoryImplementationKind as SpiMemoryImplementationKind, MemoryMutationJournal,
     MemoryRetrievalHitDraft, MemoryRetrieverKind as SpiMemoryRetrieverKind,
     MemoryRuntimeProfileMetadata, MemoryScopeContext, MemorySensitivityReadScope,
@@ -47,6 +48,9 @@ use crate::store_error::map_native_sql_store_error;
 
 pub struct OpenMemoryService {
     pub(crate) store: Arc<NativeSqlMemoryStore>,
+    /// Graph (entity/edge) operations go through the SPI port so the graph
+    /// capability stays store-agnostic behind the boundary.
+    pub(crate) graph: Arc<dyn MemoryGraphPort>,
     pub(crate) core_runtime: MemoryCoreRuntime,
     pub(crate) runtime_data_plane: MemoryRuntimeDataPlane,
     pub(crate) drive_export_uploader: Option<Arc<dyn MemoryDriveExportUploader>>,
@@ -59,8 +63,10 @@ impl OpenMemoryService {
         let core_runtime = Self::build_default_core_runtime(store.clone());
         let runtime_data_plane = MemoryRuntimeDataPlane::try_for_phase1_http(core_runtime.clone())
             .expect("built-in native SQL runtime must expose the Phase-1 HTTP data plane");
+        let graph: Arc<dyn MemoryGraphPort> = store.clone();
         Self {
             store,
+            graph,
             core_runtime,
             runtime_data_plane,
             drive_export_uploader: None,
@@ -83,8 +89,10 @@ impl OpenMemoryService {
         let core_runtime = Self::build_native_core_runtime(store.clone(), metadata);
         let runtime_data_plane = MemoryRuntimeDataPlane::try_for_phase1_http(core_runtime.clone())
             .expect("built-in native SQL runtime must expose the Phase-1 HTTP data plane");
+        let graph: Arc<dyn MemoryGraphPort> = store.clone();
         Self {
             store,
+            graph,
             core_runtime,
             runtime_data_plane,
             drive_export_uploader: None,
@@ -231,8 +239,10 @@ impl OpenMemoryService {
         let core_runtime = Self::build_native_core_runtime(store.clone(), metadata);
         let runtime_data_plane = MemoryRuntimeDataPlane::try_for_phase1_http(core_runtime.clone())
             .expect("built-in native SQL runtime must expose the Phase-1 HTTP data plane");
+        let graph: Arc<dyn MemoryGraphPort> = store.clone();
         Self {
             store,
+            graph,
             core_runtime,
             runtime_data_plane,
             drive_export_uploader: None,
@@ -259,8 +269,11 @@ impl OpenMemoryService {
         Self::validate_native_sql_core_runtime(&core_runtime)?;
         let runtime_data_plane = MemoryRuntimeDataPlane::try_for_phase1_http(core_runtime.clone())
             .map_err(|error| error.to_string())?;
+        let store = phase1.into_arc_store();
+        let graph: Arc<dyn MemoryGraphPort> = store.clone();
         Ok(Self {
-            store: phase1.into_arc_store(),
+            store,
+            graph,
             core_runtime,
             runtime_data_plane,
             drive_export_uploader: None,
@@ -1507,10 +1520,10 @@ impl MemoryOpenApi for OpenMemoryService {
                 Vec::new()
             } else {
                 let links = self
-                    .store
-                    .list_entity_memory_links(scope.tenant_id, scope.space_id)
+                    .graph
+                    .entity_memory_links(scope.clone())
                     .await
-                    .map_err(Self::map_store_error)?;
+                    .map_err(map_memory_spi_error)?;
                 let mut matches: Vec<LinkedEntityMatch> = Vec::with_capacity(query_entities.len());
                 for query_entity in &query_entities {
                     let normalized = normalize_entity_text(&query_entity.text);

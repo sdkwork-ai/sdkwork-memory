@@ -6415,7 +6415,7 @@ fn parse_event_payload(payload: &str) -> Result<Value, serde_json::Error> {
     serde_json::from_str(payload)
 }
 
-fn port_error(port: &str, error: NativeSqlStoreError) -> MemorySpiError {
+pub(crate) fn port_error(port: &str, error: NativeSqlStoreError) -> MemorySpiError {
     if let NativeSqlStoreError::IdempotencyConflict { idempotency_key } = error {
         return MemorySpiError::IdempotencyConflict { idempotency_key };
     }
