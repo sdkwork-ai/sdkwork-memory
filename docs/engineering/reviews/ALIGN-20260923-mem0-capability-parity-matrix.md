@@ -1579,6 +1579,24 @@ crates/sdkwork-memory-contract/src/dto.rs:210  pub struct MemoryRecord {        
 > 本仓插件侧已有**经测试的等价语义**可镜像：`vector_index.rs` 的 `normalize_expiration_date`
 > + `VectorRecordProjection::is_expired_on`（§17 已验证「过滤发生在 limit 之前」）。
 
+### 21.5 ✅ 本排队批次已全部落地（2026-09-23，批次 9 + 批次 10）
+
+上游参考自排队后前进到 `83b07b1`，本仓随新会话把 §21 的三步**全部做完并提交**：
+
+| 步 | 提交 | 落点与证据 |
+| --- | --- | --- |
+| 1+2（接受/写入/读回） | `c157e4b` | DTO/SPI/命令/INSERT/SELECT/读模型/服务层全链路；`sqlite_expiration_roundtrip_*` 两测试 + 服务级 echo 测试；supersede 幂等比对纳入 `expires_at` |
+| 3（检索过滤 + showExpired） | `21a096c` | FTS 主路径 + LIKE 回退 + 列表两变体在 LIMIT 前加 `(expires_at IS NULL OR expires_at > ?)`（与写入同一时间生成器，字典序恒为时间序）；SPI `SearchMemoryCandidatesQuery.include_expired`；契约 `MemoryRetrievalRequest`/`ListMemoriesQuery` + 三面 OpenAPI `showExpired`（含 SDK 镜像，parity 门禁绿）；服务层拒收不可解析值并归一化为存储 UTC 格式（mem0 式写入期归一化） |
+| —（附带） | `50f04d8` | 批次 1/2/3/5/6/8a 的全部对齐资产（打分栈四模块、search-first-vector 插件、filter 语言与下推、矩阵本体）首次入库，消除 §14.4 登记的「工作区提交状态」残余缺口 |
+
+**取证更正两处**：① FTS 两条 SELECT（`search_index.rs` 双方言分支）此前未投影
+`expires_at`，读模型会静默返 None —— 批次 3 落地时补齐；② GET /memories 的 OpenAPI
+query 参数命名是 `page_size` 而实现（serde camelCase）实际只接收 `pageSize` ——
+**既有契约漂移**，本轮按实现命名新增 `showExpired`，`page_size` 漂移登记待修不在本轮扩大。
+
+**§9 计数更新**：缺失 6→**5**（#6 检索侧过期过滤关闭）；部分 7→**6**（#2 search 参数面
+的 `show_expired` 关闭；`threshold`/`explain` 仍被 provider 阻断，见 §20.4）。
+
 ---
 
 ## 附：上游自身的缺陷（**不应复刻**，仅登记）
