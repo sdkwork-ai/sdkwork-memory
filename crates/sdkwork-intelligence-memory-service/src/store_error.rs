@@ -1,4 +1,4 @@
-use sdkwork_memory_contract::{MemoryServiceError, MemoryServiceErrorKind};
+use sdkwork_memory_contract::{MemoryServiceError, MemoryServiceErrorKind, STORAGE_ERROR_DETAIL};
 use sdkwork_memory_plugin_native_sql::NativeSqlStoreError;
 use sdkwork_memory_spi::MemorySpiError;
 
@@ -13,7 +13,7 @@ pub fn map_memory_spi_error(error: MemorySpiError) -> MemoryServiceError {
     MemoryServiceError {
         kind: MemoryServiceErrorKind::Storage,
         code: "storage_error".to_string(),
-        detail: "internal storage error".to_string(),
+        detail: STORAGE_ERROR_DETAIL.to_string(),
     }
 }
 
@@ -42,7 +42,7 @@ pub fn map_native_sql_store_error(error: NativeSqlStoreError) -> MemoryServiceEr
     MemoryServiceError {
         kind: MemoryServiceErrorKind::Storage,
         code: "storage_error".to_string(),
-        detail: "internal storage error".to_string(),
+        detail: STORAGE_ERROR_DETAIL.to_string(),
     }
 }
 
@@ -84,6 +84,18 @@ mod tests {
             message: "database password leaked by provider".to_string(),
         });
         assert_eq!(mapped.kind, MemoryServiceErrorKind::Storage);
-        assert_eq!(mapped.detail, "internal storage error");
+        assert_eq!(mapped.detail, STORAGE_ERROR_DETAIL);
+        assert!(
+            !mapped.detail.contains("password"),
+            "the masking mapper is the single boundary that must never forward a provider message"
+        );
+    }
+
+    #[test]
+    fn never_forwards_raw_store_error_text() {
+        let mapped = map_native_sql_store_error(NativeSqlStoreError::InvariantViolation {
+            message: "postgres://user:secret@db/memory".to_string(),
+        });
+        assert_eq!(mapped.detail, STORAGE_ERROR_DETAIL);
     }
 }

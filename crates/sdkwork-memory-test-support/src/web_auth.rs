@@ -13,10 +13,15 @@ pub const DEFAULT_SESSION_ID: &str = "s-1";
 static INTEGRATION_TEST_ENV_LOCK: Mutex<()> = Mutex::const_new(());
 
 /// Stable idempotency key scoped by HTTP method, path, and request body.
+///
+/// API_SPEC requires the canonical `Idempotency-Key` header with `maxLength: 128`, so the key is a
+/// fixed prefix plus a 64-character digest of the request identity. Unbounded method/path/body
+/// material therefore never pushes the header past the contract limit, while a repeated request
+/// still produces the same key and is replayed instead of re-executed.
 pub fn memory_idempotency_key(method: &str, uri: &str, body: &str) -> String {
     format!(
-        "{MEMORY_TEST_IDEMPOTENCY_KEY}:{method}:{uri}:{}",
-        sha256_hash(body.as_bytes())
+        "{MEMORY_TEST_IDEMPOTENCY_KEY}:{}",
+        sha256_hash(format!("{method}:{uri}:{body}").as_bytes())
     )
 }
 

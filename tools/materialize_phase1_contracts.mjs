@@ -1748,6 +1748,13 @@ const idSchema = {
   pattern: "^[0-9]+$",
   "x-sdkwork-int64-string": true
 };
+
+// Request-content bounds. Each mirrors the Rust constant that enforces it, so the
+// published contract and the runtime ceiling describe the same limit instead of
+// the runtime silently accepting payloads the contract appears to allow.
+// check_sdkwork_memory_architecture_alignment.mjs asserts both sides stay equal.
+const MAX_SCOPE_SPACE_IDS = 32; // platform::MAX_SCOPE_SPACE_IDS
+const MAX_FORGET_MEMORY_IDS = 200; // platform::MAX_FORGET_MEMORY_IDS (MAX_LIST_PAGE_SIZE)
 const nullableIdSchema = { anyOf: [idSchema, { type: "null" }] };
 const nullableString = { anyOf: [{ type: "string" }, { type: "null" }] };
 const jsonObject = { type: "object", additionalProperties: true };
@@ -2209,7 +2216,7 @@ function baseSchemas() {
       required: ["query", "spaceIds", "topK", "contextBudgetTokens"],
       properties: {
         query: { type: "string" },
-        spaceIds: { type: "array", items: idSchema },
+        spaceIds: { type: "array", items: idSchema, maxItems: MAX_SCOPE_SPACE_IDS },
         actorId: nullableString,
         retrievalProfileId: nullableIdSchema,
         memoryTypes: { anyOf: [{ type: "array", items: memoryType }, { type: "null" }] },
@@ -2318,13 +2325,29 @@ function baseSchemas() {
       type: "object",
       required: ["scope", "reason"],
       properties: {
-        scope: { type: "string", enum: ["memory", "space", "user", "query"] },
-        memoryIds: { anyOf: [{ type: "array", items: idSchema }, { type: "null" }] },
+        // Per-scope event semantics: `space` and `user` partition an entire
+        // footprint and therefore purge the ai_event rows that fed it, so a
+        // caller sees a real purgedEvents count. `memory` targets named records
+        // and `query` targets records matching text; ai_event references
+        // ai_space only, never ai_record, so neither can purge events without
+        // destroying inputs shared with records the caller did not name.
+        scope: {
+          type: "string",
+          enum: ["memory", "space", "user", "query"],
+          description:
+            "Forget scope. space and user purge the ai_event inputs of the whole footprint; memory and query delete only the named or matched records and report purgedEvents 0 by construction.",
+        },
+        memoryIds: {
+          anyOf: [
+            { type: "array", items: idSchema, maxItems: MAX_FORGET_MEMORY_IDS },
+            { type: "null" },
+          ],
+        },
         spaceId: nullableIdSchema,
         query: nullableString,
         reason: { type: "string" },
-        metadata: nullableJsonObject
-      }
+        metadata: nullableJsonObject,
+      },
     },
     MemoryForgetJob: {
       type: "object",
@@ -2342,7 +2365,7 @@ function baseSchemas() {
       type: "object",
       required: ["spaceIds", "format"],
       properties: {
-        spaceIds: { type: "array", items: idSchema },
+        spaceIds: { type: "array", items: idSchema, maxItems: MAX_SCOPE_SPACE_IDS },
         format: { type: "string", enum: ["json", "jsonl", "markdown"] },
         includeEvents: { type: "boolean" },
         driveTargetRef: nullableString,

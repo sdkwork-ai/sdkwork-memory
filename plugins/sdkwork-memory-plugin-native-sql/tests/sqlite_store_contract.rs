@@ -2156,11 +2156,16 @@ async fn sqlite_hard_delete_cleans_foreign_key_dependents_and_fts() {
         ("ai_record_source", "uuid = 'hard-delete-source'"),
         ("ai_record_fts", "memory_uuid = 'hard-delete-target'"),
     ] {
+        // `table` and `condition` are the two literal pairs in this loop; no
+        // external input reaches the statement, so the audited escape hatch is
+        // the correct way to satisfy sqlx 0.9's `SqlSafeStr` bound.
         let count: i64 =
-            sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table} WHERE {condition}"))
-                .fetch_one(store.pool())
-                .await
-                .unwrap();
+            sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+                "SELECT COUNT(*) FROM {table} WHERE {condition}"
+            )))
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
         assert_eq!(count, 0, "{table} must not retain the deleted record");
     }
     let habit_target: Option<i64> = sqlx::query_scalar(

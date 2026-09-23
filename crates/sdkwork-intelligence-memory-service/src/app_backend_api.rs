@@ -38,6 +38,21 @@ use crate::platform;
 
 const LEARNING_SETTINGS_KEY: &str = "learning_settings";
 
+/// Events purged by a targeted `scope: "memory"` forget.
+///
+/// `ai_event` rows are memory *inputs*. The canonical baseline links them to
+/// `ai_space` only — never to `ai_record` — so deleting one record cannot
+/// cascade to events, and it must not: a single event may have produced several
+/// records, and the ones the caller did not name stay live. Event purging is a
+/// property of the whole-space and whole-user scopes, which partition an entire
+/// footprint and are served by the store's `delete_events_in_space` and
+/// `delete_events_for_user_*`.
+///
+/// This is therefore a structural zero, not a placeholder. It is named so the
+/// field cannot drift into a bare literal, and
+/// `forget_memory_scope_reports_no_purged_events_while_space_scope_does` pins it.
+const TARGETED_FORGET_PURGED_EVENTS: u32 = 0;
+
 fn default_learning_settings() -> MemoryLearningSettings {
     MemoryLearningSettings {
         auto_promote_candidates: false,
@@ -683,6 +698,17 @@ impl MemoryAppApi for OpenMemoryService {
                 let memory_ids = request.memory_ids.as_ref().ok_or_else(|| {
                     MemoryServiceError::validation("memoryIds is required when scope is memory")
                 })?;
+                if memory_ids.is_empty() {
+                    return Err(MemoryServiceError::validation(
+                        "memoryIds must not be empty when scope is memory",
+                    ));
+                }
+                let max_memory_ids = platform::MAX_FORGET_MEMORY_IDS;
+                if memory_ids.len() > max_memory_ids {
+                    return Err(MemoryServiceError::validation(format!(
+                        "memoryIds must not exceed {max_memory_ids} entries per forget request"
+                    )));
+                }
                 let space_id = request.space_id.ok_or_else(|| {
                     MemoryServiceError::validation("spaceId is required when scope is memory")
                 })?;
@@ -723,7 +749,7 @@ impl MemoryAppApi for OpenMemoryService {
                 }
                 sdkwork_memory_plugin_native_sql::ForgetScopeStats {
                     deleted_records,
-                    purged_events: 0,
+                    purged_events: TARGETED_FORGET_PURGED_EVENTS,
                     rejected_candidates,
                 }
             }
@@ -1491,7 +1517,7 @@ impl MemoryAppApi for OpenMemoryService {
             return Ok(default_learning_settings());
         };
         serde_json::from_str(&raw).map_err(|error| {
-            MemoryServiceError::storage_internal(format!(
+            MemoryServiceError::storage(format!(
                 "learning settings decode failed: {error}"
             ))
         })
@@ -1513,7 +1539,7 @@ impl MemoryAppApi for OpenMemoryService {
         }
         settings.updated_at = platform::current_timestamp();
         let encoded = serde_json::to_string(&settings).map_err(|error| {
-            MemoryServiceError::storage_internal(format!(
+            MemoryServiceError::storage(format!(
                 "learning settings encode failed: {error}"
             ))
         })?;

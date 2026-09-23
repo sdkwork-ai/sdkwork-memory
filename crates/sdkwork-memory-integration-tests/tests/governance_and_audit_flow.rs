@@ -5,7 +5,7 @@ use sdkwork_intelligence_memory_service::OpenMemoryService;
 use sdkwork_memory_test_support::api_envelope;
 use sdkwork_memory_test_support::web_auth::{
     lock_integration_test_env, memory_access_token, memory_auth_token_bearer,
-    MEMORY_TEST_IDEMPOTENCY_KEY,
+    memory_idempotency_key,
 };
 use sdkwork_routes_memory_app_api::{
     build_router_with_app_api, wrap_router_with_iam_database_web_framework,
@@ -35,7 +35,7 @@ fn authed_json_request(
     uri: &str,
     body: serde_json::Value,
 ) -> Request<Body> {
-    let idempotency_key = format!("{MEMORY_TEST_IDEMPOTENCY_KEY}:{method}:{uri}");
+    let idempotency_key = memory_idempotency_key(method, uri, &body.to_string());
     Request::builder()
         .method(method)
         .uri(uri)
@@ -392,4 +392,168 @@ async fn app_api_rejects_foreign_actor_retrieving_forget_job() {
         .await
         .unwrap();
     assert_eq!(foreign_retrieve.status(), StatusCode::FORBIDDEN);
+}
+
+/// The app-api contract declares `MemoryForgetRequest.memoryIds` with
+/// `maxItems`, so the server must reject a list past that ceiling with the
+/// standard validation problem instead of running an unbounded N+1 write path.
+#[tokio::test]
+async fn app_api_rejects_forget_memory_id_lists_beyond_the_contract_bound() {
+    let _env = lock_integration_test_env().await;
+    let store = sdkwork_memory_test_support::space_fixtures::new_seeded_in_memory_store().await;
+    let app = wrap_router_with_iam_database_web_framework(
+        IamWebRequestContextResolver::new(None),
+        build_router_with_app_api(OpenMemoryService::new(store)),
+    );
+
+    let bound = sdkwork_intelligence_memory_service::platform::MAX_FORGET_MEMORY_IDS;
+    let ids: Vec<String> = (1..=bound + 1).map(|id| id.to_string()).collect();
+    assert_eq!(ids.len(), bound + 1);
+
+    let response = app
+        .oneshot(authed_json_request(
+            "2001",
+            "POST",
+            "/app/v3/api/memory/forget_requests",
+            json!({
+                "scope": "memory",
+                "spaceId": "2",
+                "memoryIds": ids,
+                "reason": "bound probe"
+            }),
+        ))
+        .await
+        .expect("over-bound forget response");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        response
+            .headers()
+            .get(axum::http::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        Some("application/problem+json"),
+    );
+    let body = to_bytes(response.into_body(), 64 * 1024)
+        .await
+        .expect("bounded problem body");
+    let problem: serde_json::Value = serde_json::from_slice(&body).expect("problem json");
+    // 40001 is the service-level validation code; 40003 is reserved for the
+    // invalid-parameter path, which is why the export and retrieval ceilings use
+    // the same 40001 shape as this one.
+    assert_eq!(problem["code"], 40001);
+    let detail = problem["detail"].as_str().unwrap_or_default();
+    assert!(
+        detail.contains(&format!("must not exceed {bound}")),
+        "diagnostic must name the ceiling, got {detail:?}"
+    );
+}
+
+/// `ai_event` rows are memory inputs linked to `ai_space` only, never to
+/// `ai_record`, so a targeted `scope: "memory"` forget reports purgedEvents 0 by
+/// construction while `scope: "space"` purges the events that fed the space.
+/// This pins both halves: the targeted forget must not purge events, and the
+/// space forget must still be able to account for them afterwards.
+#[tokio::test]
+async fn app_api_targeted_forget_reports_zero_purged_events_while_space_scope_purges_them() {
+    let _env = lock_integration_test_env().await;
+    let store = sdkwork_memory_test_support::space_fixtures::new_seeded_in_memory_store().await;
+    let app = wrap_router_with_iam_database_web_framework(
+        IamWebRequestContextResolver::new(None),
+        build_router_with_app_api(OpenMemoryService::new(store)),
+    );
+
+    for index in 0..2 {
+        let appended = app
+            .clone()
+            .oneshot(authed_json_request(
+                "2001",
+                "POST",
+                "/app/v3/api/memory/events",
+                json!({
+                    "spaceId": "2",
+                    "eventType": "user.preference.stated",
+                    "sourceType": "chat",
+                    "eventTime": "2026-09-23T00:00:00Z",
+                    "payload": { "ordinal": index }
+                }),
+            ))
+            .await
+            .expect("append event response");
+        assert_eq!(appended.status(), StatusCode::CREATED, "event {index}");
+    }
+
+    let created = app
+        .clone()
+        .oneshot(authed_json_request(
+            "2001",
+            "POST",
+            "/app/v3/api/memory/memories",
+            json!({
+                "spaceId": "2",
+                "scope": "user",
+                "memoryType": "semantic",
+                "canonicalText": "a preference that does not cover the space"
+            }),
+        ))
+        .await
+        .expect("create memory response");
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created_body = to_bytes(created.into_body(), usize::MAX).await.unwrap();
+    let created_json: serde_json::Value = serde_json::from_slice(&created_body).unwrap();
+    let memory_id = api_envelope::item(&created_json)["memoryId"]
+        .as_str()
+        .expect("memory id")
+        .to_owned();
+
+    let targeted = app
+        .clone()
+        .oneshot(authed_json_request(
+            "2001",
+            "POST",
+            "/app/v3/api/memory/forget_requests",
+            json!({
+                "scope": "memory",
+                "spaceId": "2",
+                "memoryIds": [memory_id],
+                "reason": "targeted forget must not purge shared inputs"
+            }),
+        ))
+        .await
+        .expect("targeted forget response");
+    assert_eq!(targeted.status(), StatusCode::CREATED);
+    let targeted_body = to_bytes(targeted.into_body(), usize::MAX).await.unwrap();
+    let targeted_json: serde_json::Value = serde_json::from_slice(&targeted_body).unwrap();
+    let targeted_item = api_envelope::item(&targeted_json);
+    assert_eq!(targeted_item["state"], "succeeded");
+    assert_eq!(targeted_item["result"]["deletedCount"], 1);
+    assert_eq!(
+        targeted_item["result"]["purgedEvents"], 0,
+        "a targeted record forget must not purge ai_event inputs shared with other records"
+    );
+
+    let space_wide = app
+        .oneshot(authed_json_request(
+            "2001",
+            "POST",
+            "/app/v3/api/memory/forget_requests",
+            json!({
+                "scope": "space",
+                "spaceId": "2",
+                "reason": "space-wide forget must purge the event inputs"
+            }),
+        ))
+        .await
+        .expect("space forget response");
+    assert_eq!(space_wide.status(), StatusCode::CREATED);
+    let space_body = to_bytes(space_wide.into_body(), usize::MAX).await.unwrap();
+    let space_json: serde_json::Value = serde_json::from_slice(&space_body).unwrap();
+    let space_item = api_envelope::item(&space_json);
+    assert_eq!(space_item["state"], "succeeded");
+    assert!(
+        space_item["result"]["purgedEvents"]
+            .as_u64()
+            .is_some_and(|purged| purged >= 2),
+        "the two appended events must still be present for the space-scope forget to purge, got {:?}",
+        space_item["result"]["purgedEvents"]
+    );
 }

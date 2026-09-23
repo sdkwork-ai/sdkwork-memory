@@ -10,7 +10,7 @@ use sdkwork_database_repository as _;
 pub use bootstrap::{
     bootstrap_memory_data_plane_from_env, bootstrap_memory_database,
     bootstrap_memory_database_from_env, connect_and_bootstrap_memory_database_from_env,
-    MemoryDataPlane,
+    ensure_server_role_database_engine_from_env, reject_sqlite_server_role_engine, MemoryDataPlane,
 };
 pub use db::{connect_memory_pool_from_env, open_native_sql_store_from_pool, MemoryDatabasePool};
 pub use runtime::{

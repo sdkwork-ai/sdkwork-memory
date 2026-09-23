@@ -7,7 +7,6 @@ owner_team: memory-platform
 compliance_level: L2
 engines:
   - postgres
-  - sqlite
 table_prefix: ai_
 tables:
   - name: ai_space

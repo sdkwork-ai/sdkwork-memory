@@ -72,8 +72,12 @@ spec:
             # idempotency use the Redis store configured below.
             - name: SDKWORK_MEMORY_MAX_BODY_BYTES
               value: "1048576"
+            # Pod-local admission ceiling, sized against the process database
+            # budget declared below: admission <= 2 x process pool, so a
+            # saturated pod queues on the pool for a bounded time instead of
+            # piling 8x more waiters than the pool can ever serve.
             - name: SDKWORK_MEMORY_MAX_CONCURRENCY
-              value: "256"
+              value: "64"
             - name: SDKWORK_MEMORY_HTTP_REQUEST_TIMEOUT_SECS
               value: "30"
             - name: SDKWORK_MEMORY_WEB_REDIS_URL
@@ -86,11 +90,20 @@ spec:
                 configMapKeyRef:
                   name: sdkwork-memory-runtime
                   key: cors-allowed-origins
-            # Database connection pool tuning.
-            - name: SDKWORK_MEMORY_DB_MAX_CONNECTIONS
-              value: "20"
-            - name: SDKWORK_MEMORY_DB_MIN_CONNECTIONS
-              value: "5"
+            # Process-scoped database budget. DATABASE_SPEC_PROCESS_SHARED_POOL
+            # section 5: MAX_CONNECTIONS is a process budget, not a per-module
+            # multiplier, and module-prefixed forms (SDKWORK_MEMORY_DATABASE_*,
+            # SDKWORK_MEMORY_DB_*) are retired migration inputs that runtime
+            # startup MUST NOT read. Capacity planning must satisfy
+            #   sum(process pool maxima) + admin reserve + operator reserve
+            #   <= PostgreSQL max_connections
+            # With replicas: 2 this pod declares 32, so the service reserves 64.
+            - name: SDKWORK_DATABASE_MAX_CONNECTIONS
+              value: "32"
+            # Fail pool acquisition well inside SDKWORK_MEMORY_HTTP_REQUEST_TIMEOUT_SECS
+            # so contention surfaces as a bounded 503 instead of an expired request.
+            - name: SDKWORK_DATABASE_ACQUIRE_TIMEOUT
+              value: "10"
             # SDKWORK_MEMORY_SNOWFLAKE_NODE_ID is intentionally NOT set here.
             # The Memory service now uses database-backed node_id allocation
             # via sdkwork_node_registry, which automatically assigns unique
@@ -122,23 +135,28 @@ spec:
               value: "4194304"
             - name: SDKWORK_MEMORY_DRIVE_EXPORT_MAX_BYTES
               value: "67108864"
+            # Background-plane drain budget. Shutdown is ordered HTTP-first:
+            # `axum::serve(..).await` returns after in-flight requests finish,
+            # then the runtime drains workers within this budget. Keep the sum of
+            # the request timeout above and this budget under
+            # terminationGracePeriodSeconds so the process reports an incomplete
+            # drain itself instead of being killed mid-write. Work that outlives
+            # the budget keeps its database lease and is re-claimed by a peer.
+            - name: SDKWORK_MEMORY_SHUTDOWN_DRAIN_SECS
+              value: "25"
+            # One unified workspace database identity for the whole process.
+            # DATABASE_SPEC_PROCESS_SHARED_POOL section 6: modules integrated
+            # into one process MUST resolve the same database and schema, and
+            # runtime startup validates one normalized identity and fails on any
+            # application- or module-prefixed database key. The Memory service,
+            # the embedded IAM readiness/audit plane, and the Drive-backed
+            # export adapter therefore share this single URL and its pool.
             - name: SDKWORK_DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: sdkwork-memory-database
                   key: database-url
-            - name: SDKWORK_DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: sdkwork-memory-iam-database
-                  key: database-url
             # Drive-backed export upload (optional; enable when privacy exports use driveTargetRef).
-            - name: SDKWORK_DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: sdkwork-memory-drive
-                  key: database-url
-                  optional: true
             - name: SDKWORK_MEMORY_DRIVE_S3_ENDPOINT
               valueFrom:
                 secretKeyRef:
@@ -212,4 +230,6 @@ spec:
           emptyDir: {}
         - name: app-tmp
           emptyDir: {}
-      terminationGracePeriodSeconds: 30
+      # Bounds the whole shutdown: HTTP drain (request timeout above) plus the
+      # SDKWORK_MEMORY_SHUTDOWN_DRAIN_SECS background budget.
+      terminationGracePeriodSeconds: 60

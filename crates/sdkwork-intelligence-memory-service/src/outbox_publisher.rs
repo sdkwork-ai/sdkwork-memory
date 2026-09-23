@@ -12,7 +12,7 @@ const MAX_OUTBOX_CONCURRENCY: u64 = 64;
 pub fn spawn_outbox_publisher(
     store: Arc<NativeSqlMemoryStore>,
     mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
-) {
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let config = Arc::new(OutboxDeliveryConfig::from_env());
         if matches!(config.mode, OutboxDeliveryMode::Disabled) {
@@ -102,7 +102,7 @@ pub fn spawn_outbox_publisher(
                 }
             }
         }
-    });
+    })
 }
 
 async fn process_claimed_event(

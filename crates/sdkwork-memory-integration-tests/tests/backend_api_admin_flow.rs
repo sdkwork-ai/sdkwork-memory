@@ -171,8 +171,14 @@ async fn backend_api_admin_config_persists_in_sql_tables() {
         ))
         .await
         .unwrap();
-    assert_eq!(create.status(), StatusCode::CREATED);
+    let create_status = create.status();
     let create_body = to_bytes(create.into_body(), usize::MAX).await.unwrap();
+    assert_eq!(
+        create_status,
+        StatusCode::CREATED,
+        "eval run create failed: {}",
+        String::from_utf8_lossy(&create_body)
+    );
     let create_json: serde_json::Value = serde_json::from_slice(&create_body).unwrap();
     let eval_run_id = api_envelope::item(&create_json)["evalRunId"]
         .as_str()

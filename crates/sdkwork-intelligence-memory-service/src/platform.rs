@@ -79,6 +79,37 @@ fn resolve_snowflake_node_id() -> u16 {
     rand::thread_rng().gen_range(0..=max_snowflake_node_id())
 }
 
+/// Install the development/test fallback node_id **explicitly**.
+///
+/// [`id_generator`]'s lazy path is deliberately strict: it refuses to invent a random node_id
+/// whenever [`memory_id_fallback_is_forbidden`] holds, which is any process that declared an
+/// explicit runtime target (and therefore every server deployment). That guard is exactly right —
+/// but it also made the fallback unreachable for the modes that *cannot* have a shared node
+/// registry at all (an embedded SQLite store has no registry table to allocate from). The
+/// bootstrap resolves the deployment mode, decides whether a registry-allocated node id is
+/// architecturally required, and — for the modes where it is not — calls this function to install
+/// the fallback as a deliberate, logged decision instead of an implicit one.
+///
+/// Idempotent: if a generator is already installed (for example a database-allocated one) this
+/// returns it unchanged and never overwrites it.
+pub fn init_snowflake_fallback_generator() -> MemoryServiceResult<SnowflakeIdGenerator> {
+    if let Some(holder) = ID_GENERATOR.get() {
+        return Ok(holder.generator.clone());
+    }
+    let node_id = resolve_snowflake_node_id();
+    tracing::warn!(
+        node_id,
+        "memory snowflake generator installed from the env/random fallback node_id; \
+         this process has no shared node registry to allocate from"
+    );
+    let generator = SnowflakeIdGenerator::new(node_id).map_err(|error| {
+        MemoryServiceError::storage(format!(
+            "snowflake fallback generator rejected node_id {node_id}: {error}"
+        ))
+    })?;
+    Ok(init_id_generator(generator, None))
+}
+
 fn id_generator() -> MemoryServiceResult<&'static SnowflakeIdGenerator> {
     if memory_id_fallback_is_forbidden() && ID_GENERATOR.get().is_none() {
         return Err(MemoryServiceError::storage(
@@ -263,6 +294,21 @@ pub const DEFAULT_MAX_EXTRACTION_INPUT_EVENTS: usize = 1_000;
 
 /// Default maximum events exported per job.
 pub const DEFAULT_MAX_EXPORT_EVENTS: usize = 100_000;
+
+/// Maximum memory ids per targeted `scope: "memory"` forget request.
+///
+/// The targeted forget path runs one retrieve plus one hard delete per id, each
+/// in its own transaction that takes a space lock, so an unbounded id list is an
+/// unbounded N+1 write path driven by request content. The bound equals one list
+/// page: a caller can forget exactly what a single `memories.list` response
+/// returned, no more.
+///
+/// Deliberately not environment-tunable, unlike the worker-cadence knobs above:
+/// the app-api contract declares this as `maxItems` on `MemoryForgetRequest.
+/// memoryIds`, so a tunable ceiling would let the runtime accept payloads the
+/// published contract rejects. `check_sdkwork_memory_architecture_alignment.mjs`
+/// asserts the two never diverge.
+pub const MAX_FORGET_MEMORY_IDS: usize = sdkwork_utils_rust::MAX_LIST_PAGE_SIZE as usize;
 
 /// Default maximum provider bindings materialized for health aggregation.
 pub const DEFAULT_MAX_PROVIDER_HEALTH_BINDINGS: usize = 500;

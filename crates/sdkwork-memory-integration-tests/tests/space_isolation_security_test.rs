@@ -9,7 +9,7 @@ use sdkwork_memory_spi::{
 use sdkwork_memory_test_support::api_envelope;
 use sdkwork_memory_test_support::web_auth::{
     lock_integration_test_env, memory_access_token, memory_auth_token_bearer,
-    MEMORY_TEST_IDEMPOTENCY_KEY,
+    memory_idempotency_key,
 };
 use sdkwork_routes_memory_app_api::{
     build_router_with_app_api, wrap_router_with_iam_database_web_framework,
@@ -25,7 +25,7 @@ fn authed_json_request(
     uri: &str,
     body: serde_json::Value,
 ) -> Request<Body> {
-    let idempotency_key = format!("{MEMORY_TEST_IDEMPOTENCY_KEY}:{method}:{uri}");
+    let idempotency_key = memory_idempotency_key(method, uri, &body.to_string());
     Request::builder()
         .method(method)
         .uri(uri)

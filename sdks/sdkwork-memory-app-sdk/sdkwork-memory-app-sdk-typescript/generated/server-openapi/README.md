@@ -18,7 +18,7 @@ pnpm add @sdkwork/memory-app-sdk
 import { SdkworkMemoryAppClient } from '@sdkwork/memory-app-sdk';
 
 const client = new SdkworkMemoryAppClient({
-  baseUrl: 'https://api.sdkwork.com',
+  baseUrl: 'http://localhost:8080',
   timeout: 30000,
 });
 
@@ -44,7 +44,7 @@ Access-Token: <accessToken>
 import { SdkworkMemoryAppClient } from '@sdkwork/memory-app-sdk';
 
 const client = new SdkworkMemoryAppClient({
-  baseUrl: 'https://api.sdkwork.com',
+  baseUrl: 'http://localhost:8080',
   timeout: 30000, // Request timeout in ms
   headers: {      // Custom headers
     'X-Custom-Header': 'value',

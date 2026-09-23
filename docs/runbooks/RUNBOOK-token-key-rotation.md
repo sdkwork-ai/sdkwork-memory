@@ -29,7 +29,7 @@ kubectl wait --for=condition=complete job/sdkwork-memory-db-migrate --timeout=30
 
 ## Procedure
 
-1. Rotate secrets in the platform secret store (`sdkwork-memory-database`, `sdkwork-memory-iam-database`).
+1. Rotate secrets in the platform secret store (`sdkwork-memory-database`, plus `sdkwork-memory-drive` when Drive-backed exports are enabled).
 2. Rolling restart API server deployment (`deployments/kubernetes/deployment.yaml`).
 3. Confirm `/readyz` returns 200 and `memory_health_status` gauge is `1`.
 4. Smoke test app API with dual-token auth and open API with API key.

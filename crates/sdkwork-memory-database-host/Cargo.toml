@@ -22,4 +22,9 @@ sdkwork-database-sqlx = { workspace = true }
 
 [dev-dependencies]
 sqlx = { workspace = true }
+# `engine_admission.rs` builds a SQLite pool purely to prove the module rejects an engine it does
+# not declare, so the SQLite pool variant must be available to this test target. The production
+# library stays PostgreSQL-only on purpose: the server role rejects the SQLite engine before it
+# ever opens a pool.
+sdkwork-database-sqlx = { workspace = true, features = ["sqlite"] }
 tokio = { workspace = true }

@@ -7650,7 +7650,8 @@
               "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
-            }
+            },
+            "maxItems": 32
           },
           "actorId": {
             "anyOf": [
@@ -8221,7 +8222,8 @@
               "space",
               "user",
               "query"
-            ]
+            ],
+            "description": "Forget scope. space and user purge the ai_event inputs of the whole footprint; memory and query delete only the named or matched records and report purgedEvents 0 by construction."
           },
           "memoryIds": {
             "anyOf": [
@@ -8232,7 +8234,8 @@
                   "format": "int64",
                   "pattern": "^[0-9]+$",
                   "x-sdkwork-int64-string": true
-                }
+                },
+                "maxItems": 200
               },
               {
                 "type": "null"
@@ -8356,7 +8359,8 @@
               "format": "int64",
               "pattern": "^[0-9]+$",
               "x-sdkwork-int64-string": true
-            }
+            },
+            "maxItems": 32
           },
           "format": {
             "type": "string",

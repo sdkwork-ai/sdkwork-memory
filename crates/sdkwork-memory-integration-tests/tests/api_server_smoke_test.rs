@@ -1,5 +1,7 @@
 #![allow(clippy::await_holding_lock)] // Process-wide test environment must remain serialized.
 
+use std::sync::Arc;
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use sdkwork_intelligence_memory_service::OpenMemoryService;
@@ -9,6 +11,7 @@ use sdkwork_memory_test_support::web_auth::{
 };
 use sdkwork_routes_memory_app_api::build_router_with_app_api;
 use sdkwork_routes_memory_open_api::build_router_with_open_api;
+use sdkwork_web_bootstrap::AlwaysReady;
 use tower::util::ServiceExt;
 
 const DEV_API_KEY: &str = "dev-key";
@@ -28,18 +31,24 @@ async fn api_server_bootstrap_auth_and_healthz_contracts() {
     let previous_bypass = std::env::var("SDKWORK_MEMORY_DEV_AUTH_BYPASS").ok();
     let previous_database_url = std::env::var("SDKWORK_DATABASE_URL").ok();
     let previous_auto_migrate = std::env::var("SDKWORK_DATABASE_AUTO_MIGRATE").ok();
-    let previous_iam_database_url = std::env::var("SDKWORK_DATABASE_URL").ok();
     let previous_outbox_mode = std::env::var("SDKWORK_MEMORY_OUTBOX_DELIVERY_MODE").ok();
     let previous_outbox_url = std::env::var("SDKWORK_MEMORY_OUTBOX_DELIVERY_URL").ok();
 
     std::env::set_var("SDKWORK_MEMORY_ENVIRONMENT", "development");
     std::env::set_var("SDKWORK_MEMORY_DEV_AUTH_BYPASS", "true");
-    std::env::set_var("SDKWORK_DATABASE_AUTO_MIGRATE", "true");
-    std::env::set_var("SDKWORK_DATABASE_URL", "sqlite::memory:");
-    let dev_app = sdkwork_api_memory_standalone_gateway::build_router()
-        .await
-        .expect("standalone-gateway bootstrap should succeed with in-memory sqlite");
-    let dev_router = dev_app.router;
+
+    // Process endpoints are part of the host-neutral contribution, so they are verified against a
+    // store-backed product service rather than through the environment bootstrap: this
+    // authoritative server does not admit a SQLite URL (`authoritative_server_rejects_sqlite_engine`
+    // owns that admission rule) and no external PostgreSQL is required for route-shape coverage.
+    let dev_product = Arc::new(OpenMemoryService::new(
+        sdkwork_memory_test_support::space_fixtures::new_seeded_in_memory_store().await,
+    ));
+    let dev_contribution =
+        sdkwork_api_memory_assembly::assemble_api_router(dev_product, Arc::new(AlwaysReady))
+            .await
+            .expect("memory contribution must assemble from a store-backed product service");
+    let dev_router = dev_contribution.router;
 
     let healthz = dev_router
         .clone()
@@ -88,15 +97,16 @@ async fn api_server_bootstrap_auth_and_healthz_contracts() {
         "metrics endpoint must expose HTTP request counters"
     );
 
+    // Production must fail closed on an unsafe outbox configuration. Outbox validation runs before
+    // any database work, so leaving `SDKWORK_DATABASE_URL` unset does not weaken the assertion.
     std::env::set_var("SDKWORK_MEMORY_ENVIRONMENT", "production");
     std::env::set_var("SDKWORK_MEMORY_CONFIG_PROFILE", "production");
     std::env::remove_var("SDKWORK_MEMORY_DEV_AUTH_BYPASS");
     std::env::remove_var("SDKWORK_DATABASE_URL");
     std::env::set_var("SDKWORK_MEMORY_OUTBOX_DELIVERY_MODE", "disabled");
     std::env::remove_var("SDKWORK_MEMORY_OUTBOX_DELIVERY_URL");
-    std::env::set_var("SDKWORK_DATABASE_URL", "sqlite::memory:");
 
-    let production_bootstrap = sdkwork_api_memory_standalone_gateway::build_router().await;
+    let production_bootstrap = sdkwork_api_memory_assembly::assemble_api_router_from_env().await;
     let Err(error) = production_bootstrap else {
         panic!("production bootstrap must reject disabled outbox delivery");
     };
@@ -143,55 +153,76 @@ async fn api_server_bootstrap_auth_and_healthz_contracts() {
     restore_optional_env("SDKWORK_MEMORY_CONFIG_PROFILE", previous_profile);
     restore_optional_env("SDKWORK_MEMORY_DEV_AUTH_BYPASS", previous_bypass);
     restore_optional_env("SDKWORK_DATABASE_URL", previous_database_url);
-    restore_optional_env(
-        "SDKWORK_DATABASE_AUTO_MIGRATE",
-        previous_auto_migrate,
-    );
-    restore_optional_env("SDKWORK_DATABASE_URL", previous_iam_database_url);
+    restore_optional_env("SDKWORK_DATABASE_AUTO_MIGRATE", previous_auto_migrate);
     restore_optional_env("SDKWORK_MEMORY_OUTBOX_DELIVERY_MODE", previous_outbox_mode);
     restore_optional_env("SDKWORK_MEMORY_OUTBOX_DELIVERY_URL", previous_outbox_url);
 }
 
+/// `database/database.manifest.json` declares this module `databaseRole: authoritative-server`
+/// with `engines: ["postgres"]`, so ENVIRONMENT_SPEC section 7.2 applies: a server-authoritative
+/// module must not silently accept SQLite — it resolves the server role and rejects a
+/// non-PostgreSQL pool with an actionable diagnostic.
+///
+/// Every server entrypoint is covered, and each must reject before spawning a worker or touching
+/// a migration history table, so the operator sees the configuration error and not a downstream
+/// symptom. The explicit `test-runner` escape hatch is exercised by
+/// `sdkwork-intelligence-memory-repository-sqlx`'s own `bootstrap_memory_runtime_from_env_with_sqlite`.
 #[tokio::test]
-async fn api_server_bootstrap_rejects_unmigrated_schema_before_workers_start() {
+async fn authoritative_server_rejects_sqlite_engine() {
     let _guard = env_test_lock();
     let previous_environment = std::env::var("SDKWORK_MEMORY_ENVIRONMENT").ok();
-    let previous_profile = std::env::var("SDKWORK_MEMORY_CONFIG_PROFILE").ok();
+    let previous_target = std::env::var("SDKWORK_MEMORY_RUNTIME_TARGET").ok();
     let previous_bypass = std::env::var("SDKWORK_MEMORY_DEV_AUTH_BYPASS").ok();
     let previous_database_url = std::env::var("SDKWORK_DATABASE_URL").ok();
-    let previous_auto_migrate = std::env::var("SDKWORK_DATABASE_AUTO_MIGRATE").ok();
 
     std::env::set_var("SDKWORK_MEMORY_ENVIRONMENT", "development");
-    std::env::set_var("SDKWORK_MEMORY_CONFIG_PROFILE", "development");
     std::env::set_var("SDKWORK_MEMORY_DEV_AUTH_BYPASS", "true");
     std::env::set_var("SDKWORK_DATABASE_URL", "sqlite::memory:");
-    std::env::set_var("SDKWORK_DATABASE_AUTO_MIGRATE", "false");
+    std::env::remove_var("SDKWORK_MEMORY_RUNTIME_TARGET");
 
-    let bootstrap = sdkwork_api_memory_standalone_gateway::build_router().await;
-    assert!(
-        bootstrap
-            .as_ref()
-            .is_err_and(|error| error.contains("memory database schema preflight failed")),
-        "gateway must fail before spawning workers when canonical migrations are missing"
-    );
+    let outcomes: [(&str, Result<(), String>); 3] = [
+        (
+            "assemble_api_router_from_env",
+            sdkwork_api_memory_assembly::assemble_api_router_from_env()
+                .await
+                .map(|_| ()),
+        ),
+        (
+            "assemble_api_router_retaining_background_from_env",
+            sdkwork_api_memory_assembly::assemble_api_router_retaining_background_from_env()
+                .await
+                .map(|_| ()),
+        ),
+        (
+            "run_database_migrate_only",
+            sdkwork_api_memory_assembly::run_database_migrate_only().await,
+        ),
+    ];
+
+    for (entrypoint, outcome) in outcomes {
+        let error = outcome.err().unwrap_or_else(|| {
+            panic!("{entrypoint} must reject a SQLite URL for the authoritative server")
+        });
+        assert!(
+            error.contains("authoritative-server Memory rejects the SQLite engine"),
+            "{entrypoint} must reject SQLite as a server-role violation, got: {error}"
+        );
+        assert!(
+            error.contains("PostgreSQL is required"),
+            "{entrypoint} must name the required engine, got: {error}"
+        );
+        assert!(
+            error.contains("SDKWORK_DATABASE_URL"),
+            "{entrypoint} must name the actionable PostgreSQL key, got: {error}"
+        );
+        assert!(
+            error.contains("SDKWORK_MEMORY_RUNTIME_TARGET=test-runner"),
+            "{entrypoint} must name the explicit test-runner escape hatch, got: {error}"
+        );
+    }
 
     restore_optional_env("SDKWORK_MEMORY_ENVIRONMENT", previous_environment);
-    restore_optional_env("SDKWORK_MEMORY_CONFIG_PROFILE", previous_profile);
+    restore_optional_env("SDKWORK_MEMORY_RUNTIME_TARGET", previous_target);
     restore_optional_env("SDKWORK_MEMORY_DEV_AUTH_BYPASS", previous_bypass);
-    restore_optional_env("SDKWORK_DATABASE_URL", previous_database_url);
-    restore_optional_env(
-        "SDKWORK_DATABASE_AUTO_MIGRATE",
-        previous_auto_migrate,
-    );
-}
-
-#[tokio::test]
-async fn database_migrate_only_succeeds_with_sqlite() {
-    let _guard = env_test_lock();
-    let previous_database_url = std::env::var("SDKWORK_DATABASE_URL").ok();
-    std::env::set_var("SDKWORK_DATABASE_URL", "sqlite::memory:");
-    sdkwork_api_memory_standalone_gateway::run_database_migrate_only()
-        .await
-        .expect("db-migrate bootstrap must succeed with sqlite");
     restore_optional_env("SDKWORK_DATABASE_URL", previous_database_url);
 }

@@ -33,10 +33,12 @@ async fn open_api_rejects_missing_api_key() {
 }
 
 #[tokio::test]
-async fn open_api_accepts_dual_token_fallback() {
-    // The web framework's open-api interceptor resolves dual JWT tokens
-    // before falling back to API-key resolution. This test verifies the
-    // current framework contract: dual tokens are accepted on the open API.
+async fn open_api_rejects_credential_headers_on_api_key_surface() {
+    // The authored route manifest declares this surface `auth: { mode: "api-key", required: true }`
+    // (sdks/_route-manifests/open-api/sdkwork-routes-memory-open-api.route-manifest.json), so the
+    // Web Framework fails closed when the credential profile is contaminated: an api-key surface
+    // must not accept `Authorization` / `Access-Token`, otherwise a credential header issued for
+    // another surface could be replayed against one that never validated it.
     let app = wrapped_open_api_router().await;
 
     let response = app
@@ -52,7 +54,23 @@ async fn open_api_accepts_dual_token_fallback() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    let status = response.status();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "api-key surfaces must fail closed on credential headers, got: {}",
+        String::from_utf8_lossy(&body)
+    );
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        payload["reason"], "credential-profile-contamination",
+        "the rejection must name credential-profile contamination: {body:?}",
+        body = String::from_utf8_lossy(&body)
+    );
+    assert_eq!(payload["failedStage"], "surface-classification");
 }
 
 #[tokio::test]

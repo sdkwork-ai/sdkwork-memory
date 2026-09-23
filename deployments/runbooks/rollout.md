@@ -4,8 +4,8 @@
 
 - Container image digest is pinned in the release manifest.
 - `SDKWORK_MEMORY_ENVIRONMENT=production` and `SDKWORK_MEMORY_DEPLOYMENT_PROFILE=cloud`.
-- IAM and memory database secrets exist in the target namespace.
-- For Drive-backed exports: configure `SDKWORK_DATABASE_URL` and either `SDKWORK_MEMORY_DRIVE_OBJECT_STORE_ROOT` (local) or `SDKWORK_MEMORY_DRIVE_S3_*` credentials (production S3-compatible storage).
+- One unified workspace database secret exists in the target namespace. The Memory service, the embedded IAM readiness/audit plane, and the Drive-backed export adapter all resolve their PostgreSQL identity from the same `SDKWORK_DATABASE_URL`, so no per-module database secret is required.
+- For Drive-backed exports: use the same `SDKWORK_DATABASE_URL` and configure either `SDKWORK_MEMORY_DRIVE_OBJECT_STORE_ROOT` (local) or `SDKWORK_MEMORY_DRIVE_S3_*` credentials (production S3-compatible storage).
 - Database migrations completed via release Job (`deployments/kubernetes/migration-job.yaml`) or `sdkwork-api-memory-standalone-gateway db-migrate`.
 
 ## Rollout

@@ -220,18 +220,29 @@ assert(
 const adminTables = readText('plugins/sdkwork-memory-plugin-native-sql/src/admin_tables.rs');
 const nativeSqlStore = readText('plugins/sdkwork-memory-plugin-native-sql/src/store.rs');
 assert(
-  nativeSqlStore.includes('database/ddl/baseline/postgres/0001_memory_baseline.sql') &&
-    nativeSqlStore.includes('database/ddl/baseline/sqlite/0001_memory_baseline.sql'),
-  'native-sql compatibility bootstrap must consume the consolidated application-root baseline for both engines',
+  nativeSqlStore.includes('database/ddl/baseline/postgres/0001_memory_baseline.sql'),
+  'native-sql compatibility bootstrap must consume the consolidated application-root baseline',
 );
-for (const engine of ['postgres', 'sqlite']) {
+// DATABASE_FRAMEWORK_SPEC sections 40, 344, and 421: this repository is an `authoritative-server`
+// root and owns exactly one engine, so only the postgres baseline is an application-root
+// authority. The SQLite dialect is composed by the `client-local` plugin and is exercised from
+// `tests/fixtures/database/sqlite/`, never from `database/`.
+assert(
+  fs.existsSync(path.join(repoRoot, 'database/ddl/baseline/postgres/0001_memory_baseline.sql')),
+  'consolidated postgres baseline must exist per DATABASE_FRAMEWORK_SPEC section 584',
+);
+for (const stale of ['database/ddl/baseline/sqlite', 'database/migrations/sqlite']) {
   assert(
-    fs.existsSync(
-      path.join(repoRoot, `database/ddl/baseline/${engine}/0001_memory_baseline.sql`),
-    ),
-    `consolidated ${engine} baseline must exist per DATABASE_FRAMEWORK_SPEC section 584`,
+    !fs.existsSync(path.join(repoRoot, stale)),
+    `${stale}/ must not exist: an authoritative-server root must not claim a second engine`,
   );
 }
+assert(
+  fs.existsSync(
+    path.join(repoRoot, 'tests/fixtures/database/sqlite/ddl/baseline/0001_memory_baseline.sql'),
+  ),
+  'the SQLite dialect fixture must remain under tests/fixtures/database/sqlite per DATABASE_FRAMEWORK_SPEC section 344',
+);
 for (const [needle, message] of [
   ['implementation_profile_id', 'native-sql admin tables must persist index implementation_profile_id'],
   ['provider_binding_id', 'native-sql admin tables must persist index provider_binding_id'],
@@ -303,19 +314,57 @@ assert(
   'outbox publisher must deliver events through a dedicated adapter',
 );
 {
-  // The metrics handler lives in the assembly bootstrap, delimited by the next public
-  // entrypoint. Resolve the anchors explicitly so a future rename fails loudly here instead of
-  // degrading into a silent pass.
+  // The `/metrics` handler must not consult database readiness: Prometheus scraping has to keep
+  // working exactly when the database is down, which is when the metric matters most.
+  //
+  // Resolve the handler body by brace matching rather than slicing up to the next public
+  // entrypoint, so inserting an unrelated item between the handler and its neighbour cannot
+  // silently widen (or narrow) what this assertion inspects.
   const assemblyBootstrap = readText('crates/sdkwork-api-memory-assembly/src/bootstrap.rs');
-  const metricsStart = assemblyBootstrap.indexOf('async fn metrics');
-  const metricsEnd = assemblyBootstrap.indexOf('pub async fn assemble_api_router_from_env');
+  const metricsSignature = assemblyBootstrap.indexOf('async fn metrics');
   assert(
-    metricsStart !== -1 && metricsEnd > metricsStart,
-    'memory assembly bootstrap must declare the metrics handler ahead of its router entrypoint',
+    metricsSignature !== -1,
+    'memory assembly bootstrap must declare the /metrics handler',
+  );
+  const bodyStart = assemblyBootstrap.indexOf('{', metricsSignature);
+  let depth = 0;
+  let bodyEnd = -1;
+  for (let index = bodyStart; index < assemblyBootstrap.length; index += 1) {
+    const character = assemblyBootstrap[index];
+    if (character === '{') {
+      depth += 1;
+    } else if (character === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        bodyEnd = index + 1;
+        break;
+      }
+    }
+  }
+  assert(
+    bodyStart !== -1 && bodyEnd > bodyStart,
+    'memory assembly /metrics handler body must be resolvable for readiness-independence review',
+  );
+  const metricsHandler = assemblyBootstrap.slice(bodyStart, bodyEnd);
+  for (const forbidden of [
+    'ready_check',
+    'ReadinessCheck',
+    'bootstrap_memory_database_from_env',
+    'bootstrap_memory_runtime_from_env',
+  ]) {
+    assert(
+      !metricsHandler.includes(forbidden),
+      `metrics endpoint must not depend on database readiness probes (found \`${forbidden}\`)`,
+    );
+  }
+  assert(
+    metricsHandler.includes('render_prometheus') &&
+      metricsHandler.includes('render_memory_domain_prometheus'),
+    'memory /metrics handler must render both the HTTP and the Memory domain metric registries',
   );
   assert(
-    !assemblyBootstrap.slice(metricsStart, metricsEnd).includes('ready_check'),
-    'metrics endpoint must not depend on database readiness probes',
+    assemblyBootstrap.includes('pub async fn assemble_api_router_from_env'),
+    'memory assembly must keep the assemble_api_router_from_env contribution entrypoint',
   );
 }
 assert(
@@ -1140,12 +1189,16 @@ for (const relativePath of requiredSkeletonPaths) {
   );
 }
 
-// Initialization state: `baselineStrategy` is `baseline-plus-migrations`, so each declared
+// Initialization state: `baselineStrategy` is `baseline-plus-migrations`, so the declared
 // engine commits one consolidated baseline and migrations/ holds only post-baseline deltas.
 // Those deltas may legitimately be empty (DATABASE_FRAMEWORK_SPEC section 353). When a migration
 // is present, its declared reversibility must agree with whether it ships a down file
 // (DATABASE_SPEC section 586), so a down file is never required unconditionally.
-for (const engine of ['postgres', 'sqlite']) {
+assert(
+  JSON.stringify(readJson('database/database.manifest.json')?.engines) === JSON.stringify(['postgres']),
+  'database manifest engines must be exactly ["postgres"] for an authoritative-server root',
+);
+for (const engine of ['postgres']) {
   const baselinePath = path.join(
     repoRoot,
     `database/ddl/baseline/${engine}/0001_memory_baseline.sql`,
@@ -1230,6 +1283,142 @@ assert(
     'RECORD_SENSITIVITY_FILTER_SQL',
   ),
   'native SQL store must filter sensitivity tiers in list_record_details queries',
+);
+
+// ---------------------------------------------------------------------------
+// Declared scripts must reference files that exist.
+//
+// `pnpm-script-standard` validates script *naming* and `check-browser-build-scripts`
+// validates that `build:*` delegates to the canonical runner. Neither opens the
+// referenced path, so a `pre`/`post` hook — or any script — pointing at a deleted file
+// stays green until someone actually runs it. That is how
+// `apps/sdkwork-memory-pc` shipped a `prebuild` invoking a `materialize-runtime-env.mjs`
+// that did not exist, which broke `pnpm build` and therefore `pnpm check` outright while
+// every gate reported success.
+//
+// The lesson generalizes: for a script to be trustworthy, the thing it names must be
+// there. Only `node <relative path>` invocations are resolved; pnpm/cargo runner scripts
+// resolve through the package manager and are covered by their own standards.
+// ---------------------------------------------------------------------------
+const nodeScriptReferencePattern = /\bnode\s+(?:--[^\s]+(?:\s+[^\s]+)*\s+)?([\w.@/-]+\.(?:mjs|js|cjs|mts|ts))/gu;
+
+function assertScriptReferencesExist(manifestRelativePath, scripts) {
+  const manifestDirectory = path.dirname(path.join(repoRoot, manifestRelativePath));
+  for (const [scriptName, command] of Object.entries(scripts ?? {})) {
+    for (const match of String(command).matchAll(nodeScriptReferencePattern)) {
+      const token = match[1];
+      // Bare filenames (`foo.js`) may be runner aliases resolved by the package manager;
+      // only a path with a directory component is unambiguously a file reference.
+      if (!token.includes('/')) continue;
+      assert(
+        fs.existsSync(path.resolve(manifestDirectory, token)),
+        `${manifestRelativePath}#${scriptName} invokes ${token}, which does not exist`,
+      );
+    }
+  }
+}
+
+assertScriptReferencesExist('package.json', packageJson.scripts);
+for (const appEntry of fs.readdirSync(path.join(repoRoot, 'apps'), { withFileTypes: true })) {
+  if (!appEntry.isDirectory()) continue;
+  const manifestRelativePath = `apps/${appEntry.name}/package.json`;
+  if (!fs.existsSync(path.join(repoRoot, manifestRelativePath))) continue;
+  assertScriptReferencesExist(manifestRelativePath, readJson(manifestRelativePath).scripts);
+}
+
+// ---------------------------------------------------------------------------
+// Request-content bounds declared in the contract must match the ceilings the
+// runtime actually enforces.
+//
+// A contract that omits `maxItems` while the server enforces one is a silent
+// mismatch: the generated SDK advertises an unbounded array, the server rejects
+// the entry past the ceiling, and every gate stays green because nothing
+// compares the two. `MemoryRetrievalRequest.spaceIds`,
+// `MemoryContextPackRequest.spaceIds`, and `MemoryExportRequest.spaceIds` were
+// all enforced at 32 in Rust while their contracts declared no bound at all.
+//
+// The generator owns the declarations and the service owns the enforcement, so
+// this check runs in two halves: the declared numbers must be present and equal
+// across the three authority documents, and the Rust side must reach its
+// decision through the named constant rather than an inline literal.
+// ---------------------------------------------------------------------------
+const MAX_SCOPE_SPACE_IDS_EXPECTED = 32;
+const MAX_FORGET_MEMORY_IDS_EXPECTED = 200;
+
+/** Reads an array bound through an optional `anyOf` wrapper. */
+function declaredArrayMaxItems(schema, property) {
+  let node = schema?.properties?.[property];
+  if (node?.anyOf) {
+    node = node.anyOf.find((branch) => branch.type === 'array');
+  }
+  return node?.maxItems;
+}
+
+const boundedRequestProperties = [
+  { schema: 'MemoryRetrievalRequest', property: 'spaceIds', expected: MAX_SCOPE_SPACE_IDS_EXPECTED },
+  { schema: 'MemoryContextPackRequest', property: 'spaceIds', expected: MAX_SCOPE_SPACE_IDS_EXPECTED },
+  { schema: 'MemoryExportRequest', property: 'spaceIds', expected: MAX_SCOPE_SPACE_IDS_EXPECTED },
+  { schema: 'MemoryForgetRequest', property: 'memoryIds', expected: MAX_FORGET_MEMORY_IDS_EXPECTED },
+];
+for (const authorityDocument of [
+  'sdks/sdkwork-memory-sdk/openapi/memory-open-api.openapi.json',
+  'sdks/sdkwork-memory-app-sdk/openapi/memory-app-api.openapi.json',
+  'sdks/sdkwork-memory-backend-sdk/openapi/memory-backend-api.openapi.json',
+]) {
+  const document = readJson(authorityDocument);
+  for (const { schema, property, expected } of boundedRequestProperties) {
+    const declared = declaredArrayMaxItems(document?.components?.schemas?.[schema], property);
+    if (declared === undefined) continue; // schema is not published on this surface
+    assert(
+      declared === expected,
+      `${authorityDocument}: ${schema}.${property} must declare maxItems ${expected} to match the enforced ceiling, found ${declared}`,
+    );
+  }
+}
+
+const servicePlatformSource = readText(
+  'crates/sdkwork-intelligence-memory-service/src/platform.rs',
+);
+assert(
+  /pub const MAX_FORGET_MEMORY_IDS: usize = sdkwork_utils_rust::MAX_LIST_PAGE_SIZE as usize;/u.test(
+    servicePlatformSource,
+  ),
+  'MAX_FORGET_MEMORY_IDS must derive from MAX_LIST_PAGE_SIZE instead of an independent literal, so the contract bound and the pagination bound cannot drift',
+);
+assert(
+  /pub const MAX_SCOPE_SPACE_IDS: usize = \d+;/u.test(servicePlatformSource),
+  'MAX_SCOPE_SPACE_IDS must be declared as a constant in platform.rs',
+);
+for (const [enforcedIn, needle, message] of [
+  [
+    'crates/sdkwork-intelligence-memory-service/src/app_backend_api.rs',
+    'platform::MAX_FORGET_MEMORY_IDS',
+    'the targeted forget path must enforce platform::MAX_FORGET_MEMORY_IDS',
+  ],
+  [
+    'crates/sdkwork-intelligence-memory-service/src/app_backend_api.rs',
+    'platform::MAX_SCOPE_SPACE_IDS',
+    'the export path must enforce platform::MAX_SCOPE_SPACE_IDS',
+  ],
+  [
+    'crates/sdkwork-intelligence-memory-service/src/open_api.rs',
+    'platform::MAX_SCOPE_SPACE_IDS',
+    'the retrieval path must enforce platform::MAX_SCOPE_SPACE_IDS',
+  ],
+]) {
+  assert(readText(enforcedIn).includes(needle), `${enforcedIn}: ${message}`);
+}
+
+const contractGeneratorSource = readText('tools/materialize_phase1_contracts.mjs');
+assert(
+  contractGeneratorSource.includes(
+    `const MAX_FORGET_MEMORY_IDS = ${MAX_FORGET_MEMORY_IDS_EXPECTED};`,
+  ),
+  `the contract generator must declare MAX_FORGET_MEMORY_IDS = ${MAX_FORGET_MEMORY_IDS_EXPECTED}`,
+);
+assert(
+  contractGeneratorSource.includes(`const MAX_SCOPE_SPACE_IDS = ${MAX_SCOPE_SPACE_IDS_EXPECTED};`),
+  `the contract generator must declare MAX_SCOPE_SPACE_IDS = ${MAX_SCOPE_SPACE_IDS_EXPECTED}`,
 );
 
 if (failures.length > 0) {

@@ -1,8 +1,7 @@
 ﻿[workspace]
 resolver = "2"
 members = [
-    "crates/sdkwork-api-memory-assembly",
-    "crates/sdkwork-api-memory-assembly",
+  "crates/sdkwork-api-memory-assembly",
   "crates/sdkwork-memory-database-host",
   "crates/sdkwork-memory-drive",
   "crates/sdkwork-routes-memory-support",

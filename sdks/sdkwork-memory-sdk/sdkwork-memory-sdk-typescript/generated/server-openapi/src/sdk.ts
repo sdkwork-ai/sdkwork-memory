@@ -3,7 +3,7 @@ import type { SdkworkCustomConfig } from './types/common';
 
 import { MemoryApi, createMemoryApi } from './api/memory';
 
-export class SdkworkMemoryOpenClient {
+export class SdkworkCustomClient {
   private httpClient: HttpClient;
 
   public readonly memory: MemoryApi;
@@ -22,8 +22,8 @@ export class SdkworkMemoryOpenClient {
   }
 }
 
-export function createClient(config: SdkworkCustomConfig): SdkworkMemoryOpenClient {
-  return new SdkworkMemoryOpenClient(config);
+export function createClient(config: SdkworkCustomConfig): SdkworkCustomClient {
+  return new SdkworkCustomClient(config);
 }
 
-export default SdkworkMemoryOpenClient;
+export default SdkworkCustomClient;

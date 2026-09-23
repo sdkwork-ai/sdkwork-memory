@@ -16,7 +16,7 @@ thiserror.workspace = true
 tracing.workspace = true
 sdkwork-database-config.workspace = true
 sdkwork-database-repository.workspace = true
-sdkwork-database-sqlx.workspace = true
+sdkwork-database-sqlx = { workspace = true, features = ["sqlite"] }
 sdkwork-database-id.workspace = true
 sdkwork-memory-database-host.workspace = true
 sdkwork-memory-plugin-native-sql.workspace = true

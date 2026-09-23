@@ -1,11 +1,11 @@
 //! Gateway bootstrap for sdkwork-memory.
 //!
 //! The assembly owns Memory service construction (runtime bootstrap, product
-//! service, Drive export uploader, background workers), business route
-//! composition, the readiness check, and the metrics endpoint
-//! (API_ASSEMBLY_SPEC §6.1). The thin standalone gateway calls
-//! `assemble_api_router_from_env` and projects `.router` /
-//! `.worker_shutdown_tx`.
+//! service, Drive export uploader), business route composition, the readiness
+//! check, and the metrics endpoint (API_ASSEMBLY_SPEC §6.1). It publishes one
+//! host-neutral contribution through [`assemble_api_router_from_env`], and the
+//! paired factory [`assemble_api_router_retaining_background_from_env`] hands
+//! the background-worker shutdown trigger back to the process that owns it.
 
 use std::sync::Arc;
 
@@ -38,34 +38,22 @@ use sdkwork_routes_memory_support::{
     memory_dependency_ready_check, memory_http_metrics, memory_metric_environment_label,
     refresh_memory_http_metric_dimensions,
 };
-use sdkwork_web_bootstrap::{ApiAssemblyContribution, healthz_handler, livez_handler, ReadinessCheck, ReadinessFuture, readyz_handler, WebModule};
+use sdkwork_web_bootstrap::{healthz_handler, livez_handler, ReadinessCheck, ReadinessFuture, readyz_handler, WebModule};
 use sdkwork_web_core::HttpRouteManifest;
 use tower::limit::ConcurrencyLimitLayer;
 use tracing::info;
 
+// Exactly one import binding for the contribution type: the `pub use` re-export below is the
+// module's public contract (API_ASSEMBLY_SPEC section 4 "Export Completeness"), so it must not be
+// shadowed by a second private `use` of the same name.
 pub use sdkwork_web_bootstrap::ApiAssemblyContribution;
 
 /// Indivisible host-neutral API assembly contribution (web-bootstrap contract,
 /// API_ASSEMBLY_SPEC.md section 4).
 pub type ApiAssembly = ApiAssemblyContribution;
 
-pub async fn assemble_api_router(
-    product: Arc<OpenMemoryService>,
-) -> ApiAssembly {
-    let open_business_router = build_open_router_with_product(product.clone());
-    let app_business_router = build_app_router_with_product(product.clone());
-    let backend_business_router = build_backend_router_with_product(product.clone());
-
-    let open_router = wrap_open_router(open_business_router).await;
-    let app_router = wrap_app_router(app_business_router).await;
-    let backend_router = wrap_backend_router(backend_business_router).await;
-
-    let router = Router::new()
-        .merge(open_router)
-        .merge(app_router)
-        .merge(backend_router)
-        .layer(axum::Extension(product));
-
+/// The owner's complete route manifest: every surface this module owns.
+fn memory_route_manifest() -> HttpRouteManifest {
     let routes = [
         sdkwork_routes_memory_open_api::gateway_route_manifest(),
         sdkwork_routes_memory_app_api::gateway_route_manifest(),
@@ -74,38 +62,96 @@ pub async fn assemble_api_router(
     .into_iter()
     .flat_map(|manifest| manifest.routes().to_vec())
     .collect();
-
-    ApiAssemblyContribution::from_manifest(
-        "sdkwork-memory",
-        "SDKWork Memory API",
-        router,
-        HttpRouteManifest::from_owned_routes(routes),
-        Vec::new(),
-        Arc::new(sdkwork_web_bootstrap::AlwaysReady),
-    )
-    .expect("memory assembly contribution contract is valid")
+    HttpRouteManifest::from_owned_routes(routes)
 }
-
-// ---------------------------------------------------------------------------
-// Standalone application construction (API_ASSEMBLY_SPEC §6.1)
-// ---------------------------------------------------------------------------
 
 /// Default maximum request body size: 1 MiB.
 const DEFAULT_MAX_BODY_BYTES: usize = 1024 * 1024;
 /// Default maximum concurrent in-flight requests.
 const DEFAULT_MAX_CONCURRENCY: usize = 256;
 
-/// Assembled standalone application: business + infra router and the
-/// background-worker shutdown handle.
+/// Builds the complete Memory contribution for `product`, pinned to `readiness`:
+/// every business route, the owner's route manifest, the process endpoints, the
+/// request-body ceiling, and the admission ceiling.
 ///
-/// The caller MUST keep `worker_shutdown_tx` alive and call `send(true)`
-/// during graceful shutdown so that background workers (outbox publisher,
-/// learning job worker, eval run worker, provider health probe) can drain
-/// in-flight work and exit cleanly.
-pub struct MemoryStandaloneApplication {
-    pub router: Router,
-    pub worker_shutdown_tx: tokio::sync::watch::Sender<bool>,
+/// Each surface keeps its own Web Framework layer: `app-api`, `backend-api`, and
+/// `open-api` select distinct auth profiles through `memory_web_auth_mode_from_env`
+/// (dev-inline, production fail-closed, or the IAM database resolver), so a single
+/// host-side layer cannot replace them. The contribution is therefore already
+/// framework-wrapped and a host MUST NOT apply a second layer on top of it
+/// (API_ASSEMBLY_SPEC §6.1).
+///
+/// Process endpoints are mounted exactly once here, after all three surfaces have
+/// been merged, so `/healthz`, `/livez`, `/readyz`, and `/metrics` are never
+/// duplicated per surface (APPLICATION_GATEWAY_SPEC §5.7.1, HEALTH_CHECK_SPEC).
+/// `/metrics` keeps the Memory domain renderer instead of the generic
+/// registry-only handler.
+pub async fn assemble_api_router(
+    product: Arc<OpenMemoryService>,
+    readiness: Arc<dyn ReadinessCheck>,
+) -> Result<ApiAssembly, String> {
+    let open_business_router = build_open_router_with_product(product.clone());
+    let app_business_router = build_app_router_with_product(product.clone());
+    let backend_business_router = build_backend_router_with_product(product.clone());
+
+    let open_router = wrap_open_router(open_business_router).await;
+    let app_router = wrap_app_router(app_business_router).await;
+    let backend_router = wrap_backend_router(backend_business_router).await;
+
+    let max_body_bytes =
+        platform::read_env_usize("SDKWORK_MEMORY_MAX_BODY_BYTES", DEFAULT_MAX_BODY_BYTES);
+    let max_concurrency =
+        platform::read_env_usize("SDKWORK_MEMORY_MAX_CONCURRENCY", DEFAULT_MAX_CONCURRENCY);
+
+    let router = Router::new()
+        .route("/metrics", get(metrics))
+        .route("/healthz", get(healthz_handler))
+        .route("/livez", get(livez_handler))
+        .route(
+            "/readyz",
+            get({
+                let readiness = readiness.clone();
+                move || async move { readyz_handler(Some(readiness)).await }
+            }),
+        )
+        .merge(open_router)
+        .merge(app_router)
+        .merge(backend_router)
+        .layer(Extension(product))
+        .layer(DefaultBodyLimit::max(max_body_bytes))
+        .layer(ConcurrencyLimitLayer::new(max_concurrency));
+
+    info!(
+        max_body_bytes,
+        max_concurrency, "memory standalone-gateway rate limits configured"
+    );
+
+    ApiAssemblyContribution::from_manifest(
+        "sdkwork-memory",
+        "SDKWork Memory API",
+        router,
+        memory_route_manifest(),
+        Vec::new(),
+        readiness,
+    )
 }
+
+// ---------------------------------------------------------------------------
+// Standalone application construction (API_ASSEMBLY_SPEC §6.1)
+// ---------------------------------------------------------------------------
+
+/// Background workers owned by the process that hosts this assembly.
+///
+/// Process-owner handle for the Memory background plane.
+///
+/// Re-exported from the service layer: [`ApiAssembly`] is an indivisible
+/// host-neutral contribution, so it MUST NOT carry process-lifecycle handles
+/// (API_ASSEMBLY_SPEC §4). The shutdown trigger therefore travels separately,
+/// through the paired factory
+/// [`assemble_api_router_retaining_background_from_env`] (API_ASSEMBLY_SPEC
+/// §6.2.1 "retaining background" rule). Dropping this value leaves the workers
+/// running until process exit.
+pub use sdkwork_intelligence_memory_service::MemoryBackgroundWorkers;
 
 /// Readiness probe over the memory product service and its dependencies.
 pub struct MemoryReadinessCheck {
@@ -164,12 +210,19 @@ async fn metrics(Extension(product): Extension<Arc<OpenMemoryService>>) -> impl 
     )
 }
 
-/// Boots the memory product service from `SDKWORK_DATABASE_*` environment,
-/// assembles the business router contribution, and returns the complete
-/// standalone application router with infrastructure routes, readiness,
-/// metrics, and the background-worker shutdown handle. The thin standalone
-/// gateway projects `.router` / `.worker_shutdown_tx`.
-pub async fn assemble_api_router_from_env() -> Result<MemoryStandaloneApplication, String> {
+/// Boots the memory product service from `SDKWORK_DATABASE_*` environment and
+/// builds the complete Memory HTTP surface as a host-neutral
+/// `ApiAssemblyContribution`: every business route, the owner's route manifest,
+/// the infra probes, the request-body ceiling, and the admission ceiling.
+///
+/// This is the contribution the canonical [`web_module`] publishes
+/// (API_ASSEMBLY_SPEC §4.1.1). It performs no process-lifecycle side effects:
+/// background workers are started only by
+/// [`assemble_api_router_retaining_background_from_env`], so a host that
+/// installs the module owns worker lifecycle and cannot be left with a dropped
+/// shutdown handle.
+async fn assemble_contribution_with_product_from_env(
+) -> Result<(ApiAssemblyContribution, Arc<OpenMemoryService>), String> {
     refresh_memory_http_metric_dimensions();
     validate_outbox_runtime_config().await?;
     let runtime = bootstrap_memory_runtime_from_env().await?;
@@ -195,49 +248,53 @@ pub async fn assemble_api_router_from_env() -> Result<MemoryStandaloneApplicatio
         .await
         .map_err(|_| "memory database schema preflight failed".to_owned())?;
     let product = Arc::new(product);
-    let worker_shutdown_tx = OpenMemoryService::spawn_background_workers(&product);
 
-    let business_router = assemble_api_router(product.clone()).await.router;
+    let readiness: Arc<dyn ReadinessCheck> = Arc::new(MemoryReadinessCheck::new(product.clone()));
+    let contribution = assemble_api_router(product.clone(), readiness).await?;
 
-    let readiness = Arc::new(MemoryReadinessCheck::new(product.clone()));
+    Ok((contribution, product))
+}
 
-    let max_body_bytes =
-        platform::read_env_usize("SDKWORK_MEMORY_MAX_BODY_BYTES", DEFAULT_MAX_BODY_BYTES);
-    let max_concurrency =
-        platform::read_env_usize("SDKWORK_MEMORY_MAX_CONCURRENCY", DEFAULT_MAX_CONCURRENCY);
+/// Assembles the complete Memory API contribution from `SDKWORK_DATABASE_*`
+/// environment (API_ASSEMBLY_SPEC §6.1).
+///
+/// The returned contribution is already framework-wrapped per surface, so the
+/// host composes it with [`ApiModuleRegistry`](sdkwork_web_bootstrap::ApiModuleRegistry)
+/// and serves `ComposedApiAssembly::router` without applying a second Web
+/// Framework layer. Background workers are not started: use
+/// [`assemble_api_router_retaining_background_from_env`] when the caller owns
+/// worker lifecycle.
+pub async fn assemble_api_router_from_env() -> Result<ApiAssembly, String> {
+    Ok(assemble_contribution_with_product_from_env().await?.0)
+}
 
-    let router = Router::new()
-        .route("/metrics", get(metrics))
-        .route("/healthz", get(healthz_handler))
-        .route("/livez", get(livez_handler))
-        .route(
-            "/readyz",
-            get({
-                let readiness = readiness.clone();
-                move || async move { readyz_handler(Some(readiness)).await }
-            }),
-        )
-        .merge(business_router)
-        .layer(Extension(product))
-        .layer(DefaultBodyLimit::max(max_body_bytes))
-        .layer(ConcurrencyLimitLayer::new(max_concurrency));
-
-    info!(
-        max_body_bytes,
-        max_concurrency, "memory standalone-gateway rate limits configured"
-    );
-
-    Ok(MemoryStandaloneApplication {
-        router,
-        worker_shutdown_tx,
-    })
+/// Paired factory for the process that hosts Memory: the complete API
+/// contribution **plus** the background-worker handle that process must own
+/// (API_ASSEMBLY_SPEC §6.2.1 "retaining background" rule).
+///
+/// The module still owns the complete route definition; only task shutdown
+/// moves to the host, which MUST keep the returned
+/// [`MemoryBackgroundWorkers`] alive, call
+/// [`MemoryBackgroundWorkers::shutdown`], and then await
+/// [`MemoryBackgroundWorkers::drain`] so the drain is bounded by a real
+/// completion signal rather than a guessed sleep duration.
+pub async fn assemble_api_router_retaining_background_from_env(
+) -> Result<(ApiAssembly, MemoryBackgroundWorkers), String> {
+    let (contribution, product) = assemble_contribution_with_product_from_env().await?;
+    let workers = OpenMemoryService::spawn_background_workers(&product);
+    Ok((contribution, workers))
 }
 
 /// Database migration-only lifecycle for the `db-migrate` CLI mode of the thin
 /// standalone gateway. The assembly owns database bootstrap concerns
 /// (API_ASSEMBLY_SPEC §6.1); the gateway must not import implementation crates
 /// such as `sdkwork-memory-database-host`.
+///
+/// The server-role engine admission rule runs first so `db-migrate` reports the
+/// same actionable "PostgreSQL is required" diagnostic as startup, instead of
+/// failing later inside the migration history table.
 pub async fn run_database_migrate_only() -> Result<(), String> {
+    sdkwork_intelligence_memory_repository_sqlx::ensure_server_role_database_engine_from_env()?;
     let previous_auto_migrate = std::env::var_os("SDKWORK_DATABASE_AUTO_MIGRATE");
     std::env::set_var("SDKWORK_DATABASE_AUTO_MIGRATE", "true");
     let result = bootstrap_memory_database_from_env().await;
@@ -253,6 +310,18 @@ pub async fn run_database_migrate_only() -> Result<(), String> {
 /// Canonical Web Module definition for this application
 /// (API_ASSEMBLY_SPEC §4.1.1): the complete HTTP surface — every route,
 /// manifest, and OpenAPI document of this owner — as one installable module.
+///
+/// The module is built from a real `ApiAssemblyContribution`, never from a bare
+/// router struct, so the published contract keeps its owner identity, route
+/// manifest, OpenAPI document, permission catalog, and readiness check.
+///
+/// Background workers stay with the process owner: installing this module does
+/// not start them, and the worker handle is never dropped out-of-band. A host
+/// that must own worker lifecycle uses the paired factory
+/// [`assemble_api_router_retaining_background_from_env`] (API_ASSEMBLY_SPEC
+/// §6.2.1 "retaining background" rule).
 pub async fn web_module() -> Result<WebModule, String> {
-    Ok(WebModule::from_contribution(assemble_api_router_from_env().await?))
+    Ok(WebModule::from_contribution(
+        assemble_api_router_from_env().await?,
+    ))
 }

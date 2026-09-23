@@ -5,9 +5,44 @@ canon:
   prd: docs/product/prd/PRD.md
   techArchitecture: docs/architecture/tech/TECH_ARCHITECTURE.md
 entries:
+  - id: ADR-20260627
+    path: docs/architecture/decisions/ADR-20260627-api-rate-limiting.md
+    layer: work
+    audience: [architecture, engineering, api, operations]
+    status: accepted
+  - id: ADR-20260627
+    path: docs/architecture/decisions/ADR-20260627-commercial-memory-management.md
+    layer: work
+    audience: [architecture, engineering, product, api]
+    status: accepted
+  - id: ADR-20260627
+    path: docs/architecture/decisions/ADR-20260627-graceful-shutdown.md
+    layer: work
+    audience: [architecture, engineering, operations]
+    status: accepted
+  - id: ADR-20260627
+    path: docs/architecture/decisions/ADR-20260627-restricted-sensitivity-access.md
+    layer: work
+    audience: [architecture, engineering, security, data]
+    status: accepted
+  - id: ADR-20260627
+    path: docs/architecture/decisions/ADR-20260627-ssrf-protection.md
+    layer: work
+    audience: [architecture, engineering, security]
+    status: accepted
   - id: ADR-20260721
     path: docs/architecture/decisions/ADR-20260721-optimistic-concurrency.md
     layer: work
     audience: [architecture, engineering, api, data]
     status: proposed
+  - id: ADR-20260721
+    path: docs/architecture/decisions/ADR-20260721-outbox-backoff-and-dead-letter.md
+    layer: work
+    audience: [architecture, engineering, data, operations]
+    status: accepted
+  - id: REVIEW-20260923
+    path: docs/engineering/reviews/REVIEW-20260923-memory-commercial-readiness-audit.md
+    layer: work
+    audience: [architecture, engineering, product, api, data, security, operations]
+    status: reviewed
 domains: []

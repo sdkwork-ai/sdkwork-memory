@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-// Initialization state: `baselineStrategy` is `baseline-plus-migrations`, so each declared
-// engine owns exactly one consolidated baseline and migrations/ holds only post-baseline
-// deltas. The per-migration SQL files referenced here previously were folded into these
-// baselines by reset-database-initialization-state.mjs.
+// `database/` is an `authoritative-server` root, so it declares exactly `engines: ["postgres"]`
+// and commits one consolidated baseline (DATABASE_FRAMEWORK_SPEC sections 344 and 584). The
+// SQLite dialect schema the native-sql plugin bootstraps is deliberately NOT a second module
+// root under database/, because that root must not claim both roles (section 40).
 const baselinePaths = [
   "database/ddl/baseline/postgres/0001_memory_baseline.sql",
-  "database/ddl/baseline/sqlite/0001_memory_baseline.sql",
+  "tests/fixtures/database/sqlite/ddl/baseline/0001_memory_baseline.sql",
 ];
 
 const requiredTables = [

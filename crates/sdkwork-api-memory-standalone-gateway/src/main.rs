@@ -1,5 +1,5 @@
 use sdkwork_api_memory_assembly::{
-    assemble_api_router_from_env, run_database_migrate_only,
+    assemble_api_router_retaining_background_from_env, run_database_migrate_only,
 };
 use sdkwork_api_memory_standalone_gateway::init_tracing;
 use sdkwork_web_bootstrap::ApiModuleRegistry;
@@ -17,6 +17,13 @@ fn exit_with_error(context: &str, message: impl std::fmt::Display) -> ! {
 async fn main() {
     init_tracing();
 
+    // SDKWork Process-Shared Database Pool Standard section 4: the process entrypoint enables
+    // strict process-local pool reuse before the first pool creation, so every module embedded in
+    // this process (Memory repositories, the database host lifecycle, and the Drive compatibility
+    // adapter) reuses one process pool for one normalized database identity instead of opening a
+    // private pool each. The call must precede any `*_from_env()` bootstrap.
+    sdkwork_database_sqlx::enable_process_shared_database_pool();
+
     if matches!(std::env::args().nth(1).as_deref(), Some("db-migrate")) {
         if let Err(error) = run_database_migrate_only().await {
             exit_with_error("db-migrate", error);
@@ -27,14 +34,19 @@ async fn main() {
     let bind_address = std::env::var("SDKWORK_MEMORY_APPLICATION_PUBLIC_INGRESS_BIND")
         .unwrap_or_else(|_| "127.0.0.1:8080".to_owned());
 
-    // The assembly owns service construction, route composition, readiness,
-    // and background workers; the listener projects `.router` and keeps the
-    // worker shutdown handle for graceful drain (API_ASSEMBLY_SPEC §6.1).
+    // The assembly returns one host-neutral contribution that already owns the complete route
+    // surface, the owner's route manifest, the process endpoints, and the per-surface Web
+    // Framework layers (app-api, backend-api, and open-api select distinct auth profiles).
+    // The host therefore composes it as a module and serves `ComposedApiAssembly::router`
+    // without applying a second framework layer (API_ASSEMBLY_SPEC §6.1).
+    let (assembly, mut background_workers) =
+        match assemble_api_router_retaining_background_from_env().await {
+            Ok(assembly) => assembly,
+            Err(error) => exit_with_error("bootstrap", error),
+        };
+
     let mut module_registry = ApiModuleRegistry::new();
-    module_registry.add_module(match assemble_api_router_from_env().await {
-        Ok(app) => app,
-        Err(error) => exit_with_error("bootstrap", error),
-    });
+    module_registry.add_modules(vec![assembly]);
     let app = module_registry
         .try_compose("SDKWork Memory API")
         .unwrap_or_else(|error| panic!("SDKWork Memory API module composition failed: {error}"));
@@ -45,16 +57,68 @@ async fn main() {
     };
     tracing::info!("sdkwork-api-memory-standalone-gateway listening on {bind_address}");
 
-    let worker_shutdown_tx = app.worker_shutdown_tx;
-    if let Err(error) = axum::serve(listener, app.router)
-        .with_graceful_shutdown(shutdown_signal(worker_shutdown_tx))
-        .await
-    {
+    // Shutdown order matters. `axum::serve(..).await` returns only after the
+    // listener stopped accepting and every in-flight request finished, so the
+    // HTTP plane is fully drained before the background plane starts draining.
+    // Running the two drains in sequence (rather than concurrently with the
+    // background plane going first) keeps the worst-case shutdown time the sum
+    // of two known budgets instead of an open-ended overlap, and it lets
+    // workers keep completing batches while requests are still being served.
+    let serve_result = axum::serve(listener, app.router)
+        .with_graceful_shutdown(wait_for_shutdown_signal())
+        .await;
+
+    // The HTTP plane is drained; now stop admitting background work and wait
+    // for real completion under a bounded budget.
+    let drain_budget = background_drain_budget();
+    background_workers.shutdown();
+    if background_workers.drain(drain_budget).await {
+        tracing::info!(
+            drain_budget_seconds = drain_budget.as_secs(),
+            "sdkwork-api-memory-standalone-gateway background workers drained"
+        );
+    } else {
+        tracing::warn!(
+            drain_budget_seconds = drain_budget.as_secs(),
+            "sdkwork-api-memory-standalone-gateway drain budget expired with workers still running; \
+             abandoned work keeps its database lease and becomes re-claimable by another replica \
+             after the lease expires"
+        );
+    }
+
+    if let Err(error) = serve_result {
         exit_with_error("serve", error);
     }
 }
 
-async fn shutdown_signal(worker_shutdown_tx: tokio::sync::watch::Sender<bool>) {
+/// Budget for draining the Memory background plane on shutdown.
+///
+/// Must stay below the orchestrator's `terminationGracePeriodSeconds` so the
+/// process reports an incomplete drain itself instead of being killed
+/// mid-write. Work that outlives the budget is not lost: every job and outbox
+/// row carries a database lease (`lease_owner` / `lease_token`), so the next
+/// replica re-claims it once the lease expires. That is why a bounded wait is
+/// safe here and an unbounded one is not necessary.
+const DEFAULT_BACKGROUND_DRAIN_SECONDS: u64 = 25;
+
+/// Resolves the shutdown drain budget from
+/// `SDKWORK_MEMORY_SHUTDOWN_DRAIN_SECS`, falling back to
+/// [`DEFAULT_BACKGROUND_DRAIN_SECONDS`].
+fn background_drain_budget() -> Duration {
+    let seconds = std::env::var("SDKWORK_MEMORY_SHUTDOWN_DRAIN_SECS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .unwrap_or(DEFAULT_BACKGROUND_DRAIN_SECONDS);
+    Duration::from_secs(seconds)
+}
+
+/// Resolves on SIGINT / SIGTERM.
+///
+/// Deliberately takes no worker handle: `axum::serve(..).with_graceful_shutdown`
+/// requires a `'static` future, and the background plane must survive until the
+/// HTTP plane has finished draining. The host therefore keeps the worker handle
+/// in `main` and drains it after `serve(..).await` returns.
+async fn wait_for_shutdown_signal() {
     let ctrl_c = async {
         if let Err(error) = signal::ctrl_c().await {
             tracing::warn!(%error, "failed to install Ctrl+C handler; ignoring");
@@ -81,12 +145,8 @@ async fn shutdown_signal(worker_shutdown_tx: tokio::sync::watch::Sender<bool>) {
         () = terminate => {},
     }
 
-    tracing::info!("sdkwork-api-memory-standalone-gateway shutdown signal received");
-
-    // Trigger graceful shutdown of all background workers.
-    let _ = worker_shutdown_tx.send(true);
-
-    // Give workers a bounded grace period to drain in-flight work.
-    tokio::time::sleep(Duration::from_secs(3)).await;
-    tracing::info!("sdkwork-api-memory-standalone-gateway background workers shutdown complete");
+    tracing::info!(
+        "sdkwork-api-memory-standalone-gateway shutdown signal received; \
+         draining in-flight requests"
+    );
 }

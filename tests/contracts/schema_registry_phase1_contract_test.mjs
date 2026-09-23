@@ -22,12 +22,13 @@ const phase1Tables = new Set([
   "ai_outbox_event",
 ]);
 
-// Initialization state: each declared engine owns exactly one consolidated baseline, so the
-// schema-registry indexes and tables must be materialized by that baseline rather than by the
-// per-version SQL files that reset-database-initialization-state.mjs folded into it.
+// The application root is `authoritative-server` and owns the PostgreSQL consolidated baseline
+// (DATABASE_FRAMEWORK_SPEC sections 344 and 584). The SQLite dialect schema consumed by the
+// native-sql plugin bootstrap is not a second module root under database/ because that root must
+// not claim both roles (section 40).
 const migrationPaths = [
   "database/ddl/baseline/postgres/0001_memory_baseline.sql",
-  "database/ddl/baseline/sqlite/0001_memory_baseline.sql",
+  "tests/fixtures/database/sqlite/ddl/baseline/0001_memory_baseline.sql",
 ];
 
 function loadSchemaRegistryIndexes() {
@@ -131,8 +132,8 @@ const storeSource = fs.readFileSync(
 );
 assert.ok(
   storeSource.includes("database/ddl/baseline/postgres/0001_memory_baseline.sql") &&
-    storeSource.includes("database/ddl/baseline/sqlite/0001_memory_baseline.sql"),
-  "native-sql store must consume the application-root consolidated baseline for both engines",
+    storeSource.includes("tests/fixtures/database/sqlite/migrations/0001_memory_schema.up.sql"),
+  "native-sql store must consume the application-root PostgreSQL baseline plus its SQLite dialect schema",
 );
 
 console.log(

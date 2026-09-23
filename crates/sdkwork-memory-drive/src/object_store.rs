@@ -4,7 +4,7 @@ use sdkwork_drive_storage_contract::{DriveObjectStoreError, DriveStorageProvider
 use sdkwork_drive_storage_local::LocalDriveObjectStore;
 use sdkwork_drive_storage_s3::{S3DriveObjectStore, S3StoreConfig};
 use sdkwork_utils_rust::is_blank;
-use sqlx::{AnyPool, Row};
+use sqlx::{PgPool, Row};
 
 #[derive(Debug, Clone)]
 pub struct MemoryDriveStorageProvider {
@@ -23,7 +23,7 @@ pub enum MemoryDriveObjectStore {
 }
 
 pub async fn load_memory_drive_storage_provider(
-    pool: &AnyPool,
+    pool: &PgPool,
     provider_id: &str,
 ) -> Result<MemoryDriveStorageProvider, String> {
     let row = sqlx::query(

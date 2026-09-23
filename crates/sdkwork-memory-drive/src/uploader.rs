@@ -9,7 +9,7 @@ use sdkwork_memory_spi::{
     MemorySpiError, MemorySpiResult,
 };
 use sdkwork_utils_rust::{now, sha256_hash, to_unix_millis};
-use sqlx::AnyPool;
+use sqlx::PgPool;
 
 use crate::object_store::MemoryDriveObjectStore;
 
@@ -20,17 +20,11 @@ pub struct DriveUploaderMemoryExportAdapter {
 }
 
 impl DriveUploaderMemoryExportAdapter {
-    pub fn new(
-        pool: AnyPool,
-        object_store: MemoryDriveObjectStore,
-        _storage_provider_id: String,
-        _bucket: String,
-        app_id: String,
-    ) -> Self {
+    pub fn new(pool: PgPool, object_store: MemoryDriveObjectStore) -> Self {
         Self {
             uploader: DriveUploaderService::new(SqlUploaderStore::new(pool)),
             object_store,
-            app_id,
+            app_id: "sdkwork-memory".to_string(),
         }
     }
 }

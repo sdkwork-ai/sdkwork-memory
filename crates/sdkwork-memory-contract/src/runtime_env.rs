@@ -12,6 +12,51 @@ pub fn env_test_lock() -> std::sync::MutexGuard<'static, ()> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+/// Panic-safe process-environment override for tests.
+///
+/// A hand-written save/restore pair only restores the environment when the test body returns
+/// normally. When an assertion fails, the unwind skips the restore and the leaked `SDKWORK_*`
+/// values stay visible to every other test running on another thread of the same test binary —
+/// which turns one genuine failure into a cascade of unrelated-looking failures elsewhere.
+/// `MemoryEnvScope` restores on drop, so a failure stays local to the test that caused it.
+///
+/// Pair it with [`env_test_lock`]: the lock serializes access, the scope guarantees release.
+#[doc(hidden)]
+#[must_use = "the previous values are restored only while the scope is alive"]
+pub struct MemoryEnvScope {
+    previous: Vec<(String, Option<std::ffi::OsString>)>,
+}
+
+impl MemoryEnvScope {
+    /// Apply every `(key, value)` override, remembering the previous value of each key.
+    ///
+    /// `None` removes the variable for the duration of the scope.
+    pub fn new(vars: &[(&str, Option<&str>)]) -> Self {
+        let previous = vars
+            .iter()
+            .map(|(key, _)| ((*key).to_string(), std::env::var_os(key)))
+            .collect();
+        for (key, value) in vars {
+            match value {
+                Some(value) => std::env::set_var(key, value),
+                None => std::env::remove_var(key),
+            }
+        }
+        Self { previous }
+    }
+}
+
+impl Drop for MemoryEnvScope {
+    fn drop(&mut self) {
+        for (key, value) in &self.previous {
+            match value {
+                Some(value) => std::env::set_var(key, value),
+                None => std::env::remove_var(key),
+            }
+        }
+    }
+}
+
 /// Canonical `SDKWORK_MEMORY_ENVIRONMENT` / `SDKWORK_MEMORY_CONFIG_PROFILE` value.
 pub fn memory_environment_name() -> String {
     std::env::var("SDKWORK_MEMORY_ENVIRONMENT")
@@ -50,16 +95,29 @@ mod tests {
     use super::*;
 
     fn with_env(key: &str, value: Option<&str>, test: impl FnOnce()) {
-        let previous = std::env::var(key).ok();
-        match value {
-            Some(value) => std::env::set_var(key, value),
-            None => std::env::remove_var(key),
-        }
+        let _scope = MemoryEnvScope::new(&[(key, value)]);
         test();
-        match previous {
-            Some(value) => std::env::set_var(key, value),
-            None => std::env::remove_var(key),
-        }
+    }
+
+    #[test]
+    fn env_scope_restores_the_previous_value_on_unwind() {
+        let _guard = env_test_lock();
+        const KEY: &str = "SDKWORK_MEMORY_CONTRACT_ENV_SCOPE_PROBE";
+        std::env::remove_var(KEY);
+
+        let panicked = std::panic::catch_unwind(|| {
+            let _scope = MemoryEnvScope::new(&[(KEY, Some("production"))]);
+            assert_eq!(std::env::var(KEY).as_deref(), Ok("production"));
+            panic!("simulated assertion failure inside the scope");
+        });
+
+        assert!(panicked.is_err(), "the probe closure must have panicked");
+        assert_eq!(
+            std::env::var_os(KEY),
+            None,
+            "the scope must restore the environment while unwinding, or a single failing \
+             assertion leaks SDKWORK_* values into every sibling test in this binary"
+        );
     }
 
     #[test]

@@ -22,11 +22,11 @@ pub use commercial::*;
 pub use dto::{PageInfo, *};
 pub use ports::{
     MemoryOpenApi, MemoryOpenApiRequestContext, MemoryServiceError, MemoryServiceErrorKind,
-    MemoryServiceResult,
+    MemoryServiceResult, STORAGE_ERROR_DETAIL,
 };
 pub use runtime_env::{
     env_test_lock, memory_dev_auth_bypass_enabled, memory_environment_name,
-    memory_is_production_like_environment, memory_use_dev_inline_auth_resolver,
+    memory_is_production_like_environment, memory_use_dev_inline_auth_resolver, MemoryEnvScope,
 };
 pub use space::{ListSpacesQuery, MemorySpace, MemorySpaceList, MemorySpaceRequest};
 

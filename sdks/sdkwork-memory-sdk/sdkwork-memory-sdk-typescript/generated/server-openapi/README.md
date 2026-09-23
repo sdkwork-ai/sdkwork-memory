@@ -15,10 +15,10 @@ pnpm add @sdkwork/memory-sdk
 ## Quick Start
 
 ```typescript
-import { SdkworkMemoryOpenClient } from '@sdkwork/memory-sdk';
+import { SdkworkCustomClient } from '@sdkwork/memory-sdk';
 
-const client = new SdkworkMemoryOpenClient({
-  baseUrl: 'https://api.sdkwork.com',
+const client = new SdkworkCustomClient({
+  baseUrl: 'http://localhost:8080',
   timeout: 30000,
 });
 
@@ -44,10 +44,10 @@ client.setApiKey('your-api-key');
 ## Configuration (Non-Auth)
 
 ```typescript
-import { SdkworkMemoryOpenClient } from '@sdkwork/memory-sdk';
+import { SdkworkCustomClient } from '@sdkwork/memory-sdk';
 
-const client = new SdkworkMemoryOpenClient({
-  baseUrl: 'https://api.sdkwork.com',
+const client = new SdkworkCustomClient({
+  baseUrl: 'http://localhost:8080',
   timeout: 30000, // Request timeout in ms
   headers: {      // Custom headers
     'X-Custom-Header': 'value',
@@ -71,7 +71,7 @@ const result = await client.memory.capabilities.retrieve();
 ## Error Handling
 
 ```typescript
-import { SdkworkMemoryOpenClient, NetworkError, TimeoutError, AuthenticationError } from '@sdkwork/memory-sdk';
+import { SdkworkCustomClient, NetworkError, TimeoutError, AuthenticationError } from '@sdkwork/memory-sdk';
 
 try {
   const result = await client.memory.capabilities.retrieve();

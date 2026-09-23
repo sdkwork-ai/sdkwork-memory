@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.process-database-pool",
+  "profile": {
+    "exampleFile": ".env.postgres.example",
+    "database": "sdkwork_ai_dev",
+    "schema": "sdkwork_ai_dev"
+  },
+  "processes": [
+    {
+      "id": "sdkwork-api-memory-standalone-gateway",
+      "entrypoint": "crates/sdkwork-api-memory-standalone-gateway/src/main.rs",
+      "poolOwner": "crates/sdkwork-intelligence-memory-repository-sqlx/src/bootstrap.rs",
+      "driver": "sdkwork_database_sqlx::DatabasePool",
+      "poolCount": 1,
+      "databaseUrlEnv": "SDKWORK_DATABASE_URL",
+      "schemaEnv": "SDKWORK_DATABASE_SCHEMA",
+      "maxConnectionsEnv": "SDKWORK_DATABASE_MAX_CONNECTIONS",
+      "productionSourceRoots": [
+        "crates/sdkwork-api-memory-standalone-gateway/src",
+        "crates/sdkwork-api-memory-assembly/src",
+        "crates/sdkwork-intelligence-memory-repository-sqlx/src",
+        "crates/sdkwork-memory-database-host/src",
+        "crates/sdkwork-routes-memory-support/src",
+        "crates/sdkwork-memory-drive/src"
+      ],
+      "consumers": [
+        {
+          "module": "Memory lifecycle, repositories, and the native SQL store",
+          "poolMode": "installed-process-pool",
+          "evidence": [
+            "crates/sdkwork-intelligence-memory-repository-sqlx/src/bootstrap.rs",
+            "crates/sdkwork-memory-database-host/src/lib.rs"
+          ]
+        },
+        {
+          "module": "embedded IAM readiness, audit, and security-event wiring",
+          "poolMode": "installed-process-pool",
+          "evidence": [
+            "crates/sdkwork-routes-memory-support/src/readiness.rs",
+            "crates/sdkwork-routes-memory-support/src/web_runtime.rs"
+          ]
+        },
+        {
+          "module": "Memory export storage through the Drive compatibility adapter",
+          "poolMode": "installed-process-pool",
+          "evidence": [
+            "crates/sdkwork-memory-drive/src/bootstrap.rs"
+          ]
+        }
+      ]
+    }
+  ],
+  "verification": [
+    "pnpm db:pool:validate",
+    "node ../sdkwork-specs/tools/check-process-shared-database-pool.mjs --root .",
+    "cargo check -p sdkwork-api-memory-standalone-gateway"
+  ]
+}

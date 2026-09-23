@@ -20,7 +20,7 @@ mod store_error;
 mod tenant_quota;
 
 pub use domain_metrics::{memory_domain_metrics, render_memory_domain_prometheus};
-pub use job_worker::spawn_background_workers;
+pub use job_worker::{spawn_background_workers, MemoryBackgroundWorkers};
 pub use open_api::OpenMemoryService;
 pub use outbox_delivery::validate_outbox_runtime_config;
 pub use outbox_publisher::spawn_outbox_publisher;

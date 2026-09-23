@@ -62,12 +62,37 @@ pub enum MemoryServiceErrorKind {
     NotImplemented,
 }
 
+/// Service-layer error carrying the `detail` that the API layer renders into the problem payload.
+///
+/// # `detail` contract
+///
+/// `detail` is **authored, operator-facing text and is returned to every caller** — the route layer
+/// copies it verbatim into the `application/problem+json` body
+/// (`sdkwork-routes-memory-support::problem::MemoryApiError::from`). Two rules follow:
+///
+/// 1. Every constructor must **preserve** the detail it is given. A constructor that silently
+///    replaces an authored diagnostic with a fixed string destroys the only signal an operator
+///    has, and turns every distinct failure below it into one indistinguishable message.
+///    `storage` in particular used to discard its argument while still accepting one — every
+///    call site that passed a real reason was writing dead code.
+/// 2. Raw provider/database/plugin errors must **never** be passed here. They are unpredictable
+///    and may embed connection strings or row contents. They are logged and masked at the single
+///    boundary that consumes them
+///    (`sdkwork-intelligence-memory-service::store_error::{map_memory_spi_error,
+///    map_native_sql_store_error}`), which emits the generic
+///    [`STORAGE_ERROR_DETAIL`] string and records the real cause in the server log.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemoryServiceError {
     pub kind: MemoryServiceErrorKind,
     pub code: String,
     pub detail: String,
 }
+
+/// Client-safe stand-in detail for failures whose real cause is a raw provider/database error.
+///
+/// Only the two masking mappers in `sdkwork-intelligence-memory-service::store_error` may use this
+/// constant; the real cause goes to the server log instead.
+pub const STORAGE_ERROR_DETAIL: &str = "internal storage error";
 
 impl MemoryServiceError {
     pub fn not_found(detail: impl Into<String>) -> Self {
@@ -118,15 +143,14 @@ impl MemoryServiceError {
         }
     }
 
-    pub fn storage(_detail: impl Into<String>) -> Self {
-        Self {
-            kind: MemoryServiceErrorKind::Storage,
-            code: "storage_error".to_string(),
-            detail: "internal storage error".to_string(),
-        }
-    }
-
-    pub fn storage_internal(detail: impl Into<String>) -> Self {
+    /// Storage-layer failure carrying an authored, client-safe diagnostic.
+    ///
+    /// The `detail` MUST be a message this codebase wrote (for example
+    /// `"export jsonl encode failed: {serde_error}"`). Never pass a raw provider or database error
+    /// here: let it surface through
+    /// `sdkwork-intelligence-memory-service::store_error::map_native_sql_store_error`, which masks
+    /// it to [`STORAGE_ERROR_DETAIL`] and logs the cause.
+    pub fn storage(detail: impl Into<String>) -> Self {
         Self {
             kind: MemoryServiceErrorKind::Storage,
             code: "storage_error".to_string(),

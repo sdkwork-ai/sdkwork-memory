@@ -8,9 +8,13 @@ pub(crate) use ::sqlx::{any, Any, AnyPool, Error, Row, Transaction};
 const MAX_CACHED_QUERY_SHAPES: usize = 2048;
 static NORMALIZED_SQL: OnceLock<RwLock<HashMap<String, &'static str>>> = OnceLock::new();
 
+// sqlx 0.9 declares `Database::Arguments` without a lifetime parameter
+// (`type Arguments: Arguments<Database = Self>`), so these return types must not
+// carry an `<'q>` on the associated type. The statement lifetime stays on
+// `Query<'q, ...>` / `QueryScalar<'q, ...>`.
 pub(crate) fn query<'q, DB>(
     sql: &str,
-) -> ::sqlx::query::Query<'q, DB, <DB as ::sqlx::Database>::Arguments<'q>>
+) -> ::sqlx::query::Query<'q, DB, <DB as ::sqlx::Database>::Arguments>
 where
     DB: ::sqlx::Database,
 {
@@ -19,7 +23,7 @@ where
 
 pub(crate) fn query_scalar<'q, DB, O>(
     sql: &str,
-) -> ::sqlx::query::QueryScalar<'q, DB, O, <DB as ::sqlx::Database>::Arguments<'q>>
+) -> ::sqlx::query::QueryScalar<'q, DB, O, <DB as ::sqlx::Database>::Arguments>
 where
     DB: ::sqlx::Database,
     (O,): for<'row> ::sqlx::FromRow<'row, DB::Row>,

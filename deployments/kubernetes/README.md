@@ -14,15 +14,13 @@ Unified-process Memory API server manifests for cloud-hosted deployment.
 - `hpa.yaml` — CPU autoscaler (min 2, max 6)
 - `pdb.yaml` — Pod disruption budget (`minAvailable: 1`)
 - `ingress.yaml` — Public ingress for `/apps/sdkwork-memory`
-- `secret.example.yaml` — Example Secret manifests for Memory database, IAM database, and Drive export (S3-compatible object store)
+- `secret.example.yaml` — Example Secret manifests for the unified workspace database and Drive export (S3-compatible object store)
 
 ## Prerequisites
 
 - Container image built from `deployments/docker/Dockerfile` (ships `/app/database` lifecycle assets)
-- Secret `sdkwork-memory-database` with key `database-url` for Memory PostgreSQL runtime
-- Secret `sdkwork-memory-iam-database` with key `database-url` for IAM PostgreSQL auth resolution
+- Secret `sdkwork-memory-database` with key `database-url` — the single unified workspace PostgreSQL identity. The Memory runtime, the embedded IAM readiness/audit plane, and the Drive-backed export adapter all resolve their database identity from this one `SDKWORK_DATABASE_URL` value (`DATABASE_SPEC_PROCESS_SHARED_POOL` section 6), so no separate IAM database secret is provisioned.
 - Optional Secret `sdkwork-memory-drive` when privacy exports upload through SDKWork Drive:
-  - `database-url` — Drive workspace PostgreSQL/SQLite URL
   - `s3-endpoint`, `s3-region`, `s3-bucket`, `s3-access-key-id`, `s3-secret-access-key` — production object store credentials
 
 Use `secret.example.yaml` as a template; provision real values through your platform secret manager.

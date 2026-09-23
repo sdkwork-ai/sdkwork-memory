@@ -29,21 +29,80 @@ use crate::platform;
 /// Dropping the sender also causes receivers to observe a closed channel,
 /// but an explicit `send(true)` ensures a cleaner shutdown with logged
 /// confirmation from each worker.
-pub fn spawn_background_workers(
-    service: Arc<OpenMemoryService>,
-) -> tokio::sync::watch::Sender<bool> {
+pub fn spawn_background_workers(service: Arc<OpenMemoryService>) -> MemoryBackgroundWorkers {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
-    crate::outbox_publisher::spawn_outbox_publisher(service.store.clone(), shutdown_rx.clone());
-    spawn_learning_job_worker(service.clone(), shutdown_rx.clone());
-    spawn_eval_run_worker(service.clone(), shutdown_rx.clone());
-    spawn_provider_health_probe(service, shutdown_rx);
-    shutdown_tx
+    let join_handles = vec![
+        crate::outbox_publisher::spawn_outbox_publisher(service.store.clone(), shutdown_rx.clone()),
+        spawn_learning_job_worker(service.clone(), shutdown_rx.clone()),
+        spawn_eval_run_worker(service.clone(), shutdown_rx.clone()),
+        spawn_provider_health_probe(service, shutdown_rx),
+    ];
+    MemoryBackgroundWorkers {
+        shutdown_tx,
+        join_handles,
+    }
+}
+
+/// Process-owner handle for the Memory background plane.
+///
+/// API_ASSEMBLY_SPEC §6.2.1 (lines 744-748) makes task *shutdown* a host
+/// concern: the module hands the host both the stop trigger and the drain
+/// handles. A bare stop trigger would force the host to guess a sleep duration,
+/// which either abandons committed work or needlessly delays every rollout.
+/// Handing back the `JoinHandle`s lets the host await real completion under a
+/// bounded budget instead.
+///
+/// The safety net for work that outlives the budget is the database lease, not
+/// a longer sleep: every job and outbox row this plane claims carries a
+/// `lease_owner`/`lease_token` fence, so abandoned work is re-claimable by
+/// another replica once its lease expires. The host therefore only has to
+/// bound *how long* it waits, never *whether* the work can be recovered.
+#[must_use = "dropping this handle leaves the background plane running until process exit"]
+pub struct MemoryBackgroundWorkers {
+    shutdown_tx: tokio::sync::watch::Sender<bool>,
+    join_handles: Vec<tokio::task::JoinHandle<()>>,
+}
+
+impl MemoryBackgroundWorkers {
+    /// Signals every worker to stop accepting new work.
+    ///
+    /// Work already committed to is not interrupted: each worker finishes the
+    /// batch it is currently executing and then observes the stop trigger at
+    /// the top of its next loop iteration.
+    pub fn shutdown(&self) {
+        let _ = self.shutdown_tx.send(true);
+    }
+
+    /// Awaits actual worker completion, bounded by `budget`.
+    ///
+    /// Returns `true` when every worker finished inside the budget. On expiry
+    /// the remaining workers are aborted and `false` is returned so the caller
+    /// can report the incomplete drain; their abandoned leases expire and the
+    /// work becomes re-claimable. The budget is enforced across the whole set,
+    /// not per worker, so a long tail cannot extend total shutdown time.
+    pub async fn drain(&mut self, budget: std::time::Duration) -> bool {
+        let deadline = tokio::time::Instant::now() + budget;
+        let mut drained = true;
+        for mut handle in self.join_handles.drain(..) {
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                drained = false;
+                handle.abort();
+                continue;
+            }
+            if tokio::time::timeout(remaining, &mut handle).await.is_err() {
+                drained = false;
+                handle.abort();
+            }
+        }
+        drained
+    }
 }
 
 fn spawn_learning_job_worker(
     service: Arc<OpenMemoryService>,
     mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
-) {
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let worker_id = match platform::next_numeric_id() {
             Ok(id) => format!("memory-learning-{id}"),
@@ -75,13 +134,13 @@ fn spawn_learning_job_worker(
                 }
             }
         }
-    });
+    })
 }
 
 fn spawn_eval_run_worker(
     service: Arc<OpenMemoryService>,
     mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
-) {
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let worker_id = match platform::next_numeric_id() {
             Ok(id) => format!("memory-eval-{id}"),
@@ -113,13 +172,13 @@ fn spawn_eval_run_worker(
                 }
             }
         }
-    });
+    })
 }
 
 fn spawn_provider_health_probe(
     service: Arc<OpenMemoryService>,
     mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
-) {
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let poll_interval =
             platform::read_env_u64("SDKWORK_MEMORY_PROVIDER_HEALTH_PROBE_SECS", 60).max(1);
@@ -138,7 +197,7 @@ fn spawn_provider_health_probe(
                 }
             }
         }
-    });
+    })
 }
 
 async fn process_learning_job_batch(
@@ -1395,5 +1454,105 @@ mod eval_tests {
             .as_str()
             .is_some_and(|value| !value.is_empty() && value != "modal editor"));
         assert!(result["cases"][0].get("query").is_none());
+    }
+}
+
+#[cfg(test)]
+mod shutdown_tests {
+    use super::MemoryBackgroundWorkers;
+    use std::time::{Duration, Instant};
+    use tokio::sync::watch;
+
+    /// Builds a drain handle over synthetic workers so the bounded-drain
+    /// contract is verified without booting a database-backed product.
+    fn handle_over(join_handles: Vec<tokio::task::JoinHandle<()>>) -> MemoryBackgroundWorkers {
+        let (shutdown_tx, _rx) = watch::channel(false);
+        MemoryBackgroundWorkers {
+            shutdown_tx,
+            join_handles,
+        }
+    }
+
+    /// A worker that observes its shutdown receiver and exits.
+    fn watchful_worker(mut rx: watch::Receiver<bool>) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            while rx.changed().await.is_ok() {
+                if *rx.borrow() {
+                    return;
+                }
+            }
+        })
+    }
+
+    #[tokio::test]
+    async fn shutdown_stops_watchful_workers_and_drain_reports_completion() {
+        let (shutdown_tx, rx) = watch::channel(false);
+        let mut workers = MemoryBackgroundWorkers {
+            shutdown_tx,
+            join_handles: vec![watchful_worker(rx.clone()), watchful_worker(rx)],
+        };
+
+        workers.shutdown();
+        assert!(
+            workers.drain(Duration::from_secs(5)).await,
+            "drain must report completion once every worker observed the stop trigger"
+        );
+    }
+
+    #[tokio::test]
+    async fn drain_stays_bounded_when_a_worker_overruns_its_budget() {
+        let overrunning = tokio::spawn(async {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        });
+        let mut workers = handle_over(vec![overrunning]);
+
+        let started = Instant::now();
+        let drained = workers.drain(Duration::from_millis(20)).await;
+        let elapsed = started.elapsed();
+
+        assert!(!drained, "an overrunning worker must be reported as not drained");
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "drain must return on the budget instead of waiting for the worker, elapsed={elapsed:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn drain_budget_is_enforced_across_the_whole_set_not_per_worker() {
+        // Three workers that each overrun a 60ms budget. A per-worker budget
+        // would take ~180ms; a set-wide deadline must stay near 60ms.
+        let mut handles = Vec::new();
+        for _ in 0..3 {
+            handles.push(tokio::spawn(async {
+                tokio::time::sleep(Duration::from_secs(30)).await;
+            }));
+        }
+        let mut workers = handle_over(handles);
+
+        let started = Instant::now();
+        let drained = workers.drain(Duration::from_millis(60)).await;
+        let elapsed = started.elapsed();
+
+        assert!(!drained);
+        assert!(
+            elapsed < Duration::from_millis(150),
+            "the budget must be a set-wide deadline, elapsed={elapsed:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn drain_with_a_zero_budget_never_panics() {
+        let worker = tokio::spawn(async {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        });
+        let mut workers = handle_over(vec![worker]);
+
+        assert!(!workers.drain(Duration::ZERO).await);
+    }
+
+    #[tokio::test]
+    async fn drain_with_no_workers_is_trivially_complete() {
+        let mut workers = handle_over(Vec::new());
+        assert!(workers.drain(Duration::from_secs(1)).await);
     }
 }

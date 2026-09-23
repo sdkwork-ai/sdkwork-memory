@@ -349,7 +349,9 @@ impl OpenMemoryService {
     ///
     /// The caller should call `send(true)` on the returned sender during
     /// graceful shutdown so workers can drain in-flight work.
-    pub fn spawn_background_workers(service: &Arc<Self>) -> tokio::sync::watch::Sender<bool> {
+    pub fn spawn_background_workers(
+        service: &Arc<Self>,
+    ) -> crate::job_worker::MemoryBackgroundWorkers {
         crate::job_worker::spawn_background_workers(service.clone())
     }
 
@@ -410,7 +412,7 @@ impl OpenMemoryService {
     ) -> MemoryServiceResult<()> {
         let outbox_id = self.next_id()?.to_string();
         let payload_json = serde_json::to_string(&payload).map_err(|error| {
-            MemoryServiceError::storage_internal(format!(
+            MemoryServiceError::storage(format!(
                 "domain event payload encode failed: {error}"
             ))
         })?;
@@ -436,7 +438,7 @@ impl OpenMemoryService {
         payload: serde_json::Value,
     ) -> MemoryServiceResult<MemoryMutationJournal> {
         let payload_json = serde_json::to_string(&payload).map_err(|error| {
-            MemoryServiceError::storage_internal(format!(
+            MemoryServiceError::storage(format!(
                 "memory mutation payload encode failed: {error}"
             ))
         })?;

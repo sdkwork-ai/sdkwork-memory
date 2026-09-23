@@ -4,7 +4,7 @@ use sdkwork_intelligence_memory_repository_sqlx::{
     resolve_memory_retrieval_strategy_from_env, resolve_native_sql_profile_for_dialect,
     resolve_native_sql_profile_for_runtime, MemoryImplementationProfileSelection,
 };
-use sdkwork_memory_contract::runtime_env::env_test_lock;
+use sdkwork_memory_contract::runtime_env::{env_test_lock, MemoryEnvScope};
 use sdkwork_memory_plugin_native_sql::MemorySqlDialect;
 use sdkwork_memory_retrieval::MemoryRetrievalStrategy;
 use sdkwork_memory_spi::{MemoryDeploymentMode, MemoryImplementationKind};
@@ -89,55 +89,53 @@ fn explicit_implementation_selection_is_typed_and_dialect_safe() {
 #[test]
 fn runtime_target_env_is_validated_separately_from_database_dialect() {
     let _guard = env_test_lock();
-    let previous_target = std::env::var("SDKWORK_MEMORY_RUNTIME_TARGET").ok();
-
-    std::env::set_var("SDKWORK_MEMORY_RUNTIME_TARGET", "container");
-    assert_eq!(
-        resolve_memory_deployment_mode_from_env(MemorySqlDialect::Postgres)
-            .expect("container target must resolve"),
-        MemoryDeploymentMode::Container
-    );
-
-    std::env::set_var("SDKWORK_MEMORY_RUNTIME_TARGET", "desktop");
-    assert!(resolve_memory_deployment_mode_from_env(MemorySqlDialect::Sqlite).is_err());
-
-    match previous_target {
-        Some(value) => std::env::set_var("SDKWORK_MEMORY_RUNTIME_TARGET", value),
-        None => std::env::remove_var("SDKWORK_MEMORY_RUNTIME_TARGET"),
+    {
+        let _scope = MemoryEnvScope::new(&[("SDKWORK_MEMORY_RUNTIME_TARGET", Some("container"))]);
+        assert_eq!(
+            resolve_memory_deployment_mode_from_env(MemorySqlDialect::Postgres)
+                .expect("container target must resolve"),
+            MemoryDeploymentMode::Container
+        );
+    }
+    {
+        let _scope = MemoryEnvScope::new(&[("SDKWORK_MEMORY_RUNTIME_TARGET", Some("desktop"))]);
+        assert!(resolve_memory_deployment_mode_from_env(MemorySqlDialect::Sqlite).is_err());
     }
 }
 
 #[test]
 fn retrieval_strategy_env_rejects_unimplemented_schemes() {
     let _guard = env_test_lock();
-    let previous = std::env::var("SDKWORK_MEMORY_RETRIEVAL_STRATEGY").ok();
-
-    std::env::set_var("SDKWORK_MEMORY_RETRIEVAL_STRATEGY", "event_aware");
-    assert_eq!(
-        resolve_memory_retrieval_strategy_from_env().unwrap(),
-        MemoryRetrievalStrategy::EventAware
-    );
-    std::env::set_var("SDKWORK_MEMORY_RETRIEVAL_STRATEGY", "graph_magic");
-    assert!(resolve_memory_retrieval_strategy_from_env().is_err());
-
-    match previous {
-        Some(value) => std::env::set_var("SDKWORK_MEMORY_RETRIEVAL_STRATEGY", value),
-        None => std::env::remove_var("SDKWORK_MEMORY_RETRIEVAL_STRATEGY"),
+    {
+        let _scope =
+            MemoryEnvScope::new(&[("SDKWORK_MEMORY_RETRIEVAL_STRATEGY", Some("event_aware"))]);
+        assert_eq!(
+            resolve_memory_retrieval_strategy_from_env().unwrap(),
+            MemoryRetrievalStrategy::EventAware
+        );
+    }
+    {
+        let _scope =
+            MemoryEnvScope::new(&[("SDKWORK_MEMORY_RETRIEVAL_STRATEGY", Some("graph_magic"))]);
+        assert!(resolve_memory_retrieval_strategy_from_env().is_err());
     }
 }
 
+/// The local-embedded profile (`SQLite` + explicit test runner) must bootstrap end to end.
+///
+/// This is the one plane that legitimately has no shared node registry to allocate a snowflake
+/// `node_id` from, so the bootstrap must install the env/random node id explicitly rather than
+/// depending on `id_generator`'s deliberately strict lazy path.
 #[tokio::test]
 #[allow(clippy::await_holding_lock)] // Serializes process-wide environment mutation for the full bootstrap.
 async fn bootstrap_memory_runtime_from_env_with_sqlite() {
     let _guard = env_test_lock();
-    let previous_url = std::env::var("SDKWORK_DATABASE_URL").ok();
-    let previous_target = std::env::var("SDKWORK_MEMORY_RUNTIME_TARGET").ok();
-    let previous_implementation = std::env::var("SDKWORK_MEMORY_IMPLEMENTATION_PROFILE").ok();
-    let previous_retrieval = std::env::var("SDKWORK_MEMORY_RETRIEVAL_STRATEGY").ok();
-    std::env::set_var("SDKWORK_DATABASE_URL", "sqlite::memory:");
-    std::env::set_var("SDKWORK_MEMORY_RUNTIME_TARGET", "test-runner");
-    std::env::set_var("SDKWORK_MEMORY_IMPLEMENTATION_PROFILE", "local_embedded");
-    std::env::set_var("SDKWORK_MEMORY_RETRIEVAL_STRATEGY", "search_first");
+    let _env = MemoryEnvScope::new(&[
+        ("SDKWORK_DATABASE_URL", Some("sqlite::memory:")),
+        ("SDKWORK_MEMORY_RUNTIME_TARGET", Some("test-runner")),
+        ("SDKWORK_MEMORY_IMPLEMENTATION_PROFILE", Some("local_embedded")),
+        ("SDKWORK_MEMORY_RETRIEVAL_STRATEGY", Some("search_first")),
+    ]);
 
     let runtime = bootstrap_memory_runtime_from_env()
         .await
@@ -189,53 +187,27 @@ async fn bootstrap_memory_runtime_from_env_with_sqlite() {
         .ping()
         .await
         .expect("store ping must succeed");
-
-    match previous_url {
-        Some(value) => std::env::set_var("SDKWORK_DATABASE_URL", value),
-        None => std::env::remove_var("SDKWORK_DATABASE_URL"),
-    }
-    match previous_target {
-        Some(value) => std::env::set_var("SDKWORK_MEMORY_RUNTIME_TARGET", value),
-        None => std::env::remove_var("SDKWORK_MEMORY_RUNTIME_TARGET"),
-    }
-    match previous_implementation {
-        Some(value) => std::env::set_var("SDKWORK_MEMORY_IMPLEMENTATION_PROFILE", value),
-        None => std::env::remove_var("SDKWORK_MEMORY_IMPLEMENTATION_PROFILE"),
-    }
-    match previous_retrieval {
-        Some(value) => std::env::set_var("SDKWORK_MEMORY_RETRIEVAL_STRATEGY", value),
-        None => std::env::remove_var("SDKWORK_MEMORY_RETRIEVAL_STRATEGY"),
-    }
 }
 
+/// A production lifecycle profile must reject the SQLite engine before any pool is created, and the
+/// diagnostic must name the engine operator has to provide.
 #[tokio::test]
 #[allow(clippy::await_holding_lock)]
 async fn production_runtime_rejects_sqlite_before_pool_creation() {
     let _guard = env_test_lock();
-    let previous_environment = std::env::var("SDKWORK_MEMORY_ENVIRONMENT").ok();
-    let previous_profile = std::env::var("SDKWORK_MEMORY_CONFIG_PROFILE").ok();
-    let previous_url = std::env::var("SDKWORK_DATABASE_URL").ok();
-
-    std::env::set_var("SDKWORK_MEMORY_ENVIRONMENT", "production");
-    std::env::set_var("SDKWORK_MEMORY_CONFIG_PROFILE", "production");
-    std::env::set_var("SDKWORK_DATABASE_URL", "sqlite::memory:");
+    let _env = MemoryEnvScope::new(&[
+        ("SDKWORK_MEMORY_ENVIRONMENT", Some("production")),
+        ("SDKWORK_MEMORY_CONFIG_PROFILE", Some("production")),
+        ("SDKWORK_DATABASE_URL", Some("sqlite::memory:")),
+        ("SDKWORK_MEMORY_RUNTIME_TARGET", None),
+    ]);
 
     let error = match bootstrap_memory_runtime_from_env().await {
         Ok(_) => panic!("production SQLite runtime must be rejected"),
         Err(error) => error,
     };
-    assert!(error.contains("PostgreSQL is required"));
-
-    match previous_environment {
-        Some(value) => std::env::set_var("SDKWORK_MEMORY_ENVIRONMENT", value),
-        None => std::env::remove_var("SDKWORK_MEMORY_ENVIRONMENT"),
-    }
-    match previous_profile {
-        Some(value) => std::env::set_var("SDKWORK_MEMORY_CONFIG_PROFILE", value),
-        None => std::env::remove_var("SDKWORK_MEMORY_CONFIG_PROFILE"),
-    }
-    match previous_url {
-        Some(value) => std::env::set_var("SDKWORK_DATABASE_URL", value),
-        None => std::env::remove_var("SDKWORK_DATABASE_URL"),
-    }
+    assert!(
+        error.contains("PostgreSQL is required"),
+        "production SQLite rejection must name the required engine, got: {error}"
+    );
 }

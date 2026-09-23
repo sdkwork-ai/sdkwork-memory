@@ -24,5 +24,7 @@ sdkwork-routes-memory-app-api.workspace = true
 sdkwork-routes-memory-open-api.workspace = true
 sdkwork-routes-memory-backend-api.workspace = true
 sdkwork-web-core.workspace = true
+sdkwork-web-bootstrap.workspace = true
+sdkwork-api-memory-assembly.workspace = true
 sdkwork-api-memory-standalone-gateway.workspace = true
 sdkwork-memory-test-support.workspace = true
