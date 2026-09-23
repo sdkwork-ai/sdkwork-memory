@@ -3,7 +3,9 @@ use axum::http::{Request, StatusCode};
 use sdkwork_intelligence_memory_service::{spawn_background_workers, OpenMemoryService};
 use sdkwork_memory_contract::MemoryOpenApiRequestContext;
 use sdkwork_memory_test_support::api_envelope;
-use sdkwork_routes_memory_open_api::{build_router_with_open_api, build_router_with_open_memory_service};
+use sdkwork_routes_memory_open_api::{
+    build_router_with_open_api, build_router_with_open_memory_service,
+};
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;

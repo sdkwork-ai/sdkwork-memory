@@ -192,6 +192,7 @@ async fn postgres_store_rebuilds_search_index_for_space_scope() {
             "Germany",
             "Germany capital",
             "internal",
+            None,
         )
         .await
         .expect("create open api record on postgres");

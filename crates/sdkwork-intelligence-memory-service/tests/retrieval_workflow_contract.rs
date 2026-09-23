@@ -7,6 +7,7 @@ use sdkwork_memory_plugin_native_sql::{
     InsertSubjectCommand, NativeSqlCreateSpaceCommand, NativeSqlMemoryStore, NativeSqlPhase1Runtime,
 };
 use sdkwork_memory_retrieval::MemoryRetrievalStrategy;
+use serde_json::json;
 
 const TENANT_ID: u64 = 91_001;
 const ACTOR_ID: u64 = 42;
@@ -68,6 +69,7 @@ fn memory_request(space_id: u64, memory_type: MemoryType, text: &str) -> MemoryR
         sensitivity_level: Some("internal".to_string()),
         metadata: None,
         tags: None,
+        expires_at: None,
     }
 }
 
@@ -344,4 +346,89 @@ async fn retrieval_trace_drops_hits_after_cross_space_access_is_revoked() {
     assert_eq!(retrieved.hits[0].memory.as_ref().unwrap().space_id, 1);
     assert_eq!(retrieved.hits[0].result_rank, 1);
     assert_eq!(retrieved.trace.as_ref().unwrap().result_count, 1);
+}
+
+#[tokio::test]
+async fn retrieval_applies_the_metadata_filter_instead_of_ignoring_it() {
+    let service = service_with_spaces().await;
+    let context = context();
+    service
+        .create_memory(
+            context.clone(),
+            memory_request(1, MemoryType::Semantic, "filterneedle metadata record"),
+        )
+        .await
+        .unwrap();
+
+    // Control: with no filter the record is returned, so the filter below is what
+    // changes the outcome rather than the record being absent for another reason.
+    let unfiltered = service
+        .create_retrieval(
+            context.clone(),
+            retrieval_request("filterneedle", vec![1], 5, None),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unfiltered.hits.len(), 1);
+
+    // An empty object is not a filter, so it must behave exactly like the control.
+    let mut empty_filter = retrieval_request("filterneedle", vec![1], 5, None);
+    empty_filter.filters = Some(json!({}));
+    let empty_filter = service
+        .create_retrieval(context.clone(), empty_filter)
+        .await
+        .expect("an empty filter object means no filter");
+    assert_eq!(empty_filter.hits.len(), 1);
+
+    // A real filter is parsed and pushed into the store search. No canonical record
+    // carries a metadata document yet, so an equality filter matches nothing: the hit
+    // count must drop, which can only happen if the filter was actually applied. A
+    // build that ignored `filters` would return the control's single hit here.
+    let mut filtered = retrieval_request("filterneedle", vec![1], 5, None);
+    filtered.filters = Some(json!({"owner": "alice"}));
+    let filtered = service
+        .create_retrieval(context.clone(), filtered)
+        .await
+        .expect("a well-formed filter must be accepted");
+    assert!(
+        filtered.hits.is_empty(),
+        "an equality filter that no record satisfies must narrow the result, got {} hit(s)",
+        filtered.hits.len()
+    );
+}
+
+#[tokio::test]
+async fn retrieval_refuses_a_metadata_filter_it_cannot_parse() {
+    let service = service_with_spaces().await;
+    let context = context();
+    service
+        .create_memory(
+            context.clone(),
+            memory_request(1, MemoryType::Semantic, "filterneedle metadata record"),
+        )
+        .await
+        .unwrap();
+
+    // A previously shipped version accepted `filters`, dropped it, and answered with
+    // unfiltered hits and no signal. Each entry below is unrepresentable in the filter
+    // language, so the request must fail rather than quietly degrade to "no filter".
+    for filters in [
+        json!("tenant"),                      // a root that is not an object
+        json!({"a": {"matches": "x"}}),       // an operator the language does not define
+        json!({"AND": []}),                   // an empty logical list widens the result set
+        json!({"a": {"eq": "1", "ne": "2"}}), // two operators on one field
+    ] {
+        let mut request = retrieval_request("filterneedle", vec![1], 5, None);
+        request.filters = Some(filters.clone());
+        let error = service
+            .create_retrieval(context.clone(), request)
+            .await
+            .expect_err("an unparseable filter must fail closed");
+        assert_eq!(error.kind, MemoryServiceErrorKind::Validation);
+        assert!(
+            error.detail.contains("filters"),
+            "the failure must name the offending field for {filters}: {}",
+            error.detail
+        );
+    }
 }

@@ -2,18 +2,18 @@ use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use sdkwork_memory_contract::{
-    ListCandidatesQuery, ListMemoriesQuery, MemoryCapabilities, MemoryCandidate,
-    MemoryCandidateList, MemoryContextPack, MemoryContextPackRequest, MemoryEvent,
+    ListCandidatesQuery, ListMemoriesQuery, MemoryCandidate, MemoryCandidateList,
+    MemoryCapabilities, MemoryContextPack, MemoryContextPackRequest, MemoryEvent,
     MemoryEventRequest, MemoryExtractionRequest, MemoryFeedback, MemoryFeedbackRequest,
     MemoryImplementationKind, MemoryLearningJob, MemoryOpenApi, MemoryOpenApiRequestContext,
     MemoryProviderHealth, MemoryProviderInterface, MemoryRecord, MemoryRecordList,
     MemoryRecordPatch, MemoryRecordRequest, MemoryRetrievalRequest, MemoryRetrievalResult,
     MemoryRetrieverKind, MemoryServiceResult,
 };
+use sdkwork_memory_test_support::web_auth::memory_dev_api_key;
 use sdkwork_routes_memory_open_api::{
     build_router_with_shared_open_api, wrap_router_with_web_framework,
 };
-use sdkwork_memory_test_support::web_auth::memory_dev_api_key;
 use sdkwork_web_core::DefaultWebRequestContextResolver;
 use std::sync::{Arc, Mutex};
 use tower::util::ServiceExt;

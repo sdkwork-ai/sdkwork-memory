@@ -62,6 +62,7 @@ async fn remembers_retrieves_and_builds_context_without_embeddings() {
                 user_id: None,
                 language: None,
                 sensitivity_level: None,
+                expires_at: None,
                 metadata: None,
                 tags: None,
             },
@@ -127,4 +128,69 @@ async fn remembers_retrieves_and_builds_context_without_embeddings() {
             .contains("concise")
     }));
     assert_eq!(pack.pack["embeddingOptional"], true);
+}
+
+#[tokio::test]
+
+async fn create_memory_accepts_and_echoes_contract_declared_expires_at() {
+    let store = sdkwork_memory_test_support::space_fixtures::new_seeded_in_memory_store().await;
+
+    let service = OpenMemoryService::new(store);
+
+    let context = open_context();
+
+    let created = service
+        .create_memory(
+            context.clone(),
+            MemoryRecordRequest {
+                space_id: 2,
+
+                scope: "user".to_string(),
+
+                memory_type: MemoryType::Semantic,
+
+                subject: None,
+
+                predicate: None,
+
+                object_text: Some("vacation plan".to_string()),
+
+                canonical_text: "Trip to Kyoto planned for April 2027".to_string(),
+
+                summary_text: None,
+
+                user_id: None,
+
+                language: None,
+
+                sensitivity_level: None,
+
+                expires_at: Some("2027-04-01T00:00:00Z".to_string()),
+
+                metadata: None,
+
+                tags: None,
+            },
+        )
+        .await
+        .expect("create memory with expiration");
+
+    assert_eq!(
+        created.expires_at.as_deref(),
+        Some("2027-04-01T00:00:00Z"),
+        "the response must echo the contract-declared expiresAt instead of dropping it"
+    );
+
+    let memory_id = created.memory_id;
+
+    let fetched = service
+        .retrieve_memory(context, memory_id, 2)
+        .await
+        .expect("fetch created memory");
+
+    assert_eq!(
+        fetched.expires_at.as_deref(),
+        Some("2027-04-01T00:00:00Z"),
+        "the stored expiration must survive the read path"
+    );
 }

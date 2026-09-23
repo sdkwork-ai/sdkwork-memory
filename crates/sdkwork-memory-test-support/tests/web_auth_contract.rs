@@ -1,6 +1,5 @@
 use sdkwork_memory_test_support::web_auth::{
-    legacy_inline_dual_tokens, memory_access_token, memory_auth_token_bearer,
-    memory_dev_api_key,
+    legacy_inline_dual_tokens, memory_access_token, memory_auth_token_bearer, memory_dev_api_key,
 };
 use sdkwork_web_core::{
     DefaultWebRequestContextResolver, WebFrameworkErrorKind, WebRequestContextResolver,
@@ -11,7 +10,9 @@ async fn memory_jwt_dual_tokens_resolve_through_default_web_resolver() {
     let resolver = DefaultWebRequestContextResolver::default();
     let principal = resolver
         .resolve_dual_token(
-            memory_auth_token_bearer("2001").strip_prefix("Bearer ").unwrap(),
+            memory_auth_token_bearer("2001")
+                .strip_prefix("Bearer ")
+                .unwrap(),
             &memory_access_token("2001"),
         )
         .await

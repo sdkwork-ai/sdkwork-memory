@@ -2,24 +2,23 @@ use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use sdkwork_iam_web_adapter::IamWebRequestContextResolver;
+use sdkwork_memory_contract::space::ListSpacesQuery;
 use sdkwork_memory_contract::{
     ListCandidatesQuery, ListHabitsQuery, ListJobsQuery, ListMemoriesQuery, ListMemorySourcesQuery,
     MemoryAppApi, MemoryAppRequestContext, MemoryCandidate, MemoryCandidateList, MemoryContextPack,
-    MemoryContextPackRequest, MemoryEvent, MemoryEventRequest, MemoryExportJob, MemoryExportJobList,
-    MemoryExportRequest, MemoryExtractionRequest, MemoryFeedback, MemoryFeedbackRequest,
-    MemoryForgetJob, MemoryForgetJobList, MemoryForgetRequest, MemoryHabit, MemoryHabitList,
-    MemoryHabitRequest,
-    MemoryLearningJob, MemoryLearningSettings, MemoryLearningSettingsPatch, MemoryRecord,
-    MemoryRecordList, MemoryRecordPatch, MemoryRecordRequest, MemoryRecordSourceList,
-    MemoryRetrievalRequest, MemoryRetrievalResult, MemoryReviewRequest, MemoryServiceResult,
-    MemorySpace, MemorySpaceList, MemorySpaceRequest,
-};
-use sdkwork_memory_contract::space::ListSpacesQuery;
-use sdkwork_routes_memory_app_api::{
-    build_router_with_shared_app_api, wrap_router_with_iam_database_web_framework,
+    MemoryContextPackRequest, MemoryEvent, MemoryEventRequest, MemoryExportJob,
+    MemoryExportJobList, MemoryExportRequest, MemoryExtractionRequest, MemoryFeedback,
+    MemoryFeedbackRequest, MemoryForgetJob, MemoryForgetJobList, MemoryForgetRequest, MemoryHabit,
+    MemoryHabitList, MemoryHabitRequest, MemoryLearningJob, MemoryLearningSettings,
+    MemoryLearningSettingsPatch, MemoryRecord, MemoryRecordList, MemoryRecordPatch,
+    MemoryRecordRequest, MemoryRecordSourceList, MemoryRetrievalRequest, MemoryRetrievalResult,
+    MemoryReviewRequest, MemoryServiceResult, MemorySpace, MemorySpaceList, MemorySpaceRequest,
 };
 use sdkwork_memory_test_support::web_auth::{
     lock_integration_test_env, memory_access_token, memory_auth_token_bearer,
+};
+use sdkwork_routes_memory_app_api::{
+    build_router_with_shared_app_api, wrap_router_with_iam_database_web_framework,
 };
 use std::sync::{Arc, Mutex};
 use tower::util::ServiceExt;

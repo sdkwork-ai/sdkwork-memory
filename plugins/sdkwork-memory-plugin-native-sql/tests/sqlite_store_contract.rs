@@ -614,6 +614,7 @@ async fn sqlite_consolidation_atomically_preserves_evidence_journals_and_identit
                 "uses a modal editor",
                 "editor prefers modal",
                 "internal",
+                None,
             )
             .await
             .unwrap();
@@ -832,6 +833,7 @@ async fn sqlite_consolidation_rolls_back_supersession_sources_and_outbox_on_jour
                 "uses a modal editor",
                 "editor prefers modal",
                 "internal",
+                None,
             )
             .await
             .unwrap();
@@ -1126,6 +1128,7 @@ async fn create_canonical_fixture(
             canonical_text: canonical_text.to_string(),
             sensitivity_level: sensitivity_level.to_string(),
             journal: mutation_journal(memory_id, &format!("{memory_id}-created")),
+            expires_at: None,
         },
     )
     .await
@@ -1151,6 +1154,7 @@ async fn sqlite_canonical_atomic_mutations_journal_and_suppress_stale_fts() {
             canonical_text: "User prefers dark mode".to_string(),
             sensitivity_level: "internal".to_string(),
             journal: mutation_journal("canonical-1", "created"),
+            expires_at: None,
         },
     )
     .await
@@ -1297,6 +1301,7 @@ async fn sqlite_record_quota_admission_rejects_without_partial_side_effects() {
             canonical_text: "must not be written".to_string(),
             sensitivity_level: "internal".to_string(),
             journal: mutation_journal("quota-rejected", "quota-rejected"),
+            expires_at: None,
         },
         1,
     )
@@ -1608,6 +1613,7 @@ async fn sqlite_candidate_detail_does_not_leak_cross_space_target_memory() {
             "other space value",
             "The other space value",
             "internal",
+            None,
         )
         .await
         .unwrap();
@@ -1680,6 +1686,7 @@ async fn sqlite_candidate_target_assignment_requires_live_same_space_record() {
             "live target",
             "live target",
             "internal",
+            None,
         )
         .await
         .unwrap();
@@ -1702,6 +1709,7 @@ async fn sqlite_candidate_target_assignment_requires_live_same_space_record() {
             "other-space target",
             "other-space target",
             "internal",
+            None,
         )
         .await
         .unwrap();
@@ -1776,6 +1784,7 @@ async fn sqlite_candidate_promotion_rejects_pending_target_reference_without_sid
             "legacy target",
             "legacy target",
             "internal",
+            None,
         )
         .await
         .unwrap();
@@ -1916,6 +1925,7 @@ async fn sqlite_hard_delete_cleans_foreign_key_dependents_and_fts() {
                 "privacy deletion fixture",
                 "privacy deletion fixture",
                 "internal",
+                None,
             )
             .await
             .unwrap();
@@ -2159,13 +2169,12 @@ async fn sqlite_hard_delete_cleans_foreign_key_dependents_and_fts() {
         // `table` and `condition` are the two literal pairs in this loop; no
         // external input reaches the statement, so the audited escape hatch is
         // the correct way to satisfy sqlx 0.9's `SqlSafeStr` bound.
-        let count: i64 =
-            sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-                "SELECT COUNT(*) FROM {table} WHERE {condition}"
-            )))
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
+        let count: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            "SELECT COUNT(*) FROM {table} WHERE {condition}"
+        )))
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
         assert_eq!(count, 0, "{table} must not retain the deleted record");
     }
     let habit_target: Option<i64> = sqlx::query_scalar(
@@ -2247,6 +2256,7 @@ async fn sqlite_hard_delete_rolls_back_dependent_cleanup_when_parent_delete_fail
             "transaction rollback fixture",
             "transaction rollback fixture",
             "internal",
+            None,
         )
         .await
         .unwrap();
@@ -2354,6 +2364,7 @@ async fn sqlite_user_space_forget_preserves_other_users_records_and_events() {
                 "user forget fixture",
                 "user forget fixture",
                 "internal",
+                None,
             )
             .await
             .unwrap();
@@ -2575,6 +2586,7 @@ async fn sqlite_retriever_port_applies_scope_type_and_sensitivity_before_limit()
             retriever_kinds: vec![MemoryRetrieverKind::Keyword],
             memory_types: vec!["semantic".to_string()],
             read_scope: MemorySensitivityReadScope::Public,
+            metadata_filter: None,
         },
     )
     .await
@@ -2591,6 +2603,7 @@ async fn sqlite_retriever_port_applies_scope_type_and_sensitivity_before_limit()
             retriever_kinds: vec![MemoryRetrieverKind::Keyword, MemoryRetrieverKind::Vector],
             memory_types: vec!["semantic".to_string()],
             read_scope: MemorySensitivityReadScope::Owner,
+            metadata_filter: None,
         },
     )
     .await
@@ -2618,6 +2631,7 @@ async fn sqlite_retriever_port_applies_scope_type_and_sensitivity_before_limit()
                 retriever_kinds: vec![MemoryRetrieverKind::Keyword],
                 memory_types: Vec::new(),
                 read_scope: MemorySensitivityReadScope::Owner,
+                metadata_filter: None,
             },
         )
         .await
@@ -2653,6 +2667,7 @@ async fn sqlite_retriever_marks_known_fulltext_unavailability_as_degraded() {
             retriever_kinds: vec![MemoryRetrieverKind::Keyword],
             memory_types: vec!["semantic".to_string()],
             read_scope: MemorySensitivityReadScope::Public,
+            metadata_filter: None,
         },
     )
     .await
@@ -2710,6 +2725,7 @@ async fn sqlite_event_retriever_returns_linked_canonical_memory_and_respects_tot
             retriever_kinds: vec![MemoryRetrieverKind::Event],
             memory_types: vec!["semantic".to_string()],
             read_scope: MemorySensitivityReadScope::Public,
+            metadata_filter: None,
         },
     )
     .await
@@ -4405,6 +4421,7 @@ async fn sqlite_rebuild_search_index_is_scoped_to_space() {
             "alpha city",
             "alpha city",
             "internal",
+            None,
         )
         .await
         .unwrap();
@@ -4419,6 +4436,7 @@ async fn sqlite_rebuild_search_index_is_scoped_to_space() {
             "beta city",
             "beta city",
             "internal",
+            None,
         )
         .await
         .unwrap();
@@ -4473,6 +4491,7 @@ async fn sqlite_rebuild_search_index_tenant_scope_preserves_other_tenants() {
             "tenant-one landmark",
             "tenant-one landmark",
             "internal",
+            None,
         )
         .await
         .unwrap();
@@ -4487,6 +4506,7 @@ async fn sqlite_rebuild_search_index_tenant_scope_preserves_other_tenants() {
             "tenant-two landmark",
             "tenant-two landmark",
             "internal",
+            None,
         )
         .await
         .unwrap();
@@ -4520,6 +4540,7 @@ async fn sqlite_fts_matches_predicate_field() {
             "Sun",
             "Earth orbits the Sun",
             "internal",
+            None,
         )
         .await
         .unwrap();
@@ -4559,6 +4580,7 @@ async fn sqlite_supersede_atomic_chain_persists_dual_journals_and_retry_is_idemp
         object_text: "new canonical value".to_string(),
         canonical_text: "User prefers the new canonical value".to_string(),
         sensitivity_level: "internal".to_string(),
+        expires_at: None,
         created_journal: mutation_journal("supersede-new", "supersede-created"),
         superseded_journal: mutation_journal("supersede-old", "supersede-superseded"),
     };
@@ -4725,6 +4747,7 @@ async fn sqlite_supersede_atomic_chain_persists_dual_journals_and_retry_is_idemp
         sensitivity_level: "internal".to_string(),
         created_journal: mutation_journal("supersede-new", "supersede-created"),
         superseded_journal: mutation_journal("supersede-old", "supersede-superseded"),
+        expires_at: None,
     };
     assert!(matches!(
         MemoryRecordStorePort::supersede_canonical_atomic_with_quota(
@@ -4839,6 +4862,7 @@ async fn sqlite_supersede_quota_rejection_keeps_chain_and_journals_unchanged() {
                 "supersede-quota-old",
                 "supersede-quota-superseded",
             ),
+            expires_at: None,
         },
         2,
     )
@@ -4938,5 +4962,207 @@ async fn sqlite_supersede_quota_rejection_keeps_chain_and_journals_unchanged() {
     assert_eq!(
         rejected_fts_count, 0,
         "quota rejection must not create FTS state"
+    );
+}
+
+#[tokio::test]
+async fn sqlite_expiration_roundtrip_persists_declared_expiration() {
+    let store = new_contract_store().await;
+
+    let scope = MemoryScopeContext::for_test(1, 1);
+
+    MemoryRecordStorePort::create_canonical_atomic(
+        &store,
+        CreateCanonicalMemoryCommand {
+            scope: scope.clone(),
+
+            memory_id: "expiring-record".to_string(),
+
+            scope_label: "user".to_string(),
+
+            memory_type: "semantic".to_string(),
+
+            subject: Some("account".to_string()),
+
+            predicate: Some("prefers".to_string()),
+
+            object_text: "session ends 2027-01-01T00:00:00Z".to_string(),
+
+            canonical_text: "Session ends 2027-01-01T00:00:00Z".to_string(),
+
+            sensitivity_level: "internal".to_string(),
+
+            expires_at: Some("2027-01-01T00:00:00Z".to_string()),
+
+            journal: mutation_journal("expiring-record", "expiring-record-created"),
+        },
+    )
+    .await
+    .unwrap();
+
+    MemoryRecordStorePort::create_canonical_atomic(
+        &store,
+        CreateCanonicalMemoryCommand {
+            scope: scope.clone(),
+
+            memory_id: "unexpiring-record".to_string(),
+
+            scope_label: "user".to_string(),
+
+            memory_type: "semantic".to_string(),
+
+            subject: Some("account".to_string()),
+
+            predicate: Some("prefers".to_string()),
+
+            object_text: "no expiration declared".to_string(),
+
+            canonical_text: "No expiration declared".to_string(),
+
+            sensitivity_level: "internal".to_string(),
+
+            expires_at: None,
+
+            journal: mutation_journal("unexpiring-record", "unexpiring-record-created"),
+        },
+    )
+    .await
+    .unwrap();
+
+    let expiring = MemoryRecordStorePort::retrieve_canonical(
+        &store,
+        RetrieveCanonicalMemoryQuery {
+            scope: scope.clone(),
+            memory_id: "expiring-record".to_string(),
+        },
+    )
+    .await
+    .unwrap()
+    .expect("expiring record must exist");
+
+    assert_eq!(
+        expiring.expires_at.as_deref(),
+        Some("2027-01-01T00:00:00Z"),
+        "declared expiration must survive the write/read roundtrip"
+    );
+
+    let unexpiring = MemoryRecordStorePort::retrieve_canonical(
+        &store,
+        RetrieveCanonicalMemoryQuery {
+            scope: scope.clone(),
+            memory_id: "unexpiring-record".to_string(),
+        },
+    )
+    .await
+    .unwrap()
+    .expect("unexpiring record must exist");
+
+    assert_eq!(
+        unexpiring.expires_at, None,
+        "record created without expiration must read back as null, not a fabricated date"
+    );
+}
+
+#[tokio::test]
+
+async fn sqlite_expiration_roundtrip_through_supersede_keeps_old_record_unchanged() {
+    let store = new_contract_store().await;
+
+    let scope = MemoryScopeContext::for_test(1, 1);
+
+    MemoryRecordStorePort::create_canonical_atomic(
+        &store,
+        CreateCanonicalMemoryCommand {
+            scope: scope.clone(),
+
+            memory_id: "supersede-exp-old".to_string(),
+
+            scope_label: "user".to_string(),
+
+            memory_type: "semantic".to_string(),
+
+            subject: Some("account".to_string()),
+
+            predicate: Some("prefers".to_string()),
+
+            object_text: "old value".to_string(),
+
+            canonical_text: "Old value".to_string(),
+
+            sensitivity_level: "internal".to_string(),
+
+            expires_at: Some("2026-01-01T00:00:00Z".to_string()),
+
+            journal: mutation_journal("supersede-exp-old", "supersede-exp-old-created"),
+        },
+    )
+    .await
+    .unwrap();
+
+    let admitted = match MemoryRecordStorePort::supersede_canonical_atomic_with_quota(
+        &store,
+        SupersedeCanonicalMemoryAtomicCommand {
+            scope: scope.clone(),
+
+            old_memory_id: "supersede-exp-old".to_string(),
+
+            new_memory_id: "supersede-exp-new".to_string(),
+
+            scope_label: "user".to_string(),
+
+            memory_type: "semantic".to_string(),
+
+            subject: Some("account".to_string()),
+
+            predicate: Some("prefers".to_string()),
+
+            object_text: "new value".to_string(),
+
+            canonical_text: "New value".to_string(),
+
+            sensitivity_level: "internal".to_string(),
+
+            expires_at: Some("2027-06-01T00:00:00Z".to_string()),
+
+            created_journal: mutation_journal("supersede-exp-new", "supersede-exp-new-created"),
+
+            superseded_journal: mutation_journal(
+                "supersede-exp-old",
+                "supersede-exp-old-superseded",
+            ),
+        },
+        0,
+    )
+    .await
+    .unwrap()
+    {
+        MemoryRecordQuotaAdmission::Admitted(record) => record,
+
+        MemoryRecordQuotaAdmission::QuotaExceeded { .. } => {
+            panic!("supersede with unlimited quota must be admitted")
+        }
+    };
+
+    assert_eq!(
+        admitted.expires_at.as_deref(),
+        Some("2027-06-01T00:00:00Z"),
+        "replacement record must carry the declared expiration"
+    );
+
+    let old = MemoryRecordStorePort::retrieve_canonical(
+        &store,
+        RetrieveCanonicalMemoryQuery {
+            scope: scope.clone(),
+            memory_id: "supersede-exp-old".to_string(),
+        },
+    )
+    .await
+    .unwrap()
+    .expect("superseded record must stay readable");
+
+    assert_eq!(
+        old.expires_at.as_deref(),
+        Some("2026-01-01T00:00:00Z"),
+        "superseding a record must not rewrite the old record's expiration"
     );
 }

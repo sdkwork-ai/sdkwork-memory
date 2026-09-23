@@ -26,6 +26,7 @@ fn sample_hit(text: &str) -> MemoryRetrievalHit {
             created_at: "2026-06-10T00:00:00Z".to_string(),
             updated_at: "2026-06-10T00:00:00Z".to_string(),
             version: 1,
+            expires_at: None,
         }),
         memory_id: Some(1),
         retriever_name: "keyword".to_string(),

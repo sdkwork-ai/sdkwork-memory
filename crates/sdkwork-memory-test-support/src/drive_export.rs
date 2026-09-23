@@ -37,7 +37,6 @@ impl MemoryDriveExportUploader for RecordingMemoryDriveExportUploader {
 }
 
 pub fn open_memory_service_with_drive(store: NativeSqlMemoryStore) -> OpenMemoryService {
-    OpenMemoryService::new(store).with_drive_export_uploader(Arc::new(
-        RecordingMemoryDriveExportUploader::default(),
-    ))
+    OpenMemoryService::new(store)
+        .with_drive_export_uploader(Arc::new(RecordingMemoryDriveExportUploader::default()))
 }

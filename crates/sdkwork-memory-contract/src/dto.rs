@@ -186,6 +186,10 @@ pub struct MemoryRecordRequest {
     pub language: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sensitivity_level: Option<String>,
+    /// Contract-declared `expiresAt`; the instant after which the record is
+    /// hidden from retrieval paths. Mirrors the OpenAPI schema on all faces.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -261,6 +265,9 @@ pub struct MemoryRecord {
     pub superseded_by_memory_id: Option<u64>,
     pub created_at: String,
     pub updated_at: String,
+    /// Contract-declared `expiresAt` echoed back on the canonical record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
     #[serde(
         serialize_with = "serialize_u64_as_string",
         deserialize_with = "deserialize_u64_from_string_or_number"

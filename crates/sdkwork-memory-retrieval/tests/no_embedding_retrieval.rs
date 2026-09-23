@@ -26,6 +26,7 @@ fn sample_record(id: u64, text: &str) -> MemoryRecord {
         created_at: "2026-06-10T00:00:00Z".to_string(),
         updated_at: "2026-06-10T00:00:00Z".to_string(),
         version: 1,
+        expires_at: None,
     }
 }
 

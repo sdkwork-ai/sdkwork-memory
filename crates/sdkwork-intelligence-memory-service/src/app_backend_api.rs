@@ -1517,9 +1517,7 @@ impl MemoryAppApi for OpenMemoryService {
             return Ok(default_learning_settings());
         };
         serde_json::from_str(&raw).map_err(|error| {
-            MemoryServiceError::storage(format!(
-                "learning settings decode failed: {error}"
-            ))
+            MemoryServiceError::storage(format!("learning settings decode failed: {error}"))
         })
     }
 
@@ -1539,9 +1537,7 @@ impl MemoryAppApi for OpenMemoryService {
         }
         settings.updated_at = platform::current_timestamp();
         let encoded = serde_json::to_string(&settings).map_err(|error| {
-            MemoryServiceError::storage(format!(
-                "learning settings encode failed: {error}"
-            ))
+            MemoryServiceError::storage(format!("learning settings encode failed: {error}"))
         })?;
         let preference_id = i64::try_from(self.next_id()?)
             .map_err(|_| MemoryServiceError::storage("generated preference id out of range"))?;

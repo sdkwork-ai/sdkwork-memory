@@ -21,11 +21,16 @@ pub fn validate_outbound_url(url: &str) -> Result<(), String> {
         other => return Err(format!("unsupported URL scheme: {other}")),
     }
 
-    let host = parsed.host().ok_or_else(|| "URL must have a host".to_string())?;
+    let host = parsed
+        .host()
+        .ok_or_else(|| "URL must have a host".to_string())?;
     if let Some(ip) = host_ip(&host) {
         validate_public_ip(ip)?;
     }
-    let host_name = host.to_string().trim_matches(['[', ']']).to_ascii_lowercase();
+    let host_name = host
+        .to_string()
+        .trim_matches(['[', ']'])
+        .to_ascii_lowercase();
     if host_name == "localhost" || host_name.ends_with(".localhost") {
         return Err("localhost hostnames are not allowed".to_string());
     }

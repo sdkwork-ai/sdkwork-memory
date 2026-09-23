@@ -366,6 +366,7 @@ async fn backend_api_supersede_memory_replays_result_without_duplicate_side_effe
             "original preference text",
             "original preference text",
             "internal",
+            None,
         )
         .await
         .unwrap();
@@ -511,6 +512,7 @@ async fn backend_api_supersede_quota_rejection_rolls_back_chain_and_journals() {
             "quota protected preference",
             "quota protected preference",
             "internal",
+            None,
         )
         .await
         .unwrap();

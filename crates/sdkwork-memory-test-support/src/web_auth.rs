@@ -41,7 +41,12 @@ pub async fn lock_integration_test_env() -> MutexGuard<'static, ()> {
 pub fn memory_auth_token_bearer(user_id: &str) -> String {
     format!(
         "Bearer {}",
-        auth_token_jwt(DEFAULT_TENANT_ID, user_id, DEFAULT_SESSION_ID, MEMORY_APP_ID)
+        auth_token_jwt(
+            DEFAULT_TENANT_ID,
+            user_id,
+            DEFAULT_SESSION_ID,
+            MEMORY_APP_ID
+        )
     )
 }
 

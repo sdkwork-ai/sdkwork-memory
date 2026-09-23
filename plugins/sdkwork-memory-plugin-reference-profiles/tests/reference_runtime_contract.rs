@@ -590,6 +590,7 @@ async fn reference_record_quota_admission_is_atomic_and_releases_deleted_slots()
         object_text: "first".to_string(),
         canonical_text: "first".to_string(),
         sensitivity_level: "internal".to_string(),
+        expires_at: None,
         journal: mutation_journal("quota-first", "created"),
     };
     assert!(matches!(
@@ -611,6 +612,7 @@ async fn reference_record_quota_admission_is_atomic_and_releases_deleted_slots()
             object_text: "rejected".to_string(),
             canonical_text: "rejected".to_string(),
             sensitivity_level: "internal".to_string(),
+            expires_at: None,
             journal: mutation_journal("quota-rejected", "created"),
         },
         1,
@@ -677,6 +679,7 @@ async fn reference_record_quota_admission_is_atomic_and_releases_deleted_slots()
             object_text: "reused".to_string(),
             canonical_text: "reused".to_string(),
             sensitivity_level: "internal".to_string(),
+            expires_at: None,
             journal: mutation_journal("quota-reused", "created"),
         },
         1,
@@ -1089,6 +1092,7 @@ async fn reference_rich_retrieval_is_bounded_filtered_and_fail_closed() {
                 object_text: "needle reference memory".to_string(),
                 canonical_text: "needle reference memory".to_string(),
                 sensitivity_level: sensitivity.to_string(),
+                expires_at: None,
                 journal: mutation_journal(memory_id, "created"),
             },
         )
@@ -1105,6 +1109,7 @@ async fn reference_rich_retrieval_is_bounded_filtered_and_fail_closed() {
             retriever_kinds: vec![MemoryRetrieverKind::Keyword],
             memory_types: vec!["semantic".to_string()],
             read_scope: MemorySensitivityReadScope::Public,
+            metadata_filter: None,
         },
     )
     .await
@@ -1121,6 +1126,7 @@ async fn reference_rich_retrieval_is_bounded_filtered_and_fail_closed() {
             retriever_kinds: vec![MemoryRetrieverKind::Keyword, MemoryRetrieverKind::Event],
             memory_types: vec!["semantic".to_string()],
             read_scope: MemorySensitivityReadScope::Owner,
+            metadata_filter: None,
         },
     )
     .await
@@ -1155,6 +1161,7 @@ async fn reference_rich_retrieval_is_bounded_filtered_and_fail_closed() {
             retriever_kinds: vec![MemoryRetrieverKind::Keyword],
             memory_types: vec!["semantic".to_string()],
             read_scope: MemorySensitivityReadScope::Public,
+            metadata_filter: None,
         },
     )
     .await
@@ -1169,6 +1176,7 @@ async fn reference_rich_retrieval_is_bounded_filtered_and_fail_closed() {
             retriever_kinds: vec![MemoryRetrieverKind::Keyword],
             memory_types: Vec::new(),
             read_scope: MemorySensitivityReadScope::Owner,
+            metadata_filter: None,
         },
         SearchMemoryCandidatesQuery {
             scope: primary.clone(),
@@ -1177,6 +1185,7 @@ async fn reference_rich_retrieval_is_bounded_filtered_and_fail_closed() {
             retriever_kinds: vec![MemoryRetrieverKind::Keyword],
             memory_types: Vec::new(),
             read_scope: MemorySensitivityReadScope::Owner,
+            metadata_filter: None,
         },
         SearchMemoryCandidatesQuery {
             scope: primary,
@@ -1185,6 +1194,7 @@ async fn reference_rich_retrieval_is_bounded_filtered_and_fail_closed() {
             retriever_kinds: Vec::new(),
             memory_types: Vec::new(),
             read_scope: MemorySensitivityReadScope::Owner,
+            metadata_filter: None,
         },
     ] {
         assert!(MemoryRetrieverPort::search_scoped(&runtime, query)
@@ -1209,6 +1219,7 @@ async fn reference_supersede_atomic_chain_persists_dual_journals_and_retry_is_id
             object_text: "old canonical value".to_string(),
             canonical_text: "User prefers the old canonical value".to_string(),
             sensitivity_level: "internal".to_string(),
+            expires_at: None,
             journal: mutation_journal("supersede-old", "created"),
         },
     )
@@ -1226,6 +1237,7 @@ async fn reference_supersede_atomic_chain_persists_dual_journals_and_retry_is_id
         object_text: "new canonical value".to_string(),
         canonical_text: "User prefers the new canonical value".to_string(),
         sensitivity_level: "internal".to_string(),
+        expires_at: None,
         created_journal: mutation_journal("supersede-new", "supersede-created"),
         superseded_journal: mutation_journal("supersede-old", "supersede-superseded"),
     };
@@ -1360,6 +1372,7 @@ async fn reference_supersede_atomic_chain_persists_dual_journals_and_retry_is_id
         object_text: "new canonical value".to_string(),
         canonical_text: "different retry payload".to_string(),
         sensitivity_level: "internal".to_string(),
+        expires_at: None,
         created_journal: mutation_journal("supersede-new", "supersede-created"),
         superseded_journal: mutation_journal("supersede-old", "supersede-superseded"),
     };
@@ -1385,6 +1398,7 @@ async fn reference_supersede_atomic_chain_persists_dual_journals_and_retry_is_id
         object_text: "new canonical value".to_string(),
         canonical_text: "User prefers the new canonical value".to_string(),
         sensitivity_level: "internal".to_string(),
+        expires_at: None,
         created_journal: mutation_journal("supersede-new", "different-journal"),
         superseded_journal: mutation_journal("supersede-old", "supersede-superseded"),
     };
@@ -1455,6 +1469,7 @@ async fn reference_supersede_quota_rejection_keeps_chain_and_journals_unchanged(
                 object_text: text.to_string(),
                 canonical_text: text.to_string(),
                 sensitivity_level: "internal".to_string(),
+                expires_at: None,
                 journal: mutation_journal(memory_id, "created"),
             },
         )
@@ -1475,6 +1490,7 @@ async fn reference_supersede_quota_rejection_keeps_chain_and_journals_unchanged(
             object_text: "must not be written".to_string(),
             canonical_text: "must not be written".to_string(),
             sensitivity_level: "internal".to_string(),
+            expires_at: None,
             created_journal: mutation_journal("supersede-quota-new", "quota-created"),
             superseded_journal: mutation_journal("supersede-quota-old", "quota-superseded"),
         },

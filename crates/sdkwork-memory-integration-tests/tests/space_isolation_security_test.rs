@@ -94,7 +94,9 @@ async fn open_api_rejects_cross_space_memory_access() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/mem/v3/api/memory/memories/{memory_id}?space_id=1"))
+                .uri(format!(
+                    "/mem/v3/api/memory/memories/{memory_id}?space_id=1"
+                ))
                 .extension(
                     sdkwork_memory_contract::MemoryOpenApiRequestContext::for_open_surface(
                         "key-1",

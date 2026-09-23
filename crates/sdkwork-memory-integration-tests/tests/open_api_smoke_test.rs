@@ -66,7 +66,8 @@ async fn open_api_rejects_credential_headers_on_api_key_surface() {
     );
     let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(
-        payload["reason"], "credential-profile-contamination",
+        payload["reason"],
+        "credential-profile-contamination",
         "the rejection must name credential-profile contamination: {body:?}",
         body = String::from_utf8_lossy(&body)
     );

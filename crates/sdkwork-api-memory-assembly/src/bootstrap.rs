@@ -38,7 +38,9 @@ use sdkwork_routes_memory_support::{
     memory_dependency_ready_check, memory_http_metrics, memory_metric_environment_label,
     refresh_memory_http_metric_dimensions,
 };
-use sdkwork_web_bootstrap::{healthz_handler, livez_handler, ReadinessCheck, ReadinessFuture, readyz_handler, WebModule};
+use sdkwork_web_bootstrap::{
+    healthz_handler, livez_handler, readyz_handler, ReadinessCheck, ReadinessFuture, WebModule,
+};
 use sdkwork_web_core::HttpRouteManifest;
 use tower::limit::ConcurrencyLimitLayer;
 use tracing::info;

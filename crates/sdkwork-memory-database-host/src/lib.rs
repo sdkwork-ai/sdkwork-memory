@@ -34,7 +34,11 @@ fn ensure_pool_engine_is_declared(
     engine: DatabaseEngine,
     manifest: &DatabaseManifest,
 ) -> Result<(), String> {
-    if manifest.engines.iter().any(|declared| declared == &engine.to_string()) {
+    if manifest
+        .engines
+        .iter()
+        .any(|declared| declared == &engine.to_string())
+    {
         return Ok(());
     }
     Err(format!(
@@ -59,8 +63,8 @@ pub async fn bootstrap_memory_database(pool: DatabasePool) -> Result<MemoryDatab
     ensure_pool_engine_is_declared(pool.engine(), &manifest)
         .map_err(|error| format!("memory database engine admission failed: {error}"))?;
     let options = lifecycle_options_from_env("MEMORY", &manifest);
-    let orchestrator = LifecycleOrchestrator::new(pool.clone(), module.clone())
-        .with_applied_by("sdkwork-memory");
+    let orchestrator =
+        LifecycleOrchestrator::new(pool.clone(), module.clone()).with_applied_by("sdkwork-memory");
 
     orchestrator
         .init()

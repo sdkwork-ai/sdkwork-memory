@@ -133,7 +133,10 @@ async fn bootstrap_memory_runtime_from_env_with_sqlite() {
     let _env = MemoryEnvScope::new(&[
         ("SDKWORK_DATABASE_URL", Some("sqlite::memory:")),
         ("SDKWORK_MEMORY_RUNTIME_TARGET", Some("test-runner")),
-        ("SDKWORK_MEMORY_IMPLEMENTATION_PROFILE", Some("local_embedded")),
+        (
+            "SDKWORK_MEMORY_IMPLEMENTATION_PROFILE",
+            Some("local_embedded"),
+        ),
         ("SDKWORK_MEMORY_RETRIEVAL_STRATEGY", Some("search_first")),
     ]);
 

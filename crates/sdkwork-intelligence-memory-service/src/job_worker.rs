@@ -1384,6 +1384,7 @@ mod eval_tests {
                 "prefers modal editor keybindings",
                 "editor preference is modal keybindings",
                 "internal",
+                None,
             )
             .await
             .expect("expected eval memory");
@@ -1398,6 +1399,7 @@ mod eval_tests {
                 "prefers a light color theme",
                 "theme preference is light",
                 "internal",
+                None,
             )
             .await
             .expect("distractor eval memory");
@@ -1510,7 +1512,10 @@ mod shutdown_tests {
         let drained = workers.drain(Duration::from_millis(20)).await;
         let elapsed = started.elapsed();
 
-        assert!(!drained, "an overrunning worker must be reported as not drained");
+        assert!(
+            !drained,
+            "an overrunning worker must be reported as not drained"
+        );
         assert!(
             elapsed < Duration::from_secs(2),
             "drain must return on the budget instead of waiting for the worker, elapsed={elapsed:?}"

@@ -49,7 +49,9 @@ async fn open_api_rejects_memory_retrieve_when_space_id_does_not_match_record() 
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/mem/v3/api/memory/memories/{memory_id}?space_id=2"))
+                .uri(format!(
+                    "/mem/v3/api/memory/memories/{memory_id}?space_id=2"
+                ))
                 .extension(context)
                 .body(Body::empty())
                 .unwrap(),

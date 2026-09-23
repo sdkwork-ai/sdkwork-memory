@@ -8,493 +8,600 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "/backend/v3/api/memory/spaces",
         "memory",
         "spaces.list",
-    ).with_required_permission("memory.backend.spaces.read"),
+    )
+    .with_required_permission("memory.backend.spaces.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/spaces/{spaceId}",
         "memory",
         "spaces.retrieve",
-    ).with_required_permission("memory.backend.spaces.read"),
+    )
+    .with_required_permission("memory.backend.spaces.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/backend/v3/api/memory/spaces/{spaceId}",
         "memory",
         "spaces.update",
-    ).with_required_permission("memory.backend.spaces.write"),
+    )
+    .with_required_permission("memory.backend.spaces.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/memories",
         "memory",
         "memories.list",
-    ).with_required_permission("memory.backend.records.read"),
+    )
+    .with_required_permission("memory.backend.records.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/memories/{memoryId}",
         "memory",
         "memories.retrieve",
-    ).with_required_permission("memory.backend.records.read"),
+    )
+    .with_required_permission("memory.backend.records.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/backend/v3/api/memory/memories/{memoryId}",
         "memory",
         "memories.update",
-    ).with_required_permission("memory.backend.records.write"),
+    )
+    .with_required_permission("memory.backend.records.write"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/memories/{memoryId}/supersede",
         "memory",
         "memories.supersede",
-    ).with_required_permission("memory.backend.records.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.records.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/events",
         "memory",
         "events.list",
-    ).with_required_permission("memory.backend.events.read"),
+    )
+    .with_required_permission("memory.backend.events.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/events/{eventId}",
         "memory",
         "events.retrieve",
-    ).with_required_permission("memory.backend.events.read"),
+    )
+    .with_required_permission("memory.backend.events.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/candidates",
         "memory",
         "candidates.list",
-    ).with_required_permission("memory.backend.candidates.read"),
+    )
+    .with_required_permission("memory.backend.candidates.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/candidates/{candidateId}/approve",
         "memory",
         "candidates.approve",
-    ).with_required_permission("memory.backend.candidates.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.candidates.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/candidates/{candidateId}/reject",
         "memory",
         "candidates.reject",
-    ).with_required_permission("memory.backend.candidates.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.candidates.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/extraction_jobs",
         "memory",
         "extractionJobs.list",
-    ).with_required_permission("memory.backend.learning.read"),
+    )
+    .with_required_permission("memory.backend.learning.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/extraction_jobs",
         "memory",
         "extractionJobs.create",
-    ).with_required_permission("memory.backend.learning.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.learning.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/extraction_jobs/{jobId}",
         "memory",
         "extractionJobs.retrieve",
-    ).with_required_permission("memory.backend.learning.read"),
+    )
+    .with_required_permission("memory.backend.learning.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/consolidation_jobs",
         "memory",
         "consolidationJobs.list",
-    ).with_required_permission("memory.backend.learning.read"),
+    )
+    .with_required_permission("memory.backend.learning.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/consolidation_jobs",
         "memory",
         "consolidationJobs.create",
-    ).with_required_permission("memory.backend.learning.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.learning.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/consolidation_jobs/{jobId}",
         "memory",
         "consolidationJobs.retrieve",
-    ).with_required_permission("memory.backend.learning.read"),
+    )
+    .with_required_permission("memory.backend.learning.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/indexes",
         "memory",
         "indexes.list",
-    ).with_required_permission("memory.backend.indexes.read"),
+    )
+    .with_required_permission("memory.backend.indexes.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/indexes",
         "memory",
         "indexes.create",
-    ).with_required_permission("memory.backend.indexes.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.indexes.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/indexes/{indexId}",
         "memory",
         "indexes.retrieve",
-    ).with_required_permission("memory.backend.indexes.read"),
+    )
+    .with_required_permission("memory.backend.indexes.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/backend/v3/api/memory/indexes/{indexId}",
         "memory",
         "indexes.update",
-    ).with_required_permission("memory.backend.indexes.write"),
+    )
+    .with_required_permission("memory.backend.indexes.write"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/indexes/{indexId}/rebuild",
         "memory",
         "indexes.rebuild",
-    ).with_required_permission("memory.backend.indexes.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::AuthCritical),
+    )
+    .with_required_permission("memory.backend.indexes.write")
+    .with_idempotent(true)
+    .with_rate_limit_tier(RateLimitTier::AuthCritical),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/retrieval_profiles",
         "memory",
         "retrievalProfiles.list",
-    ).with_required_permission("memory.backend.retrievalProfiles.read"),
+    )
+    .with_required_permission("memory.backend.retrievalProfiles.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/retrieval_profiles",
         "memory",
         "retrievalProfiles.create",
-    ).with_required_permission("memory.backend.retrievalProfiles.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.retrievalProfiles.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/retrieval_profiles/{profileId}",
         "memory",
         "retrievalProfiles.retrieve",
-    ).with_required_permission("memory.backend.retrievalProfiles.read"),
+    )
+    .with_required_permission("memory.backend.retrievalProfiles.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/backend/v3/api/memory/retrieval_profiles/{profileId}",
         "memory",
         "retrievalProfiles.update",
-    ).with_required_permission("memory.backend.retrievalProfiles.write"),
+    )
+    .with_required_permission("memory.backend.retrievalProfiles.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/implementation_profiles",
         "memory",
         "implementationProfiles.list",
-    ).with_required_permission("memory.backend.implementationProfiles.read"),
+    )
+    .with_required_permission("memory.backend.implementationProfiles.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/implementation_profiles",
         "memory",
         "implementationProfiles.create",
-    ).with_required_permission("memory.backend.implementationProfiles.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.implementationProfiles.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/implementation_profiles/{implementationProfileId}",
         "memory",
         "implementationProfiles.retrieve",
-    ).with_required_permission("memory.backend.implementationProfiles.read"),
+    )
+    .with_required_permission("memory.backend.implementationProfiles.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/backend/v3/api/memory/implementation_profiles/{implementationProfileId}",
         "memory",
         "implementationProfiles.update",
-    ).with_required_permission("memory.backend.implementationProfiles.write"),
+    )
+    .with_required_permission("memory.backend.implementationProfiles.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/provider_bindings",
         "memory",
         "providerBindings.list",
-    ).with_required_permission("memory.backend.providerBindings.read"),
+    )
+    .with_required_permission("memory.backend.providerBindings.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/provider_bindings",
         "memory",
         "providerBindings.create",
-    ).with_required_permission("memory.backend.providerBindings.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.providerBindings.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/backend/v3/api/memory/provider_bindings/{providerBindingId}",
         "memory",
         "providerBindings.update",
-    ).with_required_permission("memory.backend.providerBindings.write"),
+    )
+    .with_required_permission("memory.backend.providerBindings.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/provider_health",
         "memory",
         "providerHealth.retrieve",
-    ).with_required_permission("memory.backend.providerHealth.read"),
+    )
+    .with_required_permission("memory.backend.providerHealth.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/eval_runs",
         "memory",
         "evalRuns.list",
-    ).with_required_permission("memory.backend.evalRuns.read"),
+    )
+    .with_required_permission("memory.backend.evalRuns.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/eval_runs",
         "memory",
         "evalRuns.create",
-    ).with_required_permission("memory.backend.evalRuns.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.evalRuns.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/eval_runs/{evalRunId}",
         "memory",
         "evalRuns.retrieve",
-    ).with_required_permission("memory.backend.evalRuns.read"),
+    )
+    .with_required_permission("memory.backend.evalRuns.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/retrieval_traces",
         "memory",
         "retrievalTraces.list",
-    ).with_required_permission("memory.backend.retrievalTraces.read"),
+    )
+    .with_required_permission("memory.backend.retrievalTraces.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/retrieval_traces/{traceId}",
         "memory",
         "retrievalTraces.retrieve",
-    ).with_required_permission("memory.backend.retrievalTraces.read"),
+    )
+    .with_required_permission("memory.backend.retrievalTraces.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/audit_logs",
         "memory",
         "auditLogs.list",
-    ).with_required_permission("memory.backend.auditLogs.read"),
+    )
+    .with_required_permission("memory.backend.auditLogs.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/retention_jobs",
         "memory",
         "retentionJobs.list",
-    ).with_required_permission("memory.backend.retention.read"),
+    )
+    .with_required_permission("memory.backend.retention.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/retention_jobs",
         "memory",
         "retentionJobs.create",
-    ).with_required_permission("memory.backend.retention.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::AuthCritical),
+    )
+    .with_required_permission("memory.backend.retention.write")
+    .with_idempotent(true)
+    .with_rate_limit_tier(RateLimitTier::AuthCritical),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/retention_jobs/{retentionJobId}",
         "memory",
         "retentionJobs.retrieve",
-    ).with_required_permission("memory.backend.retention.read"),
+    )
+    .with_required_permission("memory.backend.retention.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/migration_jobs",
         "memory",
         "migrationJobs.list",
-    ).with_required_permission("memory.backend.migrations.read"),
+    )
+    .with_required_permission("memory.backend.migrations.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/migration_jobs",
         "memory",
         "migrationJobs.create",
-    ).with_required_permission("memory.backend.migrations.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::AuthCritical),
+    )
+    .with_required_permission("memory.backend.migrations.write")
+    .with_idempotent(true)
+    .with_rate_limit_tier(RateLimitTier::AuthCritical),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/migration_jobs/{migrationJobId}",
         "memory",
         "migrationJobs.retrieve",
-    ).with_required_permission("memory.backend.migrations.read"),
+    )
+    .with_required_permission("memory.backend.migrations.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/subjects",
         "memory",
         "subjects.list",
-    ).with_required_permission("memory.backend.subjects.read"),
+    )
+    .with_required_permission("memory.backend.subjects.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/subjects",
         "memory",
         "subjects.create",
-    ).with_required_permission("memory.backend.subjects.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.subjects.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/subjects/{subjectId}",
         "memory",
         "subjects.retrieve",
-    ).with_required_permission("memory.backend.subjects.read"),
+    )
+    .with_required_permission("memory.backend.subjects.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/backend/v3/api/memory/subjects/{subjectId}",
         "memory",
         "subjects.update",
-    ).with_required_permission("memory.backend.subjects.write"),
+    )
+    .with_required_permission("memory.backend.subjects.write"),
     HttpRoute::dual_token(
         HttpMethod::Delete,
         "/backend/v3/api/memory/subjects/{subjectId}",
         "memory",
         "subjects.delete",
-    ).with_required_permission("memory.backend.subjects.write"),
+    )
+    .with_required_permission("memory.backend.subjects.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/bindings",
         "memory",
         "bindings.list",
-    ).with_required_permission("memory.backend.bindings.read"),
+    )
+    .with_required_permission("memory.backend.bindings.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/bindings",
         "memory",
         "bindings.create",
-    ).with_required_permission("memory.backend.bindings.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.bindings.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/bindings/{bindingId}",
         "memory",
         "bindings.retrieve",
-    ).with_required_permission("memory.backend.bindings.read"),
+    )
+    .with_required_permission("memory.backend.bindings.read"),
     HttpRoute::dual_token(
         HttpMethod::Delete,
         "/backend/v3/api/memory/bindings/{bindingId}",
         "memory",
         "bindings.delete",
-    ).with_required_permission("memory.backend.bindings.write"),
+    )
+    .with_required_permission("memory.backend.bindings.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/capability_bindings",
         "memory",
         "capabilityBindings.list",
-    ).with_required_permission("memory.backend.capabilityBindings.read"),
+    )
+    .with_required_permission("memory.backend.capabilityBindings.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/capability_bindings",
         "memory",
         "capabilityBindings.create",
-    ).with_required_permission("memory.backend.capabilityBindings.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.capabilityBindings.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/capability_bindings/{capabilityBindingId}",
         "memory",
         "capabilityBindings.retrieve",
-    ).with_required_permission("memory.backend.capabilityBindings.read"),
+    )
+    .with_required_permission("memory.backend.capabilityBindings.read"),
     HttpRoute::dual_token(
         HttpMethod::Delete,
         "/backend/v3/api/memory/capability_bindings/{capabilityBindingId}",
         "memory",
         "capabilityBindings.delete",
-    ).with_required_permission("memory.backend.capabilityBindings.write"),
+    )
+    .with_required_permission("memory.backend.capabilityBindings.write"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/capabilities/resolve",
         "memory",
         "capabilities.resolve",
-    ).with_required_permission("memory.backend.capabilityBindings.read").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.capabilityBindings.read")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/entities",
         "memory",
         "entities.list",
-    ).with_required_permission("memory.backend.entities.read"),
+    )
+    .with_required_permission("memory.backend.entities.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/entities",
         "memory",
         "entities.create",
-    ).with_required_permission("memory.backend.entities.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.entities.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/entities/{entityId}",
         "memory",
         "entities.retrieve",
-    ).with_required_permission("memory.backend.entities.read"),
+    )
+    .with_required_permission("memory.backend.entities.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/backend/v3/api/memory/entities/{entityId}",
         "memory",
         "entities.update",
-    ).with_required_permission("memory.backend.entities.write"),
+    )
+    .with_required_permission("memory.backend.entities.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/edges",
         "memory",
         "edges.list",
-    ).with_required_permission("memory.backend.entities.read"),
+    )
+    .with_required_permission("memory.backend.entities.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/edges",
         "memory",
         "edges.create",
-    ).with_required_permission("memory.backend.edges.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.edges.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/edges/{edgeId}",
         "memory",
         "edges.retrieve",
-    ).with_required_permission("memory.backend.entities.read"),
+    )
+    .with_required_permission("memory.backend.entities.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/backend/v3/api/memory/edges/{edgeId}",
         "memory",
         "edges.update",
-    ).with_required_permission("memory.backend.edges.write"),
+    )
+    .with_required_permission("memory.backend.edges.write"),
     HttpRoute::dual_token(
         HttpMethod::Delete,
         "/backend/v3/api/memory/edges/{edgeId}",
         "memory",
         "edges.delete",
-    ).with_required_permission("memory.backend.edges.write"),
+    )
+    .with_required_permission("memory.backend.edges.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/policies",
         "memory",
         "policies.list",
-    ).with_required_permission("memory.backend.policies.write"),
+    )
+    .with_required_permission("memory.backend.policies.write"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/policies",
         "memory",
         "policies.create",
-    ).with_required_permission("memory.backend.policies.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.policies.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/policies/{policyId}",
         "memory",
         "policies.retrieve",
-    ).with_required_permission("memory.backend.policies.write"),
+    )
+    .with_required_permission("memory.backend.policies.write"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/backend/v3/api/memory/policies/{policyId}",
         "memory",
         "policies.update",
-    ).with_required_permission("memory.backend.policies.write"),
+    )
+    .with_required_permission("memory.backend.policies.write"),
     HttpRoute::dual_token(
         HttpMethod::Delete,
         "/backend/v3/api/memory/policies/{policyId}",
         "memory",
         "policies.delete",
-    ).with_required_permission("memory.backend.policies.write"),
+    )
+    .with_required_permission("memory.backend.policies.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/policy_assignments",
         "memory",
         "policyAssignments.list",
-    ).with_required_permission("memory.backend.policies.write"),
+    )
+    .with_required_permission("memory.backend.policies.write"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/policy_assignments",
         "memory",
         "policyAssignments.create",
-    ).with_required_permission("memory.backend.policies.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.policies.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/policy_assignments/{policyAssignmentId}",
         "memory",
         "policyAssignments.retrieve",
-    ).with_required_permission("memory.backend.policies.write"),
+    )
+    .with_required_permission("memory.backend.policies.write"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/backend/v3/api/memory/policy_assignments/{policyAssignmentId}",
         "memory",
         "policyAssignments.update",
-    ).with_required_permission("memory.backend.policies.write"),
+    )
+    .with_required_permission("memory.backend.policies.write"),
     HttpRoute::dual_token(
         HttpMethod::Delete,
         "/backend/v3/api/memory/policy_assignments/{policyAssignmentId}",
         "memory",
         "policyAssignments.delete",
-    ).with_required_permission("memory.backend.policies.write"),
+    )
+    .with_required_permission("memory.backend.policies.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/memory/commercial_readiness",
         "memory",
         "commercialReadiness.retrieve",
-    ).with_required_permission("memory.backend.commercialReadiness.read"),
+    )
+    .with_required_permission("memory.backend.commercialReadiness.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/memory/commercial_readiness/rebuild",
         "memory",
         "commercialReadiness.rebuild",
-    ).with_required_permission("memory.backend.commercialReadiness.write").with_idempotent(true),
+    )
+    .with_required_permission("memory.backend.commercialReadiness.write")
+    .with_idempotent(true),
 ];
 
 pub fn backend_route_manifest() -> HttpRouteManifest {

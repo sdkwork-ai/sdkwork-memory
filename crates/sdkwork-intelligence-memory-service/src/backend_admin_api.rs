@@ -998,9 +998,7 @@ impl OpenMemoryService {
             .map_err(MemoryServiceError::validation)?;
         if let Some(profile_ref) = request.profile_ref.as_deref() {
             let profile_id = profile_ref.parse::<u64>().map_err(|_| {
-                MemoryServiceError::validation(
-                    "profileRef must be a numeric retrieval profile id",
-                )
+                MemoryServiceError::validation("profileRef must be a numeric retrieval profile id")
             })?;
             let profile_exists = self
                 .store
@@ -1364,6 +1362,7 @@ impl OpenMemoryService {
                     object_text,
                     canonical_text: request.canonical_text,
                     sensitivity_level: sensitivity.to_string(),
+                    expires_at: request.expires_at,
                     created_journal,
                     superseded_journal,
                 },

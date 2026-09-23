@@ -4,7 +4,8 @@ use sdkwork_database_config::{DatabaseConfig, DatabaseEngine};
 use sdkwork_database_id::{NodeAllocatorConfig, SnowflakeIdGenerator, SnowflakeNodeAllocator};
 use sdkwork_database_sqlx::create_pool_from_config;
 use sdkwork_memory_plugin_native_sql::{
-    normalize_memory_database_config, MemorySqlDialect, NativeSqlMemoryStore, NativeSqlPhase1Runtime,
+    normalize_memory_database_config, MemorySqlDialect, NativeSqlMemoryStore,
+    NativeSqlPhase1Runtime,
 };
 use sdkwork_memory_spi::MemoryDeploymentMode;
 
@@ -104,7 +105,9 @@ pub fn ensure_server_role_database_engine_from_env() -> Result<(), String> {
 fn registry_node_allocation_required(deployment_mode: MemoryDeploymentMode) -> bool {
     matches!(
         deployment_mode,
-        MemoryDeploymentMode::Server | MemoryDeploymentMode::Container | MemoryDeploymentMode::Private
+        MemoryDeploymentMode::Server
+            | MemoryDeploymentMode::Container
+            | MemoryDeploymentMode::Private
     )
 }
 

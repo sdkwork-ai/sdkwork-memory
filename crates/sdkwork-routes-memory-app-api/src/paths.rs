@@ -29,5 +29,4 @@ pub const LEARNING_SETTINGS: &str = "/app/v3/api/memory/learning_settings";
 pub const ENTITIES: &str = "/app/v3/api/memory/entities";
 pub const ENTITY: &str = "/app/v3/api/memory/entities/{entityId}";
 pub const POLICY_ASSIGNMENTS: &str = "/app/v3/api/memory/policy_assignments";
-pub const POLICY_ASSIGNMENT: &str =
-    "/app/v3/api/memory/policy_assignments/{policyAssignmentId}";
+pub const POLICY_ASSIGNMENT: &str = "/app/v3/api/memory/policy_assignments/{policyAssignmentId}";

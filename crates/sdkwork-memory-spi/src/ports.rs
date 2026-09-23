@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::{MemoryRetrieverKind, MemorySpiError, MemorySpiResult};
+use crate::{MemoryRetrieverKind, MemorySpiError, MemorySpiResult, MetadataFilterExpression};
 
 pub trait MemoryRuntimePlugin: Send + Sync {}
 
@@ -64,6 +64,9 @@ pub struct MemoryCanonicalRecord {
     pub created_at: String,
     pub updated_at: String,
     pub version: i64,
+    /// Instant after which the record is hidden from retrieval paths, mirroring
+    /// the contract-declared `expiresAt` field on the canonical record schemas.
+    pub expires_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,6 +95,8 @@ pub struct CreateCanonicalMemoryCommand {
     pub object_text: String,
     pub canonical_text: String,
     pub sensitivity_level: String,
+    /// Optional contract-declared expiration instant persisted with the record.
+    pub expires_at: Option<String>,
     pub journal: MemoryMutationJournal,
 }
 
@@ -111,6 +116,8 @@ pub struct SupersedeCanonicalMemoryAtomicCommand {
     pub object_text: String,
     pub canonical_text: String,
     pub sensitivity_level: String,
+    /// Optional contract-declared expiration instant persisted with the replacement.
+    pub expires_at: Option<String>,
     pub created_journal: MemoryMutationJournal,
     pub superseded_journal: MemoryMutationJournal,
 }
@@ -665,6 +672,11 @@ pub const MAX_MEMORY_RETRIEVAL_CANDIDATES: u32 = 200;
 /// The plugin receives only the search scope and the enabled retriever kinds. It must never
 /// infer tenant or space context from ambient state, and it must honor the limit at the
 /// authoritative index/store boundary.
+///
+/// `metadata_filter` is the caller's metadata predicate, already parsed and validated by
+/// [`crate::parse_metadata_filter`]. A store must apply it **inside** its query rather than
+/// to a broad read, per `PAGINATION_SPEC.md` section 5.1, and must refuse the query when it
+/// cannot express an operator exactly rather than returning unfiltered rows.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchMemoryCandidatesQuery {
     pub scope: MemoryScopeContext,
@@ -673,6 +685,7 @@ pub struct SearchMemoryCandidatesQuery {
     pub retriever_kinds: Vec<MemoryRetrieverKind>,
     pub memory_types: Vec<String>,
     pub read_scope: MemorySensitivityReadScope,
+    pub metadata_filter: Option<MetadataFilterExpression>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

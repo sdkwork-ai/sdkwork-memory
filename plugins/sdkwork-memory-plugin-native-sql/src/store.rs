@@ -17,7 +17,7 @@ use sdkwork_memory_spi::{
     MemoryRetrievalHitDraft, MemoryRetrievalRecordCandidate, MemoryRetrievalTrace,
     MemoryRetrievalTraceStorePort, MemoryRetrieverKind, MemoryRetrieverPort, MemoryRetrieverResult,
     MemoryRetrieverSearchResult, MemoryScopeContext, MemorySensitivityReadScope, MemorySpiError,
-    MemorySpiResult, PromoteMemoryCandidateAtomicCommand,
+    MemorySpiResult, MetadataFilterExpression, PromoteMemoryCandidateAtomicCommand,
     PromoteMemoryCandidateAtomicWithJournalCommand, PromoteMemoryHabitCommand,
     RejectMemoryCandidateCommand, RetrieveCanonicalMemoryQuery, RetrieveMemoryAuditQuery,
     RetrieveMemoryCandidateDetailQuery, RetrieveMemoryCandidateQuery,
@@ -433,6 +433,7 @@ impl NativeSqlMemoryStore {
               r.sensitivity_level,
               r.created_at,
               r.updated_at,
+              r.expires_at,
               r.version,
               sup.uuid AS supersedes_uuid,
               sub.uuid AS superseded_by_uuid
@@ -503,6 +504,7 @@ impl NativeSqlMemoryStore {
         object_text: &str,
         canonical_text: &str,
         sensitivity_level: &str,
+        expires_at: Option<&str>,
     ) -> Result<(), NativeSqlStoreError> {
         self.ensure_space(scope).await?;
         sqlx::query(
@@ -526,11 +528,12 @@ impl NativeSqlMemoryStore {
               recency_score,
               status,
               sensitivity_level,
+              expires_at,
               created_at,
               updated_at,
               version
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1.0, 1, 0, 0.5, 0.5, 'active', ?, ?, ?, 1)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1.0, 1, 0, 0.5, 0.5, 'active', ?, ?, ?, ?, 1)
             "#,
         )
         .bind(self.next_row_id()?)
@@ -545,6 +548,7 @@ impl NativeSqlMemoryStore {
         .bind(object_text)
         .bind(canonical_text)
         .bind(sensitivity_level)
+        .bind(expires_at)
         .bind(now_text())
         .bind(now_text())
         .execute(&self.pool)
@@ -576,6 +580,7 @@ impl NativeSqlMemoryStore {
         object_text: &str,
         canonical_text: &str,
         sensitivity_level: &str,
+        expires_at: Option<&str>,
     ) -> Result<(), NativeSqlStoreError> {
         self.ensure_space(scope).await?;
         let old_row_id = self
@@ -595,6 +600,7 @@ impl NativeSqlMemoryStore {
             object_text,
             canonical_text,
             sensitivity_level,
+            expires_at,
         )
         .await?;
 
@@ -670,6 +676,7 @@ impl NativeSqlMemoryStore {
               r.sensitivity_level,
               r.created_at,
               r.updated_at,
+              r.expires_at,
               r.version,
               sup.uuid AS supersedes_uuid,
               sub.uuid AS superseded_by_uuid
@@ -724,6 +731,7 @@ impl NativeSqlMemoryStore {
                   r.sensitivity_level,
                   r.created_at,
                   r.updated_at,
+                  r.expires_at,
                   r.version,
                   sup.uuid AS supersedes_uuid,
                   sub.uuid AS superseded_by_uuid
@@ -767,6 +775,7 @@ impl NativeSqlMemoryStore {
                   r.sensitivity_level,
                   r.created_at,
                   r.updated_at,
+                  r.expires_at,
                   r.version,
                   sup.uuid AS supersedes_uuid,
                   sub.uuid AS superseded_by_uuid
@@ -912,6 +921,7 @@ impl NativeSqlMemoryStore {
             top_k,
             &[],
             MemorySensitivityReadScope::Owner,
+            None,
         )
         .await
         .map(|(rows, _degraded)| rows)
@@ -924,9 +934,17 @@ impl NativeSqlMemoryStore {
         top_k: i32,
         memory_types: &[String],
         read_scope: MemorySensitivityReadScope,
+        metadata_filter: Option<&MetadataFilterExpression>,
     ) -> Result<(Vec<NativeSqlMemoryRecordDetail>, bool), NativeSqlStoreError> {
         let fulltext_result = self
-            .search_record_details_fulltext_filtered(scope, query, top_k, memory_types, read_scope)
+            .search_record_details_fulltext_filtered(
+                scope,
+                query,
+                top_k,
+                memory_types,
+                read_scope,
+                metadata_filter,
+            )
             .await;
         let degraded = match fulltext_result {
             Ok(rows) if !rows.is_empty() => return Ok((rows, false)),
@@ -955,6 +973,7 @@ impl NativeSqlMemoryStore {
               r.sensitivity_level,
               r.created_at,
               r.updated_at,
+              r.expires_at,
               r.version,
               sup.uuid AS supersedes_uuid,
               sub.uuid AS superseded_by_uuid
@@ -972,8 +991,14 @@ impl NativeSqlMemoryStore {
                    OR COALESCE(r.predicate, '') LIKE ? ESCAPE '\')
             "#,
         );
+        let filter_predicate = crate::filter_pushdown::translate_metadata_filter(
+            self.dialect(),
+            "r",
+            metadata_filter,
+        )?;
         Self::append_sensitivity_filter(&mut sql, "r");
         Self::append_memory_type_filter(&mut sql, "r", memory_types);
+        sql.push_str(&filter_predicate.sql);
         sql.push_str(" ORDER BY r.updated_at DESC, r.uuid ASC LIMIT ?");
         let mut query_builder = sqlx::query(&sql)
             .bind(scope.tenant_id)
@@ -986,6 +1011,9 @@ impl NativeSqlMemoryStore {
             .bind(sensitivity_level);
         for memory_type in memory_types {
             query_builder = query_builder.bind(memory_type);
+        }
+        for bind in &filter_predicate.binds {
+            query_builder = query_builder.bind(bind);
         }
         let rows = query_builder
             .bind(top_k.max(1) as i64)
@@ -1053,9 +1081,15 @@ impl NativeSqlMemoryStore {
         limit: u32,
         memory_types: &[String],
         read_scope: MemorySensitivityReadScope,
+        metadata_filter: Option<&MetadataFilterExpression>,
     ) -> Result<Vec<MemoryRetrievalEventCandidate>, NativeSqlStoreError> {
         let pattern = crate::privacy::like_pattern(query.trim());
         let sensitivity_level = Self::read_scope_level(read_scope);
+        let filter_predicate = crate::filter_pushdown::translate_metadata_filter(
+            self.dialect(),
+            "record",
+            metadata_filter,
+        )?;
         let mut sql = String::from(
             r#"
             SELECT
@@ -1079,6 +1113,7 @@ impl NativeSqlMemoryStore {
         );
         Self::append_sensitivity_filter(&mut sql, "record");
         Self::append_memory_type_filter(&mut sql, "record", memory_types);
+        sql.push_str(&filter_predicate.sql);
         sql.push_str(" ORDER BY event.created_at DESC, record.uuid ASC, event.uuid ASC LIMIT ?");
         let mut query_builder = sqlx::query(&sql)
             .bind(scope.tenant_id)
@@ -1089,6 +1124,9 @@ impl NativeSqlMemoryStore {
             .bind(sensitivity_level);
         for memory_type in memory_types {
             query_builder = query_builder.bind(memory_type);
+        }
+        for bind in &filter_predicate.binds {
+            query_builder = query_builder.bind(bind);
         }
         let rows = query_builder
             .bind(i64::from(limit))
@@ -1179,6 +1217,7 @@ impl NativeSqlMemoryStore {
                     i32::try_from(record_limit).unwrap_or(i32::MAX),
                     &query.memory_types,
                     query.read_scope,
+                    query.metadata_filter.as_ref(),
                 )
                 .await?;
             (
@@ -1204,6 +1243,7 @@ impl NativeSqlMemoryStore {
                 event_limit,
                 &query.memory_types,
                 query.read_scope,
+                query.metadata_filter.as_ref(),
             )
             .await?
         } else {
@@ -1932,6 +1972,7 @@ impl NativeSqlMemoryStore {
         object_text: &str,
         canonical_text: &str,
         sensitivity_level: &str,
+        expires_at: Option<&str>,
     ) -> Result<(), NativeSqlStoreError> {
         sqlx::query(
             r#"
@@ -1940,9 +1981,9 @@ impl NativeSqlMemoryStore {
               subject, predicate, object_text, canonical_text,
               confidence, evidence_count, contradiction_count,
               importance_score, recency_score,
-              status, sensitivity_level, created_at, updated_at, version
+              status, sensitivity_level, expires_at, created_at, updated_at, version
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1.0, 1, 0, 0.5, 0.5, 'active', ?, ?, ?, 1)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1.0, 1, 0, 0.5, 0.5, 'active', ?, ?, ?, ?, 1)
             "#,
         )
         .bind(self.next_row_id()?)
@@ -1957,6 +1998,7 @@ impl NativeSqlMemoryStore {
         .bind(object_text)
         .bind(canonical_text)
         .bind(sensitivity_level)
+        .bind(expires_at)
         .bind(now_text())
         .bind(now_text())
         .execute(&mut **tx)
@@ -2352,6 +2394,7 @@ impl NativeSqlMemoryStore {
                 command.proposed_text,
                 command.proposed_text,
                 "internal",
+                None,
             )
             .await?;
             for (source_id, event_id, confidence) in command.evidence_links {
@@ -5207,6 +5250,7 @@ impl MemoryRetrieverPort for NativeSqlMemoryStore {
                 ],
                 memory_types: Vec::new(),
                 read_scope: MemorySensitivityReadScope::Owner,
+                metadata_filter: None,
             })
             .await
             .map_err(|err| port_error("MemoryRetrieverPort", err))?;
@@ -5855,6 +5899,7 @@ pub struct NativeSqlMemoryRecordDetail {
     pub superseded_by_memory_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    pub expires_at: Option<String>,
     pub version: i64,
 }
 
@@ -5878,6 +5923,7 @@ pub(crate) fn record_detail_from_row(row: AnyRow) -> NativeSqlMemoryRecordDetail
         superseded_by_memory_id: row.try_get("superseded_by_uuid").ok(),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
+        expires_at: row.try_get("expires_at").ok(),
         version: row.get("version"),
     }
 }
@@ -6108,6 +6154,8 @@ pub enum NativeSqlStoreError {
     IdempotencyConflict { idempotency_key: String },
     #[error("native SQL store invariant violation: {message}")]
     InvariantViolation { message: String },
+    #[error("native SQL store cannot honor the metadata filter: {message}")]
+    MetadataFilterUnsupported { message: String },
 }
 
 fn development_id_generator() -> SnowflakeIdGenerator {

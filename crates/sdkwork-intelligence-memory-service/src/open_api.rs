@@ -22,6 +22,7 @@ use sdkwork_memory_retrieval::{
     orchestrate_retrieval_candidates, MemoryRetrievalStrategy, RetrievalCandidate,
     RetrievalEventInput, RetrievalFusionPolicy, RetrievalRecordInput,
 };
+use sdkwork_memory_spi::parse_metadata_filter;
 use sdkwork_memory_spi::{
     AppendMemoryAuditCommand, AppendMemoryOutboxCommand, AppendMemoryRetrievalTraceCommand,
     CreateCanonicalMemoryCommand, CreateMemoryCandidateCommand, DeleteCanonicalMemoryCommand,
@@ -33,7 +34,6 @@ use sdkwork_memory_spi::{
     RetrieveMemoryRetrievalTraceForTenantQuery, SearchMemoryCandidatesQuery,
     UpdateCanonicalMemoryCommand, MAX_MEMORY_RETRIEVAL_CANDIDATES,
 };
-
 use tracing::info;
 
 use crate::access;
@@ -412,9 +412,7 @@ impl OpenMemoryService {
     ) -> MemoryServiceResult<()> {
         let outbox_id = self.next_id()?.to_string();
         let payload_json = serde_json::to_string(&payload).map_err(|error| {
-            MemoryServiceError::storage(format!(
-                "domain event payload encode failed: {error}"
-            ))
+            MemoryServiceError::storage(format!("domain event payload encode failed: {error}"))
         })?;
         self.runtime_data_plane
             .append_outbox(AppendMemoryOutboxCommand {
@@ -438,9 +436,7 @@ impl OpenMemoryService {
         payload: serde_json::Value,
     ) -> MemoryServiceResult<MemoryMutationJournal> {
         let payload_json = serde_json::to_string(&payload).map_err(|error| {
-            MemoryServiceError::storage(format!(
-                "memory mutation payload encode failed: {error}"
-            ))
+            MemoryServiceError::storage(format!("memory mutation payload encode failed: {error}"))
         })?;
         Ok(MemoryMutationJournal {
             outbox_id: self.next_id()?.to_string(),
@@ -579,6 +575,7 @@ impl OpenMemoryService {
             superseded_by_memory_id,
             created_at: detail.created_at,
             updated_at: detail.updated_at,
+            expires_at: detail.expires_at,
             version,
         })
     }
@@ -617,6 +614,7 @@ impl OpenMemoryService {
                 .and_then(|value| Self::parse_id(&value)),
             created_at: detail.created_at,
             updated_at: detail.updated_at,
+            expires_at: detail.expires_at,
             version,
         })
     }
@@ -1004,6 +1002,7 @@ impl MemoryOpenApi for OpenMemoryService {
                     object_text,
                     canonical_text: request.canonical_text,
                     sensitivity_level: sensitivity.to_string(),
+                    expires_at: request.expires_at,
                     journal,
                 },
                 quota_limits.max_records_per_space,
@@ -1160,6 +1159,16 @@ impl MemoryOpenApi for OpenMemoryService {
             request.context_budget_tokens,
         )?;
 
+        // Resolve the caller's metadata filter before touching any store, so a filter that
+        // cannot be honored exactly fails the request instead of being ignored. A previously
+        // shipped version forwarded `filters` into the request and never applied it, which
+        // handed the caller unfiltered results with no signal at all.
+        let metadata_filter = match request.filters.as_ref() {
+            None => None,
+            Some(filters) => parse_metadata_filter(filters)
+                .map_err(|error| MemoryServiceError::validation(format!("filters: {error}")))?,
+        };
+
         let authorized_spaces = access::authorize_actor_for_retrieval_spaces(
             &self.runtime_data_plane,
             &context,
@@ -1278,6 +1287,7 @@ impl MemoryOpenApi for OpenMemoryService {
                         retriever_kinds: enabled_retriever_kinds.clone(),
                         memory_types: memory_type_filter.clone().unwrap_or_default(),
                         read_scope,
+                        metadata_filter: metadata_filter.clone(),
                     })
             })
             .collect();
