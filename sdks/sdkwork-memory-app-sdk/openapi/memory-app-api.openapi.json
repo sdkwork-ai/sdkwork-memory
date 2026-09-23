@@ -7635,6 +7635,16 @@
               }
             ]
           },
+          "observationDate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "reviewRequired": {
             "type": "boolean"
           },

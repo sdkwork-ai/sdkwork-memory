@@ -584,6 +584,12 @@ pub struct MemoryExtractionRequest {
     /// prompt as its highest-priority instructions (mem0's `add(prompt=...)`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_instructions: Option<String>,
+    /// When the extracted conversation took place, as `YYYY-MM-DD`. This is
+    /// the model's only temporal anchor for resolving relative references
+    /// ("last week", "in March"); defaults to today when absent (mem0's
+    /// `Observation Date`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observation_date: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

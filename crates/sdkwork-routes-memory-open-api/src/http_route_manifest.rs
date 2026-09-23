@@ -8,213 +8,163 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "/mem/v3/api/memory/capabilities",
         "memory",
         "capabilities.retrieve",
-    )
-    .with_required_permission("memory.open.capabilities.read"),
+    ).with_required_permission("memory.open.capabilities.read"),
     HttpRoute::api_key(
         HttpMethod::Post,
         "/mem/v3/api/memory/events",
         "memory",
         "events.create",
-    )
-    .with_required_permission("memory.open.events.write")
-    .with_idempotent(true)
-    .with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    ).with_required_permission("memory.open.events.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::OpenApiDefault),
     HttpRoute::api_key(
         HttpMethod::Get,
         "/mem/v3/api/memory/events/{eventId}",
         "memory",
         "events.retrieve",
-    )
-    .with_required_permission("memory.open.events.read"),
+    ).with_required_permission("memory.open.events.read"),
     HttpRoute::api_key(
         HttpMethod::Get,
         "/mem/v3/api/memory/memories",
         "memory",
         "memories.list",
-    )
-    .with_required_permission("memory.open.records.read"),
+    ).with_required_permission("memory.open.records.read"),
     HttpRoute::api_key(
         HttpMethod::Post,
         "/mem/v3/api/memory/memories",
         "memory",
         "memories.create",
-    )
-    .with_required_permission("memory.open.records.write")
-    .with_idempotent(true)
-    .with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    ).with_required_permission("memory.open.records.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::OpenApiDefault),
     HttpRoute::api_key(
         HttpMethod::Get,
         "/mem/v3/api/memory/memories/{memoryId}",
         "memory",
         "memories.retrieve",
-    )
-    .with_required_permission("memory.open.records.read"),
+    ).with_required_permission("memory.open.records.read"),
     HttpRoute::api_key(
         HttpMethod::Patch,
         "/mem/v3/api/memory/memories/{memoryId}",
         "memory",
         "memories.update",
-    )
-    .with_required_permission("memory.open.records.write")
-    .with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    ).with_required_permission("memory.open.records.write").with_rate_limit_tier(RateLimitTier::OpenApiDefault),
     HttpRoute::api_key(
         HttpMethod::Delete,
         "/mem/v3/api/memory/memories/{memoryId}",
         "memory",
         "memories.delete",
-    )
-    .with_required_permission("memory.open.records.write")
-    .with_rate_limit_tier(RateLimitTier::AuthCritical),
+    ).with_required_permission("memory.open.records.write").with_rate_limit_tier(RateLimitTier::AuthCritical),
     HttpRoute::api_key(
         HttpMethod::Post,
         "/mem/v3/api/memory/memories/delete-all",
         "memory",
         "memories.deleteAll",
-    )
-    .with_required_permission("memory.open.records.write")
-    .with_idempotent(true)
-    .with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    ).with_required_permission("memory.open.records.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::OpenApiDefault),
     HttpRoute::api_key(
         HttpMethod::Post,
         "/mem/v3/api/memory/retrievals",
         "memory",
         "retrievals.create",
-    )
-    .with_required_permission("memory.open.retrievals.write")
-    .with_idempotent(true)
-    .with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    ).with_required_permission("memory.open.retrievals.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::OpenApiDefault),
     HttpRoute::api_key(
         HttpMethod::Get,
         "/mem/v3/api/memory/retrievals/{retrievalId}",
         "memory",
         "retrievals.retrieve",
-    )
-    .with_required_permission("memory.open.retrievals.read"),
+    ).with_required_permission("memory.open.retrievals.read"),
     HttpRoute::api_key(
         HttpMethod::Post,
         "/mem/v3/api/memory/context_packs",
         "memory",
         "contextPacks.create",
-    )
-    .with_required_permission("memory.open.contextPacks.write")
-    .with_idempotent(true)
-    .with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    ).with_required_permission("memory.open.contextPacks.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::OpenApiDefault),
     HttpRoute::api_key(
         HttpMethod::Get,
         "/mem/v3/api/memory/context_packs/{contextPackId}",
         "memory",
         "contextPacks.retrieve",
-    )
-    .with_required_permission("memory.open.contextPacks.read"),
+    ).with_required_permission("memory.open.contextPacks.read"),
     HttpRoute::api_key(
         HttpMethod::Post,
         "/mem/v3/api/memory/feedback",
         "memory",
         "feedback.create",
-    )
-    .with_required_permission("memory.open.feedback.write")
-    .with_idempotent(true)
-    .with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    ).with_required_permission("memory.open.feedback.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::OpenApiDefault),
     HttpRoute::api_key(
         HttpMethod::Post,
         "/mem/v3/api/memory/extractions",
         "memory",
         "extractions.create",
-    )
-    .with_required_permission("memory.open.learning.write")
-    .with_idempotent(true)
-    .with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    ).with_required_permission("memory.open.learning.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::OpenApiDefault),
     HttpRoute::api_key(
         HttpMethod::Get,
         "/mem/v3/api/memory/candidates",
         "memory",
         "candidates.list",
-    )
-    .with_required_permission("memory.open.candidates.read"),
+    ).with_required_permission("memory.open.candidates.read"),
     HttpRoute::api_key(
         HttpMethod::Get,
         "/mem/v3/api/memory/candidates/{candidateId}",
         "memory",
         "candidates.retrieve",
-    )
-    .with_required_permission("memory.open.candidates.read"),
+    ).with_required_permission("memory.open.candidates.read"),
     HttpRoute::api_key(
         HttpMethod::Get,
         "/mem/v3/api/memory/provider_health",
         "memory",
         "providerHealth.retrieve",
-    )
-    .with_required_permission("memory.open.providerHealth.read"),
+    ).with_required_permission("memory.open.providerHealth.read"),
     HttpRoute::api_key(
         HttpMethod::Get,
         "/mem/v3/api/memory/entities",
         "memory",
         "entities.list",
-    )
-    .with_required_permission("memory.open.entities.read"),
+    ).with_required_permission("memory.open.entities.read"),
     HttpRoute::api_key(
         HttpMethod::Post,
         "/mem/v3/api/memory/entities",
         "memory",
         "entities.create",
-    )
-    .with_required_permission("memory.open.entities.write")
-    .with_idempotent(true)
-    .with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    ).with_required_permission("memory.open.entities.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::OpenApiDefault),
     HttpRoute::api_key(
         HttpMethod::Get,
         "/mem/v3/api/memory/entities/{entityId}",
         "memory",
         "entities.retrieve",
-    )
-    .with_required_permission("memory.open.entities.read"),
+    ).with_required_permission("memory.open.entities.read"),
     HttpRoute::api_key(
         HttpMethod::Patch,
         "/mem/v3/api/memory/entities/{entityId}",
         "memory",
         "entities.update",
-    )
-    .with_required_permission("memory.open.entities.write")
-    .with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    ).with_required_permission("memory.open.entities.write").with_rate_limit_tier(RateLimitTier::OpenApiDefault),
     HttpRoute::api_key(
         HttpMethod::Get,
         "/mem/v3/api/memory/edges",
         "memory",
         "edges.list",
-    )
-    .with_required_permission("memory.open.entities.read"),
+    ).with_required_permission("memory.open.entities.read"),
     HttpRoute::api_key(
         HttpMethod::Post,
         "/mem/v3/api/memory/edges",
         "memory",
         "edges.create",
-    )
-    .with_required_permission("memory.open.entities.write")
-    .with_idempotent(true)
-    .with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    ).with_required_permission("memory.open.entities.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::OpenApiDefault),
     HttpRoute::api_key(
         HttpMethod::Get,
         "/mem/v3/api/memory/edges/{edgeId}",
         "memory",
         "edges.retrieve",
-    )
-    .with_required_permission("memory.open.entities.read"),
+    ).with_required_permission("memory.open.entities.read"),
     HttpRoute::api_key(
         HttpMethod::Patch,
         "/mem/v3/api/memory/edges/{edgeId}",
         "memory",
         "edges.update",
-    )
-    .with_required_permission("memory.open.entities.write")
-    .with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    ).with_required_permission("memory.open.entities.write").with_rate_limit_tier(RateLimitTier::OpenApiDefault),
     HttpRoute::api_key(
         HttpMethod::Delete,
         "/mem/v3/api/memory/edges/{edgeId}",
         "memory",
         "edges.delete",
-    )
-    .with_required_permission("memory.open.entities.write")
-    .with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    ).with_required_permission("memory.open.entities.write").with_rate_limit_tier(RateLimitTier::OpenApiDefault),
 ];
 
 pub fn open_route_manifest() -> HttpRouteManifest {

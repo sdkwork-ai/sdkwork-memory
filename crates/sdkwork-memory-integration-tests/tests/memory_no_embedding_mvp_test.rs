@@ -1109,7 +1109,9 @@ async fn additive_hybrid_strategy_gates_on_semantic_threshold_and_explains() {
 
 /// Test double LLM: returns a fixed additive envelope with two facts, one
 /// attributed to the user and one to the assistant.
-struct ScriptedLlm;
+struct ScriptedLlm {
+    seen_prompts: std::sync::Mutex<Vec<String>>,
+}
 
 #[async_trait::async_trait]
 impl LanguageModelPort for ScriptedLlm {
@@ -1117,7 +1119,11 @@ impl LanguageModelPort for ScriptedLlm {
         "scripted"
     }
 
-    async fn generate(&self, _command: LanguageModelCommand) -> Result<String, MemorySpiError> {
+    async fn generate(&self, command: LanguageModelCommand) -> Result<String, MemorySpiError> {
+        self.seen_prompts
+            .lock()
+            .unwrap()
+            .push(command.prompt.clone());
         Ok(String::from(
             r#"{"memory": [
                 {"id": "0", "text": "User prefers Portland roasters", "attributed_to": "user", "linked_memory_ids": []},
@@ -1130,7 +1136,10 @@ impl LanguageModelPort for ScriptedLlm {
 #[tokio::test]
 async fn extraction_runs_llm_additive_pipeline_when_a_provider_is_bound() {
     let store = sdkwork_memory_test_support::space_fixtures::new_seeded_in_memory_store().await;
-    let service = OpenMemoryService::new(store).with_llm(std::sync::Arc::new(ScriptedLlm));
+    let llm = std::sync::Arc::new(ScriptedLlm {
+        seen_prompts: std::sync::Mutex::new(Vec::new()),
+    });
+    let service = OpenMemoryService::new(store).with_llm(llm.clone());
     let context = open_context();
 
     let event = service
@@ -1167,6 +1176,7 @@ async fn extraction_runs_llm_additive_pipeline_when_a_provider_is_bound() {
                 input_events: vec![event_id],
                 extraction_mode: None,
                 custom_instructions: Some("Focus on coffee preferences".to_string()),
+                observation_date: Some("2026-09-20".to_string()),
             },
         )
         .await
@@ -1174,6 +1184,16 @@ async fn extraction_runs_llm_additive_pipeline_when_a_provider_is_bound() {
     assert_eq!(result["extractionMode"], "additive_llm");
     assert_eq!(result["candidateCount"], 2);
     assert_eq!(result["refusedCount"], 0);
+
+    // The prompt the model saw must carry the caller's temporal anchor and
+    // custom instructions - the mem0 Observation Date / add(prompt=...) inputs.
+    let prompts = llm.seen_prompts.lock().unwrap();
+    assert_eq!(prompts.len(), 1);
+    assert!(prompts[0].contains("2026-09-20"), "observation date anchor");
+    assert!(
+        prompts[0].contains("Focus on coffee preferences"),
+        "custom instructions"
+    );
 
     let listed = service
         .list_candidates(
@@ -1200,6 +1220,7 @@ async fn extraction_runs_llm_additive_pipeline_when_a_provider_is_bound() {
                 input_events: vec![event_id],
                 extraction_mode: Some("deterministic".to_string()),
                 custom_instructions: None,
+                observation_date: None,
             },
         )
         .await
@@ -1243,6 +1264,7 @@ async fn extraction_without_a_provider_keeps_the_deterministic_path() {
                 input_events: vec![event.event_id],
                 extraction_mode: None,
                 custom_instructions: None,
+                observation_date: None,
             },
         )
         .await

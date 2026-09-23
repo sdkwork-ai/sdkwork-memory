@@ -918,6 +918,22 @@ impl OpenMemoryService {
         // event contents. Each accepted fact becomes its own candidate so the
         // approval flow stays per-memory, exactly as one mem0 `add` yields
         // many memories.
+        if let Some(date) = request.observation_date.as_deref() {
+            let bytes = date.trim().as_bytes();
+            let well_formed = bytes.len() == 10
+                && bytes[4] == b'-'
+                && bytes[7] == b'-'
+                && bytes
+                    .iter()
+                    .enumerate()
+                    .all(|(index, byte)| matches!(index, 4 | 7) || byte.is_ascii_digit());
+            if !well_formed {
+                return Err(MemoryServiceError::validation(
+                    "observationDate must be a YYYY-MM-DD date",
+                ));
+            }
+        }
+
         let llm_requested = request
             .extraction_mode
             .as_deref()
@@ -941,7 +957,7 @@ impl OpenMemoryService {
                     existing_memories: Vec::new(),
                     last_k_messages: Vec::new(),
                     new_messages: turns,
-                    observation_date: None,
+                    observation_date: request.observation_date.clone(),
                     current_date: None,
                     custom_instructions: request.custom_instructions.clone(),
                     agent_id: None,
