@@ -241,6 +241,9 @@ pub struct MemoryRecord {
     pub canonical_text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary_text: Option<String>,
+    /// Caller metadata (contract `metadata`), persisted as JSON.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Value>,
     pub confidence: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence_count: Option<i32>,

@@ -1,8 +1,8 @@
 use sdkwork_intelligence_memory_service::OpenMemoryService;
 use sdkwork_memory_contract::{
     DeleteAllMemoriesRequest, ListMemoriesQuery, MemoryContextPackRequest,
-    MemoryImplementationKind, MemoryOpenApi, MemoryOpenApiRequestContext, MemoryRecordRequest,
-    MemoryRetrievalRequest, MemoryType,
+    MemoryImplementationKind, MemoryOpenApi, MemoryOpenApiRequestContext, MemoryRecordPatch,
+    MemoryRecordRequest, MemoryRetrievalRequest, MemoryType,
 };
 
 fn open_context() -> MemoryOpenApiRequestContext {
@@ -487,4 +487,127 @@ async fn delete_all_memories_sweeps_active_records_and_reports_the_ids() {
         .expect("repeat delete all");
 
     assert_eq!(repeat.deleted_count, 0);
+}
+
+#[tokio::test]
+
+async fn metadata_is_persisted_merged_and_filterable() {
+    let store = sdkwork_memory_test_support::space_fixtures::new_seeded_in_memory_store().await;
+
+    let service = OpenMemoryService::new(store);
+
+    let context = open_context();
+
+    let created = service
+        .create_memory(
+            context.clone(),
+            MemoryRecordRequest {
+                space_id: 2,
+
+                scope: "user".to_string(),
+
+                memory_type: MemoryType::Semantic,
+
+                subject: None,
+
+                predicate: None,
+
+                object_text: Some("metadata filterable".to_string()),
+
+                canonical_text: "User works in Rust with tracing".to_string(),
+
+                summary_text: None,
+
+                user_id: None,
+
+                language: None,
+
+                sensitivity_level: None,
+
+                expires_at: None,
+
+                metadata: Some(serde_json::json!({
+
+                    "topic": "tooling",
+
+                    "env": "dev"
+
+                })),
+
+                tags: None,
+            },
+        )
+        .await
+        .expect("create with metadata");
+
+    assert_eq!(
+        created.metadata,
+        Some(serde_json::json!({"topic": "tooling", "env": "dev"})),
+        "the response must echo the persisted metadata"
+    );
+
+    // A metadata patch shallow-merges: incoming keys win, others survive.
+
+    let merged = service
+        .update_memory(
+            context.clone(),
+            created.memory_id,
+            2,
+            MemoryRecordPatch {
+                canonical_text: None,
+
+                subject: None,
+
+                summary_text: None,
+
+                metadata: Some(serde_json::json!({ "topic": "rust-tooling" })),
+            },
+        )
+        .await
+        .expect("patch metadata");
+
+    assert_eq!(
+        merged.metadata,
+        Some(serde_json::json!({"topic": "rust-tooling", "env": "dev"})),
+        "metadata patches must shallow-merge like mem0 updates"
+    );
+
+    // Metadata filters now evaluate over caller-written metadata end to end.
+
+    let filtered = service
+        .create_retrieval(
+            context.clone(),
+            MemoryRetrievalRequest {
+                query: "rust tracing".to_string(),
+
+                space_ids: vec![2],
+
+                actor_id: None,
+
+                retrieval_profile_id: None,
+
+                memory_types: None,
+
+                filters: Some(serde_json::json!({
+
+                    "AND": [{ "topic": { "eq": "rust-tooling" } }]
+
+                })),
+
+                top_k: 5,
+
+                context_budget_tokens: 512,
+
+                show_expired: None,
+
+                include_trace: None,
+            },
+        )
+        .await
+        .expect("filtered retrieval");
+
+    assert!(
+        !filtered.hits.is_empty(),
+        "a metadata filter must hit records whose metadata was written by the caller"
+    );
 }

@@ -67,6 +67,8 @@ pub struct MemoryCanonicalRecord {
     /// Instant after which the record is hidden from retrieval paths, mirroring
     /// the contract-declared `expiresAt` field on the canonical record schemas.
     pub expires_at: Option<String>,
+    /// Caller metadata as stored JSON (contract `metadata` field).
+    pub metadata_json: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,6 +99,9 @@ pub struct CreateCanonicalMemoryCommand {
     pub sensitivity_level: String,
     /// Optional contract-declared expiration instant persisted with the record.
     pub expires_at: Option<String>,
+    /// Optional caller metadata, serialized JSON; persisted into
+    /// `ai_record.metadata_json` where metadata filters evaluate.
+    pub metadata_json: Option<String>,
     pub journal: MemoryMutationJournal,
 }
 
@@ -118,6 +123,9 @@ pub struct SupersedeCanonicalMemoryAtomicCommand {
     pub sensitivity_level: String,
     /// Optional contract-declared expiration instant persisted with the replacement.
     pub expires_at: Option<String>,
+    /// Optional caller metadata, serialized JSON; persisted into
+    /// `ai_record.metadata_json` where metadata filters evaluate.
+    pub metadata_json: Option<String>,
     pub created_journal: MemoryMutationJournal,
     pub superseded_journal: MemoryMutationJournal,
 }
@@ -145,6 +153,9 @@ pub struct UpdateCanonicalMemoryCommand {
     pub memory_id: String,
     pub canonical_text: Option<String>,
     pub subject: Option<String>,
+    /// Replacement metadata (merged by the caller); serialized JSON persisted
+    /// into `ai_record.metadata_json`.
+    pub metadata_json: Option<String>,
     pub journal: MemoryMutationJournal,
 }
 

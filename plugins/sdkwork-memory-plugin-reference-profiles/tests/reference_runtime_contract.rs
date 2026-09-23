@@ -592,6 +592,7 @@ async fn reference_record_quota_admission_is_atomic_and_releases_deleted_slots()
         sensitivity_level: "internal".to_string(),
         expires_at: None,
         journal: mutation_journal("quota-first", "created"),
+        metadata_json: None,
     };
     assert!(matches!(
         MemoryRecordStorePort::create_canonical_atomic_with_quota(&runtime, first, 1)
@@ -614,6 +615,7 @@ async fn reference_record_quota_admission_is_atomic_and_releases_deleted_slots()
             sensitivity_level: "internal".to_string(),
             expires_at: None,
             journal: mutation_journal("quota-rejected", "created"),
+            metadata_json: None,
         },
         1,
     )
@@ -681,6 +683,7 @@ async fn reference_record_quota_admission_is_atomic_and_releases_deleted_slots()
             sensitivity_level: "internal".to_string(),
             expires_at: None,
             journal: mutation_journal("quota-reused", "created"),
+            metadata_json: None,
         },
         1,
     )
@@ -1094,6 +1097,7 @@ async fn reference_rich_retrieval_is_bounded_filtered_and_fail_closed() {
                 sensitivity_level: sensitivity.to_string(),
                 expires_at: None,
                 journal: mutation_journal(memory_id, "created"),
+                metadata_json: None,
             },
         )
         .await
@@ -1227,6 +1231,7 @@ async fn reference_supersede_atomic_chain_persists_dual_journals_and_retry_is_id
             sensitivity_level: "internal".to_string(),
             expires_at: None,
             journal: mutation_journal("supersede-old", "created"),
+            metadata_json: None,
         },
     )
     .await
@@ -1246,6 +1251,7 @@ async fn reference_supersede_atomic_chain_persists_dual_journals_and_retry_is_id
         expires_at: None,
         created_journal: mutation_journal("supersede-new", "supersede-created"),
         superseded_journal: mutation_journal("supersede-old", "supersede-superseded"),
+        metadata_json: None,
     };
 
     let first =
@@ -1381,6 +1387,7 @@ async fn reference_supersede_atomic_chain_persists_dual_journals_and_retry_is_id
         expires_at: None,
         created_journal: mutation_journal("supersede-new", "supersede-created"),
         superseded_journal: mutation_journal("supersede-old", "supersede-superseded"),
+        metadata_json: None,
     };
     assert!(matches!(
         MemoryRecordStorePort::supersede_canonical_atomic_with_quota(
@@ -1407,6 +1414,7 @@ async fn reference_supersede_atomic_chain_persists_dual_journals_and_retry_is_id
         expires_at: None,
         created_journal: mutation_journal("supersede-new", "different-journal"),
         superseded_journal: mutation_journal("supersede-old", "supersede-superseded"),
+        metadata_json: None,
     };
     assert!(matches!(
         MemoryRecordStorePort::supersede_canonical_atomic_with_quota(
@@ -1477,6 +1485,7 @@ async fn reference_supersede_quota_rejection_keeps_chain_and_journals_unchanged(
                 sensitivity_level: "internal".to_string(),
                 expires_at: None,
                 journal: mutation_journal(memory_id, "created"),
+                metadata_json: None,
             },
         )
         .await
@@ -1499,6 +1508,7 @@ async fn reference_supersede_quota_rejection_keeps_chain_and_journals_unchanged(
             expires_at: None,
             created_journal: mutation_journal("supersede-quota-new", "quota-created"),
             superseded_journal: mutation_journal("supersede-quota-old", "quota-superseded"),
+            metadata_json: None,
         },
         2,
     )

@@ -1386,6 +1386,7 @@ mod eval_tests {
                 "editor preference is modal keybindings",
                 "internal",
                 None,
+                None,
             )
             .await
             .expect("expected eval memory");
@@ -1400,6 +1401,7 @@ mod eval_tests {
                 "prefers a light color theme",
                 "theme preference is light",
                 "internal",
+                None,
                 None,
             )
             .await

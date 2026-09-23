@@ -14,7 +14,6 @@ use sdkwork_routes_memory_backend_api::{
 };
 use sdkwork_web_core::CONTENT_SHA256_HEADER;
 use serde_json::json;
-use sqlx::Row;
 use tower::util::ServiceExt;
 
 fn authed_get(uri: &str) -> Request<Body> {

@@ -577,6 +577,10 @@ impl OpenMemoryService {
             created_at: detail.created_at,
             updated_at: detail.updated_at,
             expires_at: detail.expires_at,
+            metadata: detail
+                .metadata_json
+                .as_deref()
+                .and_then(|json| serde_json::from_str(json).ok()),
             version,
         })
     }
@@ -616,6 +620,10 @@ impl OpenMemoryService {
             created_at: detail.created_at,
             updated_at: detail.updated_at,
             expires_at: detail.expires_at,
+            metadata: detail
+                .metadata_json
+                .as_deref()
+                .and_then(|json| serde_json::from_str(json).ok()),
             version,
         })
     }
@@ -675,6 +683,19 @@ impl OpenMemoryService {
             None => Err(MemoryServiceError::validation(
                 "expiresAt must be an RFC 3339 timestamp such as 2027-01-01T00:00:00Z",
             )),
+        }
+    }
+
+    /// Serialize caller metadata into the stored JSON text form. `None` stays
+    /// `None`; a non-serializable value is a storage fault, not a silent drop.
+    pub(crate) fn serialize_metadata(
+        value: Option<&serde_json::Value>,
+    ) -> MemoryServiceResult<Option<String>> {
+        match value {
+            None => Ok(None),
+            Some(value) => serde_json::to_string(value).map(Some).map_err(|error| {
+                MemoryServiceError::storage(format!("metadata encode failed: {error}"))
+            }),
         }
     }
 
@@ -1024,6 +1045,7 @@ impl MemoryOpenApi for OpenMemoryService {
                     canonical_text: request.canonical_text,
                     sensitivity_level: sensitivity.to_string(),
                     expires_at: Self::normalize_expires_at(request.expires_at.as_deref())?,
+                    metadata_json: Self::serialize_metadata(request.metadata.as_ref())?,
                     journal,
                 },
                 quota_limits.max_records_per_space,
@@ -1066,7 +1088,7 @@ impl MemoryOpenApi for OpenMemoryService {
         )
         .await?;
         let scope = Self::scope(&context, space_id)?;
-        let _existing = self
+        let existing = self
             .load_scoped_record(&context, space_id, memory_id)
             .await?;
 
@@ -1076,6 +1098,34 @@ impl MemoryOpenApi for OpenMemoryService {
         if let Some(ref subject) = patch.subject {
             assert_memory_text_is_safe(&[("subject", subject)])?;
         }
+
+        // Mirroring mem0's update semantics, a metadata patch shallow-merges
+        // into the stored metadata instead of replacing it wholesale; incoming
+        // keys win.
+        let merged_metadata_json = match patch.metadata.clone() {
+            None => Self::serialize_metadata(existing.metadata.as_ref())?,
+            Some(incoming) if incoming.is_object() => {
+                let merged = match existing.metadata {
+                    Some(mut current) if current.is_object() => {
+                        if let (Some(current_obj), Some(incoming_obj)) =
+                            (current.as_object_mut(), incoming.as_object())
+                        {
+                            for (key, value) in incoming_obj {
+                                current_obj.insert(key.clone(), value.clone());
+                            }
+                        }
+                        current
+                    }
+                    _ => incoming,
+                };
+                Self::serialize_metadata(Some(&merged))?
+            }
+            Some(_) => {
+                return Err(MemoryServiceError::validation(
+                    "metadata must be a JSON object",
+                ))
+            }
+        };
 
         let event_payload = serde_json::json!({
             "memoryId": memory_id,
@@ -1095,6 +1145,7 @@ impl MemoryOpenApi for OpenMemoryService {
                 memory_id: memory_id_text,
                 canonical_text: patch.canonical_text,
                 subject: patch.subject,
+                metadata_json: merged_metadata_json,
                 journal,
             })
             .await?
@@ -1298,8 +1349,12 @@ impl MemoryOpenApi for OpenMemoryService {
                 "retrieval profile must enable at least one retriever",
             ));
         }
-        let candidate_limit = (effective_top_k as u32)
-            .saturating_mul(4)
+        // Over-fetch before scoring, mirroring mem0's `internal_limit =
+        // max(limit * 4, 60)`: small top_k still builds a candidate pool wide
+        // enough for the fusion stage to discriminate. The warehouse-level
+        // ceiling (MAX_MEMORY_RETRIEVAL_CANDIDATES) stays as a deliberate
+        // bound upstream does not impose.
+        let candidate_limit = ((effective_top_k as u32).saturating_mul(4).max(60))
             .clamp(1, MAX_MEMORY_RETRIEVAL_CANDIDATES);
 
         let memory_type_filter = request.memory_types.as_ref().map(|types| {

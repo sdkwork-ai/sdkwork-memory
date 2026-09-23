@@ -435,6 +435,7 @@ impl NativeSqlMemoryStore {
               r.created_at,
               r.updated_at,
               r.expires_at,
+              r.metadata_json,
               r.version,
               sup.uuid AS supersedes_uuid,
               sub.uuid AS superseded_by_uuid
@@ -506,6 +507,7 @@ impl NativeSqlMemoryStore {
         canonical_text: &str,
         sensitivity_level: &str,
         expires_at: Option<&str>,
+        metadata_json: Option<&str>,
     ) -> Result<(), NativeSqlStoreError> {
         self.ensure_space(scope).await?;
         sqlx::query(
@@ -530,11 +532,12 @@ impl NativeSqlMemoryStore {
               status,
               sensitivity_level,
               expires_at,
+              metadata_json,
               created_at,
               updated_at,
               version
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1.0, 1, 0, 0.5, 0.5, 'active', ?, ?, ?, ?, 1)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1.0, 1, 0, 0.5, 0.5, 'active', ?, ?, ?, ?, ?, 1)
             "#,
         )
         .bind(self.next_row_id()?)
@@ -550,6 +553,7 @@ impl NativeSqlMemoryStore {
         .bind(canonical_text)
         .bind(sensitivity_level)
         .bind(expires_at)
+        .bind(metadata_json)
         .bind(now_text())
         .bind(now_text())
         .execute(&self.pool)
@@ -582,6 +586,7 @@ impl NativeSqlMemoryStore {
         canonical_text: &str,
         sensitivity_level: &str,
         expires_at: Option<&str>,
+        metadata_json: Option<&str>,
     ) -> Result<(), NativeSqlStoreError> {
         self.ensure_space(scope).await?;
         let old_row_id = self
@@ -602,6 +607,7 @@ impl NativeSqlMemoryStore {
             canonical_text,
             sensitivity_level,
             expires_at,
+            metadata_json,
         )
         .await?;
 
@@ -678,6 +684,7 @@ impl NativeSqlMemoryStore {
               r.created_at,
               r.updated_at,
               r.expires_at,
+              r.metadata_json,
               r.version,
               sup.uuid AS supersedes_uuid,
               sub.uuid AS superseded_by_uuid
@@ -749,6 +756,7 @@ impl NativeSqlMemoryStore {
                   r.created_at,
                   r.updated_at,
                   r.expires_at,
+                  r.metadata_json,
                   r.version,
                   sup.uuid AS supersedes_uuid,
                   sub.uuid AS superseded_by_uuid
@@ -794,6 +802,7 @@ impl NativeSqlMemoryStore {
                   r.created_at,
                   r.updated_at,
                   r.expires_at,
+                  r.metadata_json,
                   r.version,
                   sup.uuid AS supersedes_uuid,
                   sub.uuid AS superseded_by_uuid
@@ -997,6 +1006,7 @@ impl NativeSqlMemoryStore {
               r.created_at,
               r.updated_at,
               r.expires_at,
+              r.metadata_json,
               r.version,
               sup.uuid AS supersedes_uuid,
               sub.uuid AS superseded_by_uuid
@@ -2007,6 +2017,7 @@ impl NativeSqlMemoryStore {
         canonical_text: &str,
         sensitivity_level: &str,
         expires_at: Option<&str>,
+        metadata_json: Option<&str>,
     ) -> Result<(), NativeSqlStoreError> {
         sqlx::query(
             r#"
@@ -2015,9 +2026,10 @@ impl NativeSqlMemoryStore {
               subject, predicate, object_text, canonical_text,
               confidence, evidence_count, contradiction_count,
               importance_score, recency_score,
-              status, sensitivity_level, expires_at, created_at, updated_at, version
+              status, sensitivity_level, expires_at, metadata_json,
+              created_at, updated_at, version
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1.0, 1, 0, 0.5, 0.5, 'active', ?, ?, ?, ?, 1)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1.0, 1, 0, 0.5, 0.5, 'active', ?, ?, ?, ?, ?, 1)
             "#,
         )
         .bind(self.next_row_id()?)
@@ -2033,6 +2045,7 @@ impl NativeSqlMemoryStore {
         .bind(canonical_text)
         .bind(sensitivity_level)
         .bind(expires_at)
+        .bind(metadata_json)
         .bind(now_text())
         .bind(now_text())
         .execute(&mut **tx)
@@ -2139,6 +2152,7 @@ impl NativeSqlMemoryStore {
         memory_id: &str,
         canonical_text: Option<&str>,
         subject: Option<&str>,
+        metadata_json: Option<&str>,
     ) -> Result<bool, NativeSqlStoreError> {
         let now = now_text();
         let affected = sqlx::query(
@@ -2146,6 +2160,7 @@ impl NativeSqlMemoryStore {
             UPDATE ai_record
             SET canonical_text = COALESCE(?, canonical_text),
                 subject = COALESCE(?, subject),
+                metadata_json = COALESCE(?, metadata_json),
                 updated_at = ?,
                 version = version + 1
             WHERE tenant_id = ? AND space_id = ? AND uuid = ? AND status <> 'deleted'
@@ -2153,6 +2168,7 @@ impl NativeSqlMemoryStore {
         )
         .bind(canonical_text)
         .bind(subject)
+        .bind(metadata_json)
         .bind(&now)
         .bind(scope.tenant_id)
         .bind(scope.space_id)
@@ -2428,6 +2444,7 @@ impl NativeSqlMemoryStore {
                 command.proposed_text,
                 command.proposed_text,
                 "internal",
+                None,
                 None,
             )
             .await?;
@@ -5944,6 +5961,7 @@ pub struct NativeSqlMemoryRecordDetail {
     pub created_at: String,
     pub updated_at: String,
     pub expires_at: Option<String>,
+    pub metadata_json: Option<String>,
     pub version: i64,
 }
 
@@ -5968,6 +5986,7 @@ pub(crate) fn record_detail_from_row(row: AnyRow) -> NativeSqlMemoryRecordDetail
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
         expires_at: row.try_get("expires_at").ok(),
+        metadata_json: row.try_get("metadata_json").ok(),
         version: row.get("version"),
     }
 }

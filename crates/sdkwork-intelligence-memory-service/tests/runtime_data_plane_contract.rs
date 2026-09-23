@@ -762,6 +762,7 @@ async fn claimed_atomic_supersede_capability_still_fails_closed_without_mutation
                 expires_at: None,
                 created_journal: mutation_journal("memory-new", "supersede", "created"),
                 superseded_journal: mutation_journal("memory-old", "supersede", "superseded"),
+                metadata_json: None,
             },
             2,
         )
@@ -933,6 +934,7 @@ async fn canonical_record_retrieval_context_and_delete_are_scope_aware() {
             sensitivity_level: "internal".to_string(),
             expires_at: None,
             journal: mutation_journal("memory-1", "tenant-one", "created"),
+            metadata_json: None,
         })
         .await
         .unwrap();
@@ -949,6 +951,7 @@ async fn canonical_record_retrieval_context_and_delete_are_scope_aware() {
             sensitivity_level: "internal".to_string(),
             expires_at: None,
             journal: mutation_journal("memory-1", "tenant-two", "created"),
+            metadata_json: None,
         })
         .await
         .unwrap();

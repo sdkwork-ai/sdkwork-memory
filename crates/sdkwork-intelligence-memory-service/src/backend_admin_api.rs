@@ -1365,6 +1365,7 @@ impl OpenMemoryService {
                     expires_at: Self::normalize_expires_at(request.expires_at.as_deref())?,
                     created_journal,
                     superseded_journal,
+                    metadata_json: None,
                 },
                 quota_limits.max_records_per_space,
             )

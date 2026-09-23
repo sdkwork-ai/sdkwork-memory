@@ -318,6 +318,7 @@ impl NativeSqlMemoryStore {
                       r.created_at,
                       r.updated_at,
                       r.expires_at,
+                      r.metadata_json,
                       r.version,
                       sup.uuid AS supersedes_uuid,
                       sub.uuid AS superseded_by_uuid
@@ -383,6 +384,7 @@ impl NativeSqlMemoryStore {
                       r.created_at,
                       r.updated_at,
                       r.expires_at,
+                      r.metadata_json,
                       r.version,
                       sup.uuid AS supersedes_uuid,
                       sub.uuid AS superseded_by_uuid

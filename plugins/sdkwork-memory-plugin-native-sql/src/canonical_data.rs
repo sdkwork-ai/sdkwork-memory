@@ -61,6 +61,7 @@ impl NativeSqlMemoryStore {
             &command.canonical_text,
             &command.sensitivity_level,
             command.expires_at.as_deref(),
+            command.metadata_json.as_deref(),
         )
         .await?;
         append_journal_on_tx(self, &mut tx, &command.scope, &command.journal).await?;
@@ -158,7 +159,7 @@ impl NativeSqlMemoryStore {
             r#"
             SELECT id, status, supersedes_memory_id, superseded_by_memory_id,
                    user_id, scope, memory_type, subject, predicate,
-                   object_text, canonical_text, sensitivity_level, expires_at
+                   object_text, canonical_text, sensitivity_level, expires_at, metadata_json
             FROM ai_record
             WHERE tenant_id = ? AND space_id = ? AND uuid = ?
             "#,
@@ -256,6 +257,7 @@ impl NativeSqlMemoryStore {
             &command.canonical_text,
             &command.sensitivity_level,
             command.expires_at.as_deref(),
+            command.metadata_json.as_deref(),
         )
         .await?;
         let new_row_id: i64 = sqlx::query_scalar(
@@ -341,6 +343,7 @@ impl NativeSqlMemoryStore {
             &command.memory_id,
             command.canonical_text.as_deref(),
             command.subject.as_deref(),
+            command.metadata_json.as_deref(),
         )
         .await?;
         if !updated {
@@ -513,6 +516,7 @@ fn supersede_target_matches_command(
     let stored_canonical_text: String = row.get("canonical_text");
     let stored_sensitivity_level: String = row.get("sensitivity_level");
     let stored_expires_at: Option<String> = row.try_get("expires_at")?;
+    let stored_metadata_json: Option<String> = row.try_get("metadata_json")?;
 
     Ok(stored_user_id == command.scope.user_id
         && stored_scope == command.scope_label
@@ -522,7 +526,8 @@ fn supersede_target_matches_command(
         && stored_object_text == command.object_text
         && stored_canonical_text == command.canonical_text
         && stored_sensitivity_level == command.sensitivity_level
-        && stored_expires_at == command.expires_at)
+        && stored_expires_at == command.expires_at
+        && stored_metadata_json == command.metadata_json)
 }
 
 async fn supersede_journals_match(
@@ -708,5 +713,6 @@ pub(crate) fn into_canonical_record(row: NativeSqlMemoryRecordDetail) -> MemoryC
         updated_at: row.updated_at,
         version: row.version,
         expires_at: row.expires_at,
+        metadata_json: row.metadata_json,
     }
 }

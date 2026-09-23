@@ -84,6 +84,7 @@ async fn fixture_store() -> NativeSqlMemoryStore {
                 sensitivity_level: "internal".to_string(),
                 journal: journal(memory_id),
                 expires_at: None,
+                metadata_json: None,
             },
         )
         .await

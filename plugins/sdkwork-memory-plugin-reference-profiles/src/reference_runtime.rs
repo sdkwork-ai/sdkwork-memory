@@ -409,6 +409,7 @@ impl MemoryRecordStorePort for ReferenceMemoryRuntime {
             updated_at: timestamp,
             version: 1,
             expires_at: command.expires_at,
+            metadata_json: command.metadata_json,
         };
         let key = ScopedId::new(&command.scope, command.memory_id);
         let (outbox_key, outbox, audit_key, audit) =
@@ -549,6 +550,7 @@ impl MemoryRecordStorePort for ReferenceMemoryRuntime {
             updated_at: timestamp.clone(),
             version: 1,
             expires_at: command.expires_at,
+            metadata_json: command.metadata_json,
         };
         let (created_outbox_key, created_outbox, created_audit_key, created_audit) =
             reference_journal_entries(&command.scope, command.created_journal);
@@ -1388,6 +1390,7 @@ impl ReferenceMemoryRuntime {
             updated_at: timestamp,
             version: 1,
             expires_at: None,
+            metadata_json: None,
         };
         records.insert(record_key, MemoryRecordState::active_canonical(canonical));
         candidate_targets.insert(candidate_key.clone(), command.memory_id.clone());
