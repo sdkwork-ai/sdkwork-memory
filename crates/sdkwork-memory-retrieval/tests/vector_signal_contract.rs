@@ -285,6 +285,16 @@ fn commercial_retrieval_strategies_do_not_silently_enable_vector_recall() {
             .and_then(|entry| entry.get("weight"))
             .and_then(Value::as_f64)
             .unwrap_or(0.0);
+        if strategy == MemoryRetrievalStrategy::AdditiveHybrid {
+            // The additive strategy is the explicit opt-in: choosing it *is*
+            // the declaration that an embedding provider is part of the
+            // deployment, so its profile legitimately grants vector weight.
+            assert!(
+                weight > 0.0,
+                "the additive strategy must grant vector recall"
+            );
+            continue;
+        }
         assert_eq!(
             weight,
             0.0,

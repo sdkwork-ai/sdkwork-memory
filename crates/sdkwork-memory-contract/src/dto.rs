@@ -358,6 +358,16 @@ pub struct MemoryRetrievalRequest {
     /// Defaults to false, mirroring mem0's `show_expired` semantics.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_expired: Option<bool>,
+    /// Semantic-score gate under the additive-hybrid strategy, in `[0, 1]`.
+    /// Candidates whose vector similarity falls below it are dropped before
+    /// any secondary signal is consulted, mirroring mem0's `threshold`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub threshold: Option<f64>,
+    /// When true, hit explanations carry the per-signal score breakdown
+    /// (semantic / bm25 / entity / raw / maxPossible / final / threshold),
+    /// mirroring mem0's `explain`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub explain: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub include_trace: Option<bool>,
 }

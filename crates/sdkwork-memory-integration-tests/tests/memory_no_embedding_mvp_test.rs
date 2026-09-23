@@ -29,6 +29,7 @@ impl EmbeddingModelPort for ScriptedEmbedder {
     }
 }
 
+use sdkwork_memory_retrieval::MemoryRetrievalStrategy;
 use sdkwork_memory_spi::{EmbeddingCommand, EmbeddingModelPort, MemorySpiError};
 
 fn open_context() -> MemoryOpenApiRequestContext {
@@ -111,6 +112,8 @@ async fn remembers_retrieves_and_builds_context_without_embeddings() {
                 context_budget_tokens: 512,
                 show_expired: None,
                 include_trace: None,
+                threshold: None,
+                explain: None,
             },
         )
         .await
@@ -298,6 +301,8 @@ async fn retrieval_and_listing_hide_expired_records_unless_show_expired() {
         context_budget_tokens: 512,
 
         show_expired,
+        threshold: None,
+        explain: None,
 
         include_trace: None,
     };
@@ -627,6 +632,8 @@ async fn metadata_is_persisted_merged_and_filterable() {
                 show_expired: None,
 
                 include_trace: None,
+                threshold: None,
+                explain: None,
             },
         )
         .await
@@ -837,6 +844,8 @@ async fn entity_provenance_boost_surfaces_graph_linked_memories() {
         context_budget_tokens: 512,
 
         show_expired: None,
+        threshold: None,
+        explain: None,
 
         include_trace: None,
     };
@@ -933,6 +942,8 @@ async fn vector_signal_promotes_the_semantically_near_memory_when_bound() {
         top_k: 5,
         context_budget_tokens: 512,
         show_expired: None,
+        threshold: None,
+        explain: None,
         include_trace: None,
     };
 
@@ -987,4 +998,108 @@ async fn vector_signal_promotes_the_semantically_near_memory_when_bound() {
         .as_ref()
         .and_then(|explanation| explanation["contributingRetrievers"].as_array())
         .is_some_and(|retrievers| retrievers.iter().any(|name| name == "vector"))));
+}
+
+#[tokio::test]
+async fn additive_hybrid_strategy_gates_on_semantic_threshold_and_explains() {
+    let store = sdkwork_memory_test_support::space_fixtures::new_seeded_in_memory_store().await;
+    let service = OpenMemoryService::new(store)
+        .with_embedder(std::sync::Arc::new(ScriptedEmbedder))
+        .with_retrieval_strategy(MemoryRetrievalStrategy::AdditiveHybrid);
+    let context = open_context();
+
+    let request = |text: &str| MemoryRecordRequest {
+        space_id: 2,
+        scope: "user".to_string(),
+        memory_type: MemoryType::Semantic,
+        subject: None,
+        predicate: None,
+        object_text: Some(text.to_string()),
+        canonical_text: text.to_string(),
+        summary_text: None,
+        user_id: None,
+        language: None,
+        sensitivity_level: None,
+        expires_at: None,
+        metadata: None,
+        tags: None,
+    };
+    // "review" puts the near memory on the query vector; the rival is
+    // orthogonal, so a positive threshold must gate it out entirely.
+    let near = service
+        .create_memory(context.clone(), request("Gantt chart review cadence"))
+        .await
+        .expect("create near memory");
+    let rival = service
+        .create_memory(context.clone(), request("Gantt chart checklist"))
+        .await
+        .expect("create orthogonal memory");
+
+    let run =
+        async |explain: bool, threshold: Option<f64>, context: &MemoryOpenApiRequestContext| {
+            service
+                .create_retrieval(
+                    context.clone(),
+                    MemoryRetrievalRequest {
+                        query: "gantt chart review".to_string(),
+                        space_ids: vec![2],
+                        actor_id: None,
+                        retrieval_profile_id: None,
+                        memory_types: None,
+                        filters: None,
+                        top_k: 5,
+                        context_budget_tokens: 512,
+                        show_expired: None,
+                        threshold,
+                        explain: Some(explain),
+                        include_trace: None,
+                    },
+                )
+                .await
+                .expect("additive retrieval")
+        };
+
+    let explained = run(true, Some(0.0), &context).await;
+    let near_hit = explained
+        .hits
+        .iter()
+        .find(|hit| {
+            hit.memory
+                .as_ref()
+                .is_some_and(|m| m.memory_id == near.memory_id)
+        })
+        .expect("near memory must survive a zero threshold");
+    let details = near_hit.explanation.as_ref().expect("explanation")["scoreDetails"].clone();
+    assert_eq!(
+        details["semanticScore"],
+        serde_json::json!(1.0),
+        "the scripted near vector must score a full semantic match"
+    );
+    // maxPossible grows to 2.0 once BM25 participates, and the final score is
+    // the raw sum clamped by it - mem0's exact arithmetic.
+    let max_possible = details["maxPossibleScore"].as_f64().unwrap();
+    assert!((max_possible - 2.0).abs() < 1e-9);
+    let final_score = details["finalScore"].as_f64().unwrap();
+    assert!(final_score > 0.5 && final_score <= 1.0);
+    assert_eq!(details["threshold"], serde_json::json!(0.0));
+
+    // A positive threshold gates on the semantic score alone: the orthogonal
+    // memory has zero semantic score, so no keyword signal can rescue it.
+    let gated = run(false, Some(0.5), &context).await;
+    assert!(
+        gated.hits.iter().all(|hit| hit
+            .memory
+            .as_ref()
+            .is_some_and(|m| m.memory_id != rival.memory_id)),
+        "the orthogonal memory must be thresholded out by its semantic score"
+    );
+    assert!(
+        gated.hits.iter().any(|hit| hit
+            .memory
+            .as_ref()
+            .is_some_and(|m| m.memory_id == near.memory_id)),
+        "the on-vector memory must clear the threshold"
+    );
+
+    let _ = rival;
 }

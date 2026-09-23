@@ -9,6 +9,7 @@ publish = false
 [lints]
 workspace = true
 [dev-dependencies]
+sdkwork-memory-retrieval.workspace = true
 async-trait.workspace = true
 axum.workspace = true
 http.workspace = true

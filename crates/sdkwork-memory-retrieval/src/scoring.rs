@@ -35,6 +35,9 @@
 
 use std::collections::BTreeMap;
 
+use crate::bm25::{normalized_keyword_scores, Bm25Document};
+use crate::lemmatization::lemmatize_for_bm25;
+
 /// Weight applied to the entity-link boost before summing.
 ///
 /// Ported from `ENTITY_BOOST_WEIGHT` in `mem0/utils/scoring.py:57`.
@@ -493,4 +496,67 @@ mod tests {
     fn empty_candidate_set_yields_no_hits() {
         assert!(score_and_rank(&[], &HybridSignals::default(), 0.1, 10, true).is_empty());
     }
+}
+
+/// One candidate for [`score_candidates_additive`]: the identifier, the text
+/// the keyword signal indexes, and the vector similarity for this query.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AdditiveScoreInput<'a> {
+    pub memory_id: &'a str,
+    pub canonical_text: &'a str,
+    /// Vector similarity in `[0, 1]`; `0.0` when no embedding provider scored
+    /// this candidate.
+    pub semantic_score: f64,
+}
+
+/// Run the mem0 additive-fusion scoring over a candidate pool, end to end.
+///
+/// Composes the keyword stage (lemmatized query + BM25 over the candidate
+/// texts, normalized onto `[0, 1]`), the entity-boost map the caller already
+/// resolved, and the per-candidate semantic scores into [`score_and_rank`].
+/// This is the production constructor path for [`HybridSignals`]: all three
+/// signals participate, `threshold` gates the semantic score exactly as
+/// upstream does, and `explain` attaches the seven-field [`ScoreDetails`]
+/// breakdown.
+#[must_use]
+pub fn score_candidates_additive(
+    query: &str,
+    candidates: &[AdditiveScoreInput<'_>],
+    entity_boosts: &BTreeMap<String, f64>,
+    threshold: f64,
+    top_k: usize,
+    explain: bool,
+) -> Vec<ScoredMemoryHit> {
+    if top_k == 0 || candidates.is_empty() {
+        return Vec::new();
+    }
+    let lemmatized_query = lemmatize_for_bm25(query);
+    let lemmatized_docs: Vec<String> = candidates
+        .iter()
+        .map(|candidate| lemmatize_for_bm25(candidate.canonical_text))
+        .collect();
+    let documents: Vec<Bm25Document> = candidates
+        .iter()
+        .zip(lemmatized_docs.iter())
+        .map(|(candidate, text)| Bm25Document {
+            memory_id: candidate.memory_id,
+            lemmatized_text: text,
+        })
+        .collect();
+    let bm25_scores: BTreeMap<String, f64> =
+        normalized_keyword_scores(&lemmatized_query, &documents)
+            .into_iter()
+            .collect();
+    let semantic_candidates: Vec<SemanticCandidate> = candidates
+        .iter()
+        .map(|candidate| SemanticCandidate {
+            memory_id: candidate.memory_id.to_string(),
+            semantic_score: candidate.semantic_score,
+        })
+        .collect();
+    let signals = HybridSignals {
+        bm25_scores,
+        entity_boosts: entity_boosts.clone(),
+    };
+    score_and_rank(&semantic_candidates, &signals, threshold, top_k, explain)
 }

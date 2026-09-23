@@ -317,6 +317,10 @@ impl OpenMemoryService {
                 MemoryRetrievalStrategy::EventAware,
             ) => "postgresql_event_aware",
             (
+                sdkwork_memory_plugin_native_sql::MemorySqlDialect::Postgres,
+                MemoryRetrievalStrategy::AdditiveHybrid,
+            ) => "postgresql_additive_hybrid",
+            (
                 sdkwork_memory_plugin_native_sql::MemorySqlDialect::Sqlite,
                 MemoryRetrievalStrategy::Balanced,
             ) => "sqlite_balanced",
@@ -328,6 +332,10 @@ impl OpenMemoryService {
                 sdkwork_memory_plugin_native_sql::MemorySqlDialect::Sqlite,
                 MemoryRetrievalStrategy::EventAware,
             ) => "sqlite_event_aware",
+            (
+                sdkwork_memory_plugin_native_sql::MemorySqlDialect::Sqlite,
+                MemoryRetrievalStrategy::AdditiveHybrid,
+            ) => "sqlite_additive_hybrid",
         }
     }
 
@@ -754,6 +762,13 @@ impl OpenMemoryService {
     /// lexical.
     pub fn with_embedder(mut self, embedder: Arc<dyn EmbeddingModelPort>) -> Self {
         self.embedder = Some(embedder);
+        self
+    }
+
+    /// Override the retrieval strategy (batch 9): `AdditiveHybrid` ranks via
+    /// mem0's semantic+BM25+entity additive fusion instead of RRF.
+    pub fn with_retrieval_strategy(mut self, strategy: MemoryRetrievalStrategy) -> Self {
+        self.retrieval_strategy = strategy;
         self
     }
 
@@ -1430,6 +1445,22 @@ impl MemoryOpenApi for OpenMemoryService {
         // deterministic extractor here stands in for the spaCy/NER pipeline.
         let query_entities = select_query_entities(&extract_entities(&request.query));
 
+        // mem0 search threshold: gates the semantic score under the additive
+        // strategy; validated up front so a bad value fails the request.
+        let semantic_threshold = match request.threshold {
+            Some(value) => {
+                sdkwork_memory_retrieval::validate_threshold(value)
+                    .map_err(MemoryServiceError::validation)?;
+                value
+            }
+            None => 0.0,
+        };
+        let additive_scoring = self.retrieval_strategy == MemoryRetrievalStrategy::AdditiveHybrid;
+        let mut additive_score_details: std::collections::HashMap<
+            String,
+            sdkwork_memory_retrieval::ScoreDetails,
+        > = std::collections::HashMap::new();
+
         let memory_type_filter = request.memory_types.as_ref().map(|types| {
             types
                 .iter()
@@ -1628,6 +1659,55 @@ impl MemoryOpenApi for OpenMemoryService {
                     }
                 }
             };
+            if additive_scoring {
+                // mem0 additive-fusion ranking: BM25 over the rehydrated texts,
+                // the resolved entity boosts, and the vector similarities fused
+                // by score_and_rank with the semantic threshold gate. A single
+                // retriever list feeds RRF, which preserves its ordering.
+                let inputs = record_inputs
+                    .iter()
+                    .map(|record| {
+                        let semantic_score = vector_similarities
+                            .iter()
+                            .find(|input| input.memory_id == record.memory_id)
+                            .map(|input| input.similarity)
+                            .unwrap_or(0.0);
+                        sdkwork_memory_retrieval::AdditiveScoreInput {
+                            memory_id: &record.memory_id,
+                            canonical_text: &record.canonical_text,
+                            semantic_score,
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                let entity_boost_map = entity_boost_inputs
+                    .iter()
+                    .cloned()
+                    .map(|input| (input.memory_id, input.boost))
+                    .collect::<std::collections::BTreeMap<String, f64>>();
+                for hit in sdkwork_memory_retrieval::score_candidates_additive(
+                    &request.query,
+                    &inputs,
+                    &entity_boost_map,
+                    semantic_threshold,
+                    candidate_limit as usize,
+                    request.explain.unwrap_or(false),
+                ) {
+                    if let Some(details) = &hit.details {
+                        additive_score_details.insert(hit.memory_id.clone(), details.clone());
+                    }
+                    let Some(canonical) = canonical_by_id.get(&hit.memory_id).cloned() else {
+                        continue;
+                    };
+                    let memory = Self::map_canonical_record(canonical)?;
+                    candidates.push(RetrievalCandidate {
+                        memory,
+                        retriever_name: "additive_hybrid".to_string(),
+                        raw_score: hit.score,
+                        rank: candidates.len() as i32 + 1,
+                    });
+                }
+                continue;
+            }
             let orchestrated = orchestrate_retrieval_candidates_with_entity_boosts(
                 &request.query,
                 &record_inputs,
@@ -1680,13 +1760,39 @@ impl MemoryOpenApi for OpenMemoryService {
                     result_rank: hit.rank,
                     raw_score: Some(hit.raw_score),
                     fused_score: Some(hit.fused_score),
-                    explanation: Some(serde_json::json!({
-                        "fusionAlgorithm": "weighted_rrf",
-                        "rankConstant": fusion_policy.rank_constant,
-                        "dominantRetriever": hit.retriever_name,
-                        "contributingRetrievers": hit.retrievers,
-                        "canonicalRehydrated": true,
-                    })),
+                    explanation: Some({
+                        let details = hit
+                            .memory
+                            .uuid
+                            .as_deref()
+                            .and_then(|uuid| additive_score_details.get(uuid));
+                        let mut explanation = serde_json::json!({
+                            "fusionAlgorithm": if additive_scoring {
+                                "additive_normalized"
+                            } else {
+                                "weighted_rrf"
+                            },
+                            "rankConstant": fusion_policy.rank_constant,
+                            "dominantRetriever": hit.retriever_name,
+                            "contributingRetrievers": hit.retrievers,
+                            "canonicalRehydrated": true,
+                        });
+                        if let (true, Some(details)) = (
+                            additive_scoring && request.explain.unwrap_or(false),
+                            details,
+                        ) {
+                            explanation["scoreDetails"] = serde_json::json!({
+                                "semanticScore": details.semantic_score,
+                                "bm25Score": details.bm25_score,
+                                "entityBoost": details.entity_boost,
+                                "rawScore": details.raw_score,
+                                "maxPossibleScore": details.max_possible_score,
+                                "finalScore": details.final_score,
+                                "threshold": details.threshold,
+                            });
+                        }
+                        explanation
+                    }),
                     status: "accepted".to_string(),
                 })
             })
@@ -2011,6 +2117,8 @@ impl MemoryOpenApi for OpenMemoryService {
                     top_k,
                     context_budget_tokens: request.context_budget_tokens,
                     show_expired: None,
+                    threshold: None,
+                    explain: None,
                     include_trace: Some(false),
                 },
             )

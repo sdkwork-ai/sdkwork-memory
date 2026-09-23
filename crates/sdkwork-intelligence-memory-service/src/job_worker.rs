@@ -722,6 +722,8 @@ async fn run_retrieval_quality_eval(
                 top_k,
                 context_budget_tokens: config.context_budget_tokens,
                 show_expired: None,
+                threshold: None,
+                explain: None,
                 include_trace: Some(false),
             },
         )

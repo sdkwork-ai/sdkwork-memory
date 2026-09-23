@@ -13,6 +13,11 @@ pub enum MemoryRetrievalStrategy {
     Balanced,
     SearchFirst,
     EventAware,
+    /// mem0's additive-fusion ranking: semantic + BM25 + entity boosts summed
+    /// and normalized, with the threshold gating the semantic score. Requires a
+    /// bound embedding provider to be meaningful; without one the keyword
+    /// signal still ranks but `threshold` gates everything to zero.
+    AdditiveHybrid,
 }
 
 impl MemoryRetrievalStrategy {
@@ -21,6 +26,7 @@ impl MemoryRetrievalStrategy {
             Self::Balanced => "balanced",
             Self::SearchFirst => "search_first",
             Self::EventAware => "event_aware",
+            Self::AdditiveHybrid => "additive_hybrid",
         }
     }
 
@@ -29,8 +35,9 @@ impl MemoryRetrievalStrategy {
             "balanced" => Ok(Self::Balanced),
             "search_first" | "search-first" => Ok(Self::SearchFirst),
             "event_aware" | "event-aware" => Ok(Self::EventAware),
+            "additive_hybrid" | "additive-hybrid" => Ok(Self::AdditiveHybrid),
             other => Err(format!(
-                "memory retrieval strategy must be balanced, search_first, or event_aware; got {other}"
+                "memory retrieval strategy must be balanced, additive_hybrid, search_first, or event_aware; got {other}"
             )),
         }
     }
@@ -56,11 +63,24 @@ impl MemoryRetrievalStrategy {
                 "dictionary": { "weight": 0.4 },
                 "sql": { "weight": 0.2 }
             }),
+            // The additive strategy ranks via mem0's fused semantic+BM25+entity
+            // arithmetic, so the recall profile carries the vector and entity
+            // grants alongside keyword.
+            Self::AdditiveHybrid => serde_json::json!({
+                "keyword": { "weight": 1.0 },
+                "vector": { "weight": 1.0 },
+                "entity": { "weight": 0.8 }
+            }),
         }
     }
 
-    pub const fn all() -> [Self; 3] {
-        [Self::Balanced, Self::SearchFirst, Self::EventAware]
+    pub const fn all() -> [Self; 4] {
+        [
+            Self::Balanced,
+            Self::SearchFirst,
+            Self::EventAware,
+            Self::AdditiveHybrid,
+        ]
     }
 }
 

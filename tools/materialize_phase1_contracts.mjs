@@ -2224,6 +2224,8 @@ function baseSchemas() {
         topK: { type: "integer", format: "int32", minimum: 1, maximum: 100 },
         contextBudgetTokens: { type: "integer", format: "int32", minimum: 1 },
         showExpired: { type: "boolean" },
+        threshold: { anyOf: [{ type: "number" }, { type: "null" }] },
+        explain: { type: "boolean" },
         includeTrace: { type: "boolean" }
       }
     },

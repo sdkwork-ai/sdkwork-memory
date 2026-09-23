@@ -98,7 +98,7 @@ async fn qualified_runtime_exposes_honest_selectable_memory_schemes() {
     let metadata = capabilities.metadata.unwrap();
     assert_eq!(metadata["activeRetrievalStrategy"], "event_aware");
     let schemes = metadata["selectableSchemes"].as_array().unwrap();
-    assert_eq!(schemes.len(), 3);
+    assert_eq!(schemes.len(), 4);
     assert!(schemes
         .iter()
         .all(|scheme| scheme["productionQualified"] == true));

@@ -89,6 +89,8 @@ fn retrieval_request(
         top_k,
         context_budget_tokens: 512,
         show_expired: None,
+        threshold: None,
+        explain: None,
         include_trace: Some(true),
     }
 }

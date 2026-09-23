@@ -13327,6 +13327,19 @@
           "showExpired": {
             "type": "boolean"
           },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "explain": {
+            "type": "boolean"
+          },
           "includeTrace": {
             "type": "boolean"
           }

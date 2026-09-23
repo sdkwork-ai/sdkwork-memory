@@ -29,7 +29,8 @@ pub use retrieval::{
     VectorSimilarityInput,
 };
 pub use scoring::{
-    internal_fetch_limit, max_possible_score, score_and_rank, validate_threshold, HybridSignals,
-    ScoreDetails, ScoredMemoryHit, SemanticCandidate, DEFAULT_SCORE_THRESHOLD,
-    INTERNAL_FETCH_MULTIPLIER, MIN_INTERNAL_FETCH_LIMIT,
+    internal_fetch_limit, max_possible_score, score_and_rank, score_candidates_additive,
+    validate_threshold, AdditiveScoreInput, HybridSignals, ScoreDetails, ScoredMemoryHit,
+    SemanticCandidate, DEFAULT_SCORE_THRESHOLD, INTERNAL_FETCH_MULTIPLIER,
+    MIN_INTERNAL_FETCH_LIMIT,
 };
