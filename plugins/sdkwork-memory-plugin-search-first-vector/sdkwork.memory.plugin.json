@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.memory.plugin",
+  "pluginId": "sdkwork-memory-plugin-search-first-vector",
+  "packageName": "sdkwork-memory-plugin-search-first-vector",
+  "displayName": "SDKWork Memory Search-First Vector Plugin",
+  "version": "0.1.0",
+  "owner": "sdkwork-memory",
+  "implementationKinds": ["search_first"],
+  "pluginRoles": ["implementation", "retriever", "index"],
+  "deploymentModes": ["server", "container", "private", "test"],
+  "portExports": [
+    {
+      "port": "MemoryRetrieverPort",
+      "builder": "build_search_first_vector_retriever"
+    },
+    {
+      "port": "MemoryIndexPort",
+      "builder": "build_search_first_vector_index"
+    }
+  ],
+  "providerKinds": ["language_model", "embedding_model", "rerank_model"],
+  "retrieverKinds": ["vector"],
+  "indexKinds": ["vector"],
+  "requiredCoreVersion": "0.1.0",
+  "secretRefs": [],
+  "dataClasses": ["internal", "tenant", "personal"],
+  "capabilities": {
+    "canonicalStore": false,
+    "eventLog": false,
+    "candidateLifecycle": false,
+    "habitLearning": false,
+    "retrievalTrace": false,
+    "deletionPropagation": true,
+    "auditLog": false,
+    "outboxLog": false,
+    "embeddingRequired": true
+  },
+  "degradation": {
+    "mode": "fail_closed_when_embedding_port_unbound",
+    "returnsStaleHits": false
+  },
+  "migration": {
+    "exportSupported": false,
+    "importSupported": false,
+    "dualWriteSupported": false,
+    "shadowReadSupported": false
+  },
+  "observability": {
+    "metricsPrefix": "sdkwork_memory_search_first_vector",
+    "redactsPayloads": true
+  },
+  "conformance": {
+    "suite": "sdkwork-memory-plugin-conformance",
+    "suiteVersion": "0.1.0"
+  }
+}

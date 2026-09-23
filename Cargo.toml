@@ -19,6 +19,7 @@ members = [
   "crates/sdkwork-api-memory-standalone-gateway",
   "plugins/sdkwork-memory-plugin-native-sql",
   "plugins/sdkwork-memory-plugin-reference-profiles",
+  "plugins/sdkwork-memory-plugin-search-first-vector",
 ]
 
 [workspace.package]
@@ -75,6 +76,7 @@ sdkwork-memory-retrieval = { path = "crates/sdkwork-memory-retrieval" }
 sdkwork-memory-test-support = { path = "crates/sdkwork-memory-test-support" }
 sdkwork-memory-plugin-native-sql = { path = "plugins/sdkwork-memory-plugin-native-sql" }
 sdkwork-memory-plugin-reference-profiles = { path = "plugins/sdkwork-memory-plugin-reference-profiles" }
+sdkwork-memory-plugin-search-first-vector = { path = "plugins/sdkwork-memory-plugin-search-first-vector" }
 sdkwork-intelligence-memory-service = { path = "crates/sdkwork-intelligence-memory-service" }
 sdkwork-intelligence-memory-repository-sqlx = { path = "crates/sdkwork-intelligence-memory-repository-sqlx" }
 sdkwork-routes-memory-open-api = { path = "crates/sdkwork-routes-memory-open-api" }

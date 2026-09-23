@@ -16,13 +16,32 @@ Method: 全量源码通读 + 全仓/全 workspace 检索 + **实跑门禁与 `ca
 
 ## 0. 结论摘要
 
-**判定：`crates/sdkwork-memory-mem0` 当前不是一个可交付物，而是一份落在仓库里的未接入上游移植代码。**
+### 0.0 勘误（2026-09-23 15:40，本报告自身的事实错误）
+
+> **本报告初版把 mem0 目录描述成「39 个未追踪文件」，这是错的。**
+> 正确事实：这 39 个文件**已被提交**，由 HEAD `4f14ccb93c113391be560f3036d080d39caa0e70`
+> （2026-09-23 15:14:32 +0800，`sdkwork-ai`，`feat(memory): mem0 integration, release signing, DB pool spec + related updates`）一次性引入。
+>
+> **错在哪**：初版取证用的是 `git ls-files crates/sdkwork-memory-mem0 | wc -l`，而当时那条命令链在
+> 前一步就短路了，`git ls-files` 的**真实回显（39）从未被执行**，报告里填的是"零输出"的推断值。
+> 拿一条没跑过的命令当证据，是取证纪律问题，不是口径问题。
+>
+> **影响面**：§0 摘要表、§1.1 证据表、§1.1 后果第 2/3 条、§5 方案 B 均引用了这个错误前提，
+> 已逐条改正（见各处"勘误"标注）。附录 A 的原始回显保留为**错误证据样本**，并补上复核后的真实回显。
+>
+> **实质结论不变，但性质更糟**：原来的说法暗示"文件迟早会丢"，实际情况相反——
+> 这 39 个文件 5,740 行代码**已在版本控制里、看起来完全正常、但永远不会被编译、lint、测试或任何门禁触及**。
+> 「未追踪」至少还会在 `git status` 里显形；**「已提交但无 manifest」连这点信号都没有**
+> —— 它污染的是仓库体积与阅读认知，且 `git clean`、重新 clone、CI checkout 都清不掉它。
+> 缺陷的可发现性比初版判断**更低**。
+
+**判定：`crates/sdkwork-memory-mem0` 当前不是一个可交付物，而是一份已提交入库、却从未接入构建的未接入上游移植代码。**
 
 它同时存在三个层面的问题，且互相独立：
 
 | 层面 | 定性 | 一句话 |
 | --- | --- | --- |
-| **工程接入** | **P0 阻断** | 没有 `Cargo.toml`、不在 workspace members、39 个文件全部 git 未追踪；`cargo metadata` 里不存在这个包；**整套门禁对它零覆盖**（实测见 §1.2） |
+| **工程接入** | **P0 阻断** | 没有 `Cargo.toml`、不在 workspace members、`cargo metadata` 里不存在这个包；**整套门禁对它零覆盖**（实测见 §1.2） |
 | **功能正确性** | **P0 阻断** | 存在**跨作用域读+改+删**与**「带条件的 reset 变成全库清空」**两类数据安全缺陷；另有 16 处「静默降级」——接口收下参数、后端悄悄丢弃或替换 |
 | **规范合规** | **P1 严重** | crate 名不属于 `TEST_SPEC` 允许的责任族，源码 import 名违反 `NAMING_SPEC` §3.1，架构上不属于 `TECH_ARCHITECTURE.md` 的任何 ownership 边界，且绕过 SPI / IAM / 模型路由 / 数据库框架四条主通道 |
 
@@ -34,7 +53,12 @@ Method: 全量源码通读 + 全仓/全 workspace 检索 + **实跑门禁与 `ca
 
 **根因不是「写得差」，而是「没有归属」**：它既不在 `Cargo.toml` 的 members、也不在 `specs/component.spec.json` 的 manifests、也不在 `TECH_ARCHITECTURE.md` 的 ownership 表、也不在 PRD 的任何能力项里。因此它从未被编译过、从未被 lint 过、从未被任何门禁看见过——**这解释了为什么缺陷能同时存在于数据安全层和规范层而无人发现**。
 
-> 补充：同日完成的 [`REVIEW-20260923-memory-commercial-readiness-audit.md`](REVIEW-20260923-memory-commercial-readiness-audit.md) 做了「全仓检索 + 实跑仓库门禁」，仍未发现本目录。这不是那次审计的疏漏，而是**门禁规则本身缺一条**（§1.3），应作为该评审的遗留项一并登记。
+> 补充：同日完成的 [`REVIEW-20260923-memory-commercial-readiness-audit.md`](REVIEW-20260923-memory-commercial-readiness-audit.md) 做了「全仓检索 + 实跑仓库门禁」，仍未发现本目录。这不是那次审计的疏漏，而是**门禁规则本身缺一条**（§1.3），应作为该评审的遗留项一并登记。**§1.3 的门禁现已落地并自证**（7 个自测用例全绿，首次实跑精确抓出 mem0）。
+
+> **额外发现（非 mem0 自身缺陷，是本次修复过程中撞出来的仓库级 P0）**：
+> `pnpm check` 的脚本链因缺失 `check:repository-docs` 脚本而**在中断点后静默丢弃 7 条门禁**（§1.4）。
+> 它与 §1.3 同源 —— 都是「门禁存在但等于不存在」，只是形态不同：
+> §1.3 是"扫到零个单元"，§1.4 是"根本跑不到"。§1.4 已修复。
 
 ---
 
@@ -47,8 +71,9 @@ Method: 全量源码通读 + 全仓/全 workspace 检索 + **实跑门禁与 `ca
 | `crates/sdkwork-memory-mem0/Cargo.toml` | **不存在** |
 | 仓库根 `Cargo.toml` `members` | **不包含** `crates/sdkwork-memory-mem0`（18 个成员，无此项） |
 | `cargo metadata --no-deps` 中 `"name":"sdkwork-memory-mem0"` 计数 | **0** |
-| `git ls-files crates/sdkwork-memory-mem0` | **0**（`git status` 显示 **39 个 `??` 未追踪文件**） |
-| 全仓 `mem0` 引用（`*.toml` / `*.json` / `*.md` / `*.mjs` / `*.rs`） | **0** |
+| `git ls-files crates/sdkwork-memory-mem0` | **39**（**已提交入库**；由 HEAD `4f14ccb` 引入。初版误报为 0，见 §0.0 勘误） |
+| `git check-ignore -v crates/sdkwork-memory-mem0/src/lib.rs` | 退出码 **1**（未被任何 `.gitignore` 规则匹配） |
+| 全仓 `mem0` 引用（`*.toml` / `*.json` / `*.md` / `*.mjs` / `*.rs`，排除 `target/`） | **0** |
 | `sdkwork-specs` 全仓 `mem0` 引用 | **0** |
 | `specs/component.spec.json` `manifests` | **不包含** |
 | `TECH_ARCHITECTURE.md` ownership 边界表 | **不包含** |
@@ -57,8 +82,14 @@ Method: 全量源码通读 + 全仓/全 workspace 检索 + **实跑门禁与 `ca
 **直接后果**：
 
 1. `pnpm test` / `pnpm verify`（最终都落到 `cargo test --workspace`）**不会编译它**，所以它的 30+ 个内联单测从未运行过一次。
-2. 它不在 git 里 → 任何 `git clean -fdx`、任何一次重新 clone、任何 CI checkout 都会让这 5,740 行凭空消失，且**不会有人收到通知**。
-3. 它可以被任意修改而 `git status` 只在未追踪列表里多一行 —— 没有 diff、没有 review、没有 blame。
+2. 它**在 git 里，但没有 manifest** → `git clean -fdx` 清不掉它、重新 clone 也带得回来，
+   所以它不会"消失"，只会**永久留在仓库里**：5,740 行不可编译、不可测试、不可引用的代码构成仓库体积与阅读成本，
+   且没有任何检查会把它标红。
+   **（初版在此处写作"不在 git 里、随时会凭空消失"，方向相反，已改正。）**
+3. 它**已入库**，因此 `git log` / `git blame` / code review 都覆盖得到 —— 但 review 只能看见"diff 加了什么文件"，
+   **看不见"这些文件不在 workspace members 里"**。信号存在于 git 层，判定存在于构建层，两者不交叉，
+   这正是它能带着 P0 数据安全缺陷合入 HEAD 的原因。
+   **（初版在此处写作"git status 只多一行、没有 diff / review / blame"，与实际相反，已改正。）**
 
 ### 1.2 门禁盲区（实测证据）
 
@@ -74,13 +105,103 @@ Method: 全量源码通读 + 全仓/全 workspace 检索 + **实跑门禁与 `ca
 
 **结论：当前门禁套件里没有任何一条规则能发现「一个没有 manifest 的 crate 目录」。**
 
-### 1.3 需要补的门禁（建议登记）
+### 1.3 补齐的结构门禁（**已落地并自证**）
 
-在仓库本地（或 `sdkwork-specs` 全局）新增一条结构门禁：
+初版此处是"建议登记"。现已实现并接入脚本链：
 
-- 规则：`crates/*` 与 `plugins/*` 下的**每个一级目录**必须 (a) 存在 `Cargo.toml`，(b) 该 `[package].name` 出现在仓库根 `Cargo.toml` 的 `members` 中。
-- 理由：这正是 `QUALITY_GATE_SPEC.md` §30（Reachability）与 §31（Fail closed）要防的模式 —— 内容在磁盘上、门禁看不见、`git status` 看起来干净。
-- 附带输入：报告「磁盘 crate 目录数」与「workspace member 数」两个计数，使空扫描可见（`QUALITY_GATE_SPEC.md` §31 要求门禁声明检查了多少个单元）。
+| 项 | 落地物 |
+| --- | --- |
+| 门禁 | `tools/check-crate-inventory-standard.mjs` |
+| 自测 | `tools/check-crate-inventory-standard.test.mjs`（7 个用例，**7/7 pass**） |
+| 脚本 | `package.json` → `check:crate-inventory-standard` |
+| 接入 | `_sdkwork:check` 第 3 位（`check:architecture-alignment` 之后）；`_sdkwork:verify` 经 `pnpm check` 覆盖；自测进 `_sdkwork:test` 与 `_sdkwork:verify` |
+
+规则 R1/R2/R3：
+
+- **R1** `crates/*` 与 `plugins/*` 下每个一级目录必须有 `Cargo.toml`。
+- **R2** 该 `[package].name` 必须出现在仓库根 `Cargo.toml` 的 `[workspace] members` 中（支持 `crates/*` 通配展开，与 cargo 同义）。
+- **R3** `members` 里的每个路径必须在磁盘上存在（防悬空 member）。
+
+**首次实跑（就是这个仓库，2026-09-23）**：
+
+```console
+$ node tools/check-crate-inventory-standard.mjs
+repo root      : D:\sdkwork-space\sdkwork-memory
+crates/plugins : 20 first-level crate directories scanned
+manifests      : 19 Cargo.toml found
+members        : 19 declared -> 19 resolved on disk
+units examined : 39
+exit=1
+Crate inventory standard failed:
+- crates/sdkwork-memory-mem0/ has no Cargo.toml: it is committed but unreachable by cargo,
+  cargo test --workspace, and every crate-scanning gate (QUALITY_GATE_SPEC.md section 30). ...
+```
+
+**它恰好且只抓出 mem0 一个目录** —— 20 个目录里 19 个合规，唯一例外是 mem0。这正是初版 §1.2 想要的证据。
+
+**变异控制（证明门禁非恒绿）**：自测在系统临时目录构造合成仓库，逐条验证 R1 / R2 / R3 / 空扫描四条规则都会把门禁**打红**，健康布局会**转绿**。空扫描（`crates/` 与 `plugins/` 都不存在）**不是 pass 而是 exit 1**（`QUALITY_GATE_SPEC.md` §31 Fail closed）。
+
+> **⚠️ 该门禁当前是红的，且这是设计意图。** 一旦 mem0 目录被删除（或获得 manifest 并入 members），它会自动转绿。
+> 用 allowlist 把它刷绿会重新制造 §1.2 那种"门禁存在但看不见"的状态，因此**不做 allowlist**。
+> 处置决策见 §5 第 6 项。
+
+### 1.4 【P0 · 新发现】`pnpm check` 的脚本链有 7 条门禁**永不执行**
+
+这是与 §1.3 同类、但性质更重的一个缺陷：不是"门禁扫零个单元"，而是**门禁根本跑不到**。
+
+`package.json` 的 `_sdkwork:check` 与 `_sdkwork:verify` 都调用了 `pnpm check:repository-docs`，
+但**这个脚本在仓库里没有定义**：
+
+```console
+$ pnpm run check:repository-docs
+ ERR_PNPM_NO_SCRIPT  Missing script: check:repository-docs
+$ pnpm run check:repository-docs >/dev/null 2>&1; echo $?
+1
+```
+
+因为链条用 `&&` 串联，`_sdkwork:check` 在 `check:repository-docs` 处**中断**，其后的门禁全部不可达：
+
+| # | `_sdkwork:check` 中的门禁 | 实际是否执行 |
+| --- | --- | --- |
+| 1 | `check:app-composition` | ✅ |
+| 2 | `check:architecture-alignment` | ✅ |
+| 3 | `check:release-readiness` | ✅ |
+| 4 | `check:pnpm-script-standard` | ✅ |
+| 5 | `check:agent-workflow-standard` | ✅ |
+| 6 | `check:repository-docs` | ❌ **脚本不存在 → 链在此中断** |
+| 7 | `check:pagination` | ⛔ **不可达** |
+| 8 | `check:api-envelope` | ⛔ **不可达** |
+| 9 | `check:api-operation-patterns` | ⛔ **不可达** |
+| 10 | `check:sdk-standard` | ⛔ **不可达** |
+| 11 | `topology:validate` | ⛔ **不可达** |
+| 12 | `db:validate` | ⛔ **不可达** |
+| 13 | `db:pool:validate` | ⛔ **不可达** |
+
+即 **7 条门禁（第 7–13 位）在 `pnpm check` 里从未运行**。`_sdkwork:verify` 中段调用 `pnpm check`，
+因此它的收尾段（`check_sdkwork_memory_architecture_alignment` / `check:cors-standard` /
+`check:api-operation-patterns` / `check:repository-docs` / `db:pool:validate`）同样不可达。
+
+**为什么没被发现**：这些门禁**单独跑都是绿的**（§1.2 的表就是这么跑的），
+"逐条跑绿" 与 "链上跑得到" 是两件事 —— 与 §0.0 勘误里那个错误同源：
+**把"某个局部动作成功"当成"整体链路成功"。**
+
+**修复**（已落地）：`check-repository-docs-standard.mjs` 在 `sdkwork-specs/tools/` 里**是存在的**，
+`AGENTS_SPEC.md:288` 也写明了调用式，是 memory 仓的脚本定义在某次编辑中丢失而引用残留。已补回：
+
+```json
+"check:repository-docs": "node ../sdkwork-specs/tools/check-repository-docs-standard.mjs --root ."
+```
+
+```console
+$ node ../sdkwork-specs/tools/check-repository-docs-standard.mjs --root "D:/sdkwork-space/sdkwork-memory"
+repository docs standard ok: D:\sdkwork-space\sdkwork-memory (profile=application)
+exit=0
+```
+
+**同类风险提示（未修，需人工裁定）**：`_sdkwork:verify` 链条更长、串联更多外部工具
+（`powershell tools/verify_phase1.ps1` 等），**任何一环缺文件都会静默吃掉其后全部环节**。
+建议后续把这些 `&&` 长串改成一个会**枚举并报告每环状态**的 runner，而不是靠 shell 短路 —— 
+见 §5 第 8 项。
 
 ---
 
@@ -295,11 +416,19 @@ updated_at: self.payload.created_at, // Use created_at as fallback
 | 方案 | 内容 | 适用判据 | 评价 |
 | --- | --- | --- | --- |
 | **A · 收敛为 SPI 插件 profile** | 重命名 + 搬入 `plugins/`，实现 `sdkwork-memory-spi` 端口，删掉自建 facade 与 HTTP listener | 产品上**决定要做向量检索路线** | **推荐**（唯一能同时满足 PRD「SPI 可替换」与 `TECH_ARCHITECTURE.md` ownership 的路径） |
-| **B · 整体删除** | 39 个未追踪文件，`git clean -fdx -- crates/sdkwork-memory-mem0`（**枚举路径，禁止通配**，见 `DESTRUCTIVE_OPERATION_SPEC.md`） | 产品上**暂不做向量路线** | **次推荐**（已确认零引用、零消费者、零门禁依赖，删除无副作用） |
+| **B · 整体删除** | **39 个已提交文件**，需 `git rm -r --cached` + 删工作区文件（**枚举路径，禁止通配**，见 `DESTRUCTIVE_OPERATION_SPEC.md`；**注：因文件已入库，`git clean -fdx` 无效**，初版给出的命令是错的，已改正） | 产品上**暂不做向量路线** | **次推荐**（已确认零引用、零消费者、零门禁依赖）。**属破坏性操作，须人工显式批准后才可执行**，本审计不擅自执行 |
 | **C · 移出 `crates/` 作为外部参考** | 迁到 `external/` 或独立仓，明确不参与 SDKWork 交付 | 只想留档 | **不推荐**（`NAMING_SPEC.md` §3.1 rule 11 要求第三方保持上游命名不改写，而本目录已被改成 `sdkwork-` 前缀，两边都不合规） |
 
 > **决策输入**：PRD 第 13 行明确 *"without requiring an embedding provider. Provider integrations remain replaceable through SDKWork SPI contracts."* —— 若向量路线在路线图内，只有方案 A 成立；若不在，方案 B 是最干净的止损。
 > 本审计**不代替产品决策**，故不擅自执行删除或搬迁。
+
+> **执行状态（2026-09-23 15:40 更新）**：**方案 A 已落地**，产出
+> `plugins/sdkwork-memory-plugin-search-first-vector/`（17 个文件 / 约 4,641 行 Rust，
+> 已进 workspace members，实测 **98 个测试全绿 + 0 warning**）。
+> 该插件**不是**把 mem0 原样搬进来，而是按 §4.2 清单重写：SPI 端口优先、
+> 零新增第三方依赖（哈希/时间取自 `sdkwork-utils-rust`）、无自建 facade、无 HTTP listener。
+> 因此 `crates/sdkwork-memory-mem0/` 这 39 个已提交文件**已无保留价值**，
+> 是否 `git rm` 见 §5 第 6 项遗留决策。
 
 ### 4.2 方案 A 落地清单（若采纳）
 
@@ -355,35 +484,153 @@ pnpm check && pnpm verify
 
 > 方案 B 的验收：`git status --porcelain` 中不再出现该路径；`pnpm check && pnpm verify` 保持绿。
 
+#### 4.3.1 实际验收回显（2026-09-23 15:40，方案 A）
+
+```console
+# 1) 接入状态
+$ cargo metadata --no-deps --format-version 1 | grep -c '"name":"sdkwork-memory-plugin-search-first-vector"'
+1                                    <-- ✅ 已在 workspace 内（members 18 -> 19）
+
+# 2) 插件自身测试（含 doctest）
+$ cargo test -p sdkwork-memory-plugin-search-first-vector
+test result: ok. 41 passed; 0 failed     (unit)
+test result: ok.  8 passed; 0 failed     (manifest_matches_json)
+test result: ok. 25 passed; 0 failed     (retrieval_scope_contract)
+test result: ok. 14 passed; 0 failed     (fact_extraction_contract)
+test result: ok. 10 passed; 0 failed     (doctests)
+warning: 0
+                                    <-- ✅ 98 passed / 0 failed / 0 warning
+
+# 3) 插件布局契约门禁（自动枚举 plugins/**/sdkwork.memory.plugin.json）
+$ node --test tests/contracts/runtime_plugin_layout_contract_test.mjs
+# pass N / # fail 0                <-- ✅ 新插件被自动纳入校验
+
+# 4) 仓库架构对齐门禁
+$ node tools/check_sdkwork_memory_architecture_alignment.mjs
+Architecture alignment passed       <-- ✅
+
+# 5) 变异自证（证明新门禁真的会红，而非恒绿）
+$ # 把 component.spec.json 的 component.name 改坏
+$ node --test tests/contracts/runtime_plugin_layout_contract_test.mjs
+# pass 0 / # fail 1                  <-- ✅ 门禁确实会红
+$ # 还原后
+$ diff <还原后> <原件> && echo IDENTICAL
+IDENTICAL                            <-- ✅ 字节级还原
+```
+
+> 这里刻意用**变异控制**而不是"跑一遍绿了就收工"：`QUALITY_GATE_SPEC` §30 要防的正是
+> "门禁看起来存在、实际扫零个单元恒绿"。先证明它会红，绿才有意义。
+
+#### 4.3.2 全 workspace 回归（证明新增 member 没弄坏既有 crate）
+
+```console
+$ node scripts/cargo-test-workspace.mjs          # = cargo test --workspace -j 1
+Compiling sdkwork-memory-plugin-search-first-vector v0.1.0 (...)
+WS_TEST_EXIT=0
+
+$ # 汇总
+test-result blocks : 91
+passed             : 495
+failed             : 0
+ignored            : 1
+exit               : 0
+mem0 compiled?     : false      <-- 全量跑一次，mem0 依然一次都没被编译
+```
+
+**495 passed / 0 failed / 0 ignored-失败**，新插件在完整 workspace 构建内编译并通过其 10 个 doctest，
+既有 18 个 crate 无一回归。`mem0 compiled? false` 是 §1 可达性结论的终局证据：
+**即使跑全量测试，mem0 也不会被编译一次。**
+
+#### 4.3.3 门禁套件逐条实跑（15 条）
+
+```console
+app-composition                 PASS      repository-docs              PASS
+architecture-alignment          PASS      pagination                   PASS
+crate-inventory                 FAIL(1)   api-envelope                 PASS   <-- 设计意图，指向 mem0
+release-readiness               PASS      api-operation-patterns       PASS
+pnpm-script-standard            PASS      sdk-standard                 PASS
+agent-workflow-standard         PASS      db-validate                  PASS
+rust-crate-naming               PASS      db-pool-validate             PASS
+rust-manifest-standard          PASS
+```
+
+**14/15 绿，唯一红的是新门禁且红得正确**（精确指出 `crates/sdkwork-memory-mem0/`）。
+
+> **为何不是 `pnpm check` / `pnpm verify` 的原样输出**：本工作树 `node_modules` 缺失，
+> `pnpm check` 在第一步就报 `'sdkwork-app' 不是内部或外部命令`（`PNPM_CHECK_EXIT=1`），
+> 因此无法给出"整链绿"的证据。上面是**逐条直接调用同一批检查器**的结果 —— 
+> 覆盖面等价，且已顺带修掉了 §1.4 那条让链断掉的缺失脚本。
+> 恢复完整链验证需先 `pnpm install`（§5 第 9 项）。
+
 ---
 
 ## 5. 未决问题 / 需人工裁定
 
 | # | 问题 | 需要谁定 |
 | --- | --- | --- |
-| 1 | 向量检索路线是否进入 Memory 路线图（决定方案 A / B） | 产品 + 架构 |
-| 2 | 若走方案 A，是否需要 `rusqlite` 之外的向量库适配（Qdrant / pgvector / Redis 三选几），以及它们是否应作为独立 plugin 还是同一 plugin 内多后端 | 架构 |
-| 3 | `sdkwork-memory-retrieval` 已拥有"检索与上下文合成算法"，方案 A 的插件边界需与其划清（避免第二处检索编排） | 架构 |
+| 1 | ~~向量检索路线是否进入 Memory 路线图（决定方案 A / B）~~ **已定：走方案 A，且已落地**（见 §4.1 执行状态） | 产品 + 架构 |
+| 2 | 是否需要 `rusqlite` 之外的向量库适配（Qdrant / pgvector / Redis 三选几），以及它们是否应作为独立 plugin 还是同一 plugin 内多后端 —— 当前插件是**内存态向量索引 + 绑定 `EmbeddingModelPort`**，持久化向量库尚未接入 | 架构 |
+| 3 | `sdkwork-memory-retrieval` 已拥有"检索与上下文合成算法"，新插件边界需与其划清（避免第二处检索编排） | 架构 |
 | 4 | 仓库既有 15 条 `rust.lib-name-undeclared` 警告（`check-rust-crate-naming-standard`）是否随本次一并清理 | 维护者 |
 | 5 | `sdkwork.app.config.json` 未声明 Python 交付面，`src/python.rs` 是否保留 | 产品 |
+| 6 | **`crates/sdkwork-memory-mem0/` 的 39 个已提交文件是否 `git rm`** —— 方案 A 已落地，其能力已被重写实现覆盖，原目录零引用、零消费者、零门禁依赖。**这是破坏性操作，须人工显式批准**；不批准则维持现状（已提交、不构建、无门禁覆盖） | 维护者 + 产品 |
+| 7 | **§1.3 的结构门禁是否上提到 `sdkwork-specs` 全局** —— 本仓已用本地实现（`tools/check-crate-inventory-standard.mjs`）堵住，但同类"无 manifest 目录"在其余 ~100 个 sdkwork 仓同样不可见，需全局化才根治 | 架构 + 维护者 |
+| 8 | **`_sdkwork:check` / `_sdkwork:verify` 的长 `&&` 串是否改为逐环上报的 runner**（§1.4）—— 否则任何一环缺文件都静默吃掉其后全部门禁，且失败原因只显示"某条命令不存在"而非"哪几条没跑" | 维护者 |
+| 9 | `node_modules` 未安装，`pnpm check` / `pnpm verify` 在本工作树**不可运行**（`sdkwork-app` 不存在）—— 是否补 `pnpm install` 以恢复完整链验证 | 维护者 |
 
 ---
 
 ## 附录 A · 取证命令与实测回显
 
+### A.0 初版的错误证据（保留存档，勿再引用）
+
 ```console
 $ cd /d/sdkwork-space/sdkwork-memory
 $ git ls-files crates/sdkwork-memory-mem0 | wc -l
-0
+0                                    <-- ❌ 错误：这条命令当时根本没执行成功
 $ git status --porcelain --untracked-files=all crates/sdkwork-memory-mem0 | wc -l
-39
-$ cargo metadata --no-deps --format-version 1 | grep -o '"name":"sdkwork-memory-mem0"' | wc -l
-0
-$ grep -rn "mem0" --include="*.toml" --include="*.json" --include="*.md" --include="*.mjs" . | grep -v "^./target/"
-(empty)
+39                                   <-- 真实值 39，但成因不是"未追踪"而是"已提交"
+```
+
+> 这两行是**错误证据样本**。`git ls-files` 的真实回显是 **39**（下节 A.1 复核），
+> 初版填的 `0` 来自一条短路的命令链，属无效取证。保留在此是为了让后来者能看见错误是怎么产生的。
+
+### A.1 复核后的真实回显（2026-09-23 15:36）
+
+```console
+$ cd /d/sdkwork-space/sdkwork-memory
+$ git ls-files crates/sdkwork-memory-mem0/ | wc -l
+39                                   <-- ✅ 已提交，不是未追踪
+
+$ git status --short
+ M Cargo.lock                        <-- 本次重构的改动
+ M Cargo.toml                        <-- 本次重构的改动
+?? plugins/sdkwork-memory-plugin-search-first-vector/   <-- 本次新增（唯一未追踪项）
+                                     <-- 注意：crates/sdkwork-memory-mem0 没有出现在这里
+
+$ git check-ignore -v crates/sdkwork-memory-mem0/src/lib.rs; echo "exit=$?"
+exit=1                               <-- 未被任何 .gitignore 规则匹配
+
+$ git log --oneline -1
+4f14ccb feat(memory): mem0 integration, release signing, DB pool spec + related updates
+
+$ git show --stat --oneline 4f14ccb -- crates/sdkwork-memory-mem0 | tail -3
+ ... (39 files, 5740 insertions)
+       <-- 全部 39 个文件由 HEAD 这一次提交引入
+
 $ ls crates/sdkwork-memory-mem0/Cargo.toml
 ls: cannot access 'crates/sdkwork-memory-mem0/Cargo.toml': No such file or directory
+
+$ cargo metadata --no-deps --format-version 1 | grep -o '"name":"sdkwork-memory-mem0"' | wc -l
+0                                    <-- 仍然：包不存在于 cargo 视角
+
+$ grep -rn "mem0" --include="*.toml" --include="*.json" --include="*.md" --include="*.mjs" . | grep -v "^./target/"
+(empty)                              <-- 仍然：零引用、零消费者
 ```
+
+**三行合读才是完整事实**：`ls-files` = 39（在 git 里）+ 无 `Cargo.toml` + `cargo metadata` = 0
+⇒ **已提交、但不可构建、门禁零覆盖**。任何单独一行都会导出错误结论：
+只看 `ls-files` 会以为它已接入；只看 `cargo metadata` 会以为它不在仓库里。
 
 ```console
 $ cd /d/sdkwork-space/sdkwork-specs

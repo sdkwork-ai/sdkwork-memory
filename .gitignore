@@ -94,3 +94,9 @@ __pycache__/
 
 # Local assistant state (do not commit)
 .workbuddy/
+
+# --- SDKWork: external reference checkouts (read-only upstream sources) ---
+# Vendored upstream projects used as alignment references only. They are never
+# part of the delivery, never built, and never committed. See
+# docs/engineering/reviews/ for the alignment matrices produced against them.
+external/

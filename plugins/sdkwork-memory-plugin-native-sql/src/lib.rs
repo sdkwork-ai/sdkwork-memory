@@ -4,6 +4,7 @@ pub mod admin_tables;
 pub mod canonical_data;
 pub mod commercial_store;
 pub mod consolidation;
+mod filter_pushdown;
 mod governance_access;
 pub mod graph_store;
 pub mod learning_jobs;

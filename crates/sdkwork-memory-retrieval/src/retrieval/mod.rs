@@ -113,6 +113,23 @@ pub struct RetrievalEventInput {
     pub created_at: String,
 }
 
+/// A vector-store similarity for one memory, supplied by the caller.
+///
+/// This crate never embeds. The embedding port lives one layer above, so the caller
+/// embeds the query, scores the candidates it already rehydrated, and passes the
+/// similarities in. Keeping it that way preserves this module as a pure function: a
+/// ranking call must not start issuing provider requests as a side effect.
+///
+/// `similarity` must use the same scale as every other signal -- cosine similarity of
+/// unit-normalised embeddings in `[0.0, 1.0]` -- because the fused `raw_score` is
+/// compared across retrievers whenever two RRF contributions tie. Out-of-scale input is
+/// clamped rather than rescaled, so an unnormalised provider cannot dominate fusion.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VectorSimilarityInput {
+    pub memory_id: String,
+    pub similarity: f64,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct OrchestratedCandidate {
     pub record: RetrievalRecordInput,
@@ -406,6 +423,20 @@ fn retriever_weight(profile: Option<&Value>, retriever: &str, default_weight: f6
     }
 }
 
+/// Clamp a caller-supplied similarity onto the shared `[0.0, 1.0]` signal scale.
+///
+/// Non-finite input collapses to `0.0` instead of propagating a `NaN` ordering into
+/// the sort, and non-positive input collapses to `0.0` so the shared signal filter
+/// discards it: an anti-correlated embedding is not evidence for a memory. The upper
+/// clamp mirrors upstream `min(combined / max_possible, 1.0)` -- no single provider may
+/// outrank every lexical signal by reporting an unbounded dot product.
+fn vector_similarity_score(similarity: f64) -> f64 {
+    if !similarity.is_finite() {
+        return 0.0;
+    }
+    similarity.clamp(0.0, 1.0)
+}
+
 fn append_ranked_signal(
     output: &mut Vec<OrchestratedCandidate>,
     retriever_name: &str,
@@ -450,10 +481,38 @@ fn append_ranked_signal(
     );
 }
 
+/// Orchestrate the lexical and temporal recall signals into independently ranked lists.
+///
+/// This is the composition the memory service has always used. It is exactly
+/// [`orchestrate_retrieval_candidates_with_vector`] with an empty similarity slice, so a
+/// deployment with no embedding provider bound keeps byte-identical rankings.
 pub fn orchestrate_retrieval_candidates(
     query: &str,
     records: &[RetrievalRecordInput],
     events: &[RetrievalEventInput],
+    profile: Option<&Value>,
+    top_k: usize,
+) -> Vec<OrchestratedCandidate> {
+    orchestrate_retrieval_candidates_with_vector(query, records, events, &[], profile, top_k)
+}
+
+/// Orchestrate every retrieval signal, optionally including a vector-similarity signal.
+///
+/// `vector_similarities` carries similarities the caller already computed; see
+/// [`VectorSimilarityInput`]. The signal is opt-in through the profile: it contributes
+/// only when the profile grants `vector` a positive weight, so a profile written before
+/// vector recall existed cannot silently start scoring on it. That opt-in is stricter
+/// than the other signals because vector recall needs a bound embedding provider, which
+/// this crate cannot observe.
+///
+/// Similarities whose `memory_id` is absent from `records` are ignored. Vector recall
+/// re-ranks the candidate universe the caller already rehydrated and authorized; it
+/// never introduces a memory the caller did not read.
+pub fn orchestrate_retrieval_candidates_with_vector(
+    query: &str,
+    records: &[RetrievalRecordInput],
+    events: &[RetrievalEventInput],
+    vector_similarities: &[VectorSimilarityInput],
     profile: Option<&Value>,
     top_k: usize,
 ) -> Vec<OrchestratedCandidate> {
@@ -546,6 +605,24 @@ pub fn orchestrate_retrieval_candidates(
         }),
         top_k,
     );
+
+    let vector_weight = retriever_weight(profile, "vector", 0.0);
+    if vector_weight > 0.0 {
+        let records_by_id = records
+            .iter()
+            .map(|record| (record.memory_id.as_str(), record))
+            .collect::<HashMap<&str, &RetrievalRecordInput>>();
+        append_ranked_signal(
+            &mut output,
+            "vector",
+            vector_weight,
+            vector_similarities.iter().filter_map(|input| {
+                let record = records_by_id.get(input.memory_id.as_str())?;
+                Some(((*record).clone(), vector_similarity_score(input.similarity)))
+            }),
+            top_k,
+        );
+    }
 
     output
 }
@@ -671,5 +748,17 @@ mod tests {
             );
         }
         assert!(MemoryRetrievalStrategy::parse("vector_magic").is_err());
+    }
+
+    #[test]
+    fn vector_similarity_is_clamped_onto_the_shared_signal_scale() {
+        assert!((vector_similarity_score(0.5) - 0.5).abs() < 1e-9);
+        assert_eq!(vector_similarity_score(1.0), 1.0);
+        assert_eq!(vector_similarity_score(1.5), 1.0);
+        assert_eq!(vector_similarity_score(0.0), 0.0);
+        assert_eq!(vector_similarity_score(-1.0), 0.0);
+        assert_eq!(vector_similarity_score(f64::NAN), 0.0);
+        assert_eq!(vector_similarity_score(f64::INFINITY), 0.0);
+        assert_eq!(vector_similarity_score(f64::NEG_INFINITY), 0.0);
     }
 }

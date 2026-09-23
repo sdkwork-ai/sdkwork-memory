@@ -1,7 +1,9 @@
 //! Full-text search index maintenance and query helpers.
 
 use crate::sqlx_compat as sqlx;
-use sdkwork_memory_spi::{MemoryScopeContext, MemorySensitivityReadScope};
+use sdkwork_memory_spi::{
+    MemoryScopeContext, MemorySensitivityReadScope, MetadataFilterExpression,
+};
 use sdkwork_utils_rust::MAX_LIST_PAGE_SIZE;
 
 use crate::pool_backend::MemorySqlDialect;
@@ -256,6 +258,7 @@ impl NativeSqlMemoryStore {
             top_k,
             &[],
             MemorySensitivityReadScope::Owner,
+            None,
         )
         .await
     }
@@ -267,6 +270,7 @@ impl NativeSqlMemoryStore {
         top_k: i32,
         memory_types: &[String],
         read_scope: MemorySensitivityReadScope,
+        metadata_filter: Option<&MetadataFilterExpression>,
     ) -> Result<Vec<NativeSqlMemoryRecordDetail>, NativeSqlStoreError> {
         let trimmed = query.trim();
         if trimmed.is_empty() {
@@ -274,6 +278,13 @@ impl NativeSqlMemoryStore {
         }
         let result_limit = i64::from(top_k.clamp(1, MAX_LIST_PAGE_SIZE));
         let sensitivity_level = Self::read_scope_level(read_scope);
+        // Translated once, because a filter that only reached the LIKE fallback would stop
+        // applying as soon as the full-text index answered instead.
+        let filter_predicate = crate::filter_pushdown::translate_metadata_filter(
+            self.dialect(),
+            "r",
+            metadata_filter,
+        )?;
         match self.dialect() {
             MemorySqlDialect::Postgres => {
                 let websearch_query = postgres_websearch_or_query(trimmed);
@@ -312,6 +323,7 @@ impl NativeSqlMemoryStore {
                 );
                 Self::append_sensitivity_filter(&mut sql, "r");
                 Self::append_memory_type_filter(&mut sql, "r", memory_types);
+                sql.push_str(&filter_predicate.sql);
                 sql.push_str(
                     " ORDER BY ts_rank(r.search_document, websearch_to_tsquery('simple', ?)) DESC, r.uuid ASC LIMIT ?",
                 );
@@ -323,6 +335,9 @@ impl NativeSqlMemoryStore {
                     .bind(sensitivity_level);
                 for memory_type in memory_types {
                     query_builder = query_builder.bind(memory_type);
+                }
+                for bind in &filter_predicate.binds {
+                    query_builder = query_builder.bind(bind);
                 }
                 let rows = query_builder
                     .bind(&websearch_query)
@@ -369,6 +384,7 @@ impl NativeSqlMemoryStore {
                 );
                 Self::append_sensitivity_filter(&mut sql, "r");
                 Self::append_memory_type_filter(&mut sql, "r", memory_types);
+                sql.push_str(&filter_predicate.sql);
                 sql.push_str(" ORDER BY rank, r.uuid ASC LIMIT ?");
                 let mut query_builder = sqlx::query(&sql)
                     .bind(fts_query)
@@ -378,6 +394,9 @@ impl NativeSqlMemoryStore {
                     .bind(sensitivity_level);
                 for memory_type in memory_types {
                     query_builder = query_builder.bind(memory_type);
+                }
+                for bind in &filter_predicate.binds {
+                    query_builder = query_builder.bind(bind);
                 }
                 let rows = query_builder
                     .bind(result_limit)

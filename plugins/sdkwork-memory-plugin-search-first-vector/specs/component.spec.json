@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "sdkwork-memory-plugin-search-first-vector",
+    "displayName": "SDKWork Memory Search-First Vector Plugin",
+    "version": "0.1.0",
+    "type": "rust-crate",
+    "root": "sdkwork-memory/plugins/sdkwork-memory-plugin-search-first-vector",
+    "domain": "intelligence",
+    "capability": "memory",
+    "surface": "runtime-plugin",
+    "languages": ["rust"],
+    "generated": false,
+    "status": "active",
+    "manifests": [
+      "Cargo.toml",
+      "sdkwork.memory.plugin.json",
+      "specs/component.spec.json"
+    ]
+  },
+  "canonicalSpecs": [
+    { "file": "SOUL.md", "path": "../../../sdkwork-specs/SOUL.md" },
+    { "file": "COMPONENT_SPEC.md", "path": "../../../sdkwork-specs/COMPONENT_SPEC.md" },
+    { "file": "CODE_STYLE_SPEC.md", "path": "../../../sdkwork-specs/CODE_STYLE_SPEC.md" },
+    { "file": "NAMING_SPEC.md", "path": "../../../sdkwork-specs/NAMING_SPEC.md" },
+    { "file": "MODULE_SPEC.md", "path": "../../../sdkwork-specs/MODULE_SPEC.md" },
+    { "file": "RUST_CODE_SPEC.md", "path": "../../../sdkwork-specs/RUST_CODE_SPEC.md" },
+    { "file": "CONFIG_SPEC.md", "path": "../../../sdkwork-specs/CONFIG_SPEC.md" },
+    { "file": "DEPLOYMENT_SPEC.md", "path": "../../../sdkwork-specs/DEPLOYMENT_SPEC.md" },
+    { "file": "SECURITY_SPEC.md", "path": "../../../sdkwork-specs/SECURITY_SPEC.md" },
+    { "file": "PRIVACY_SPEC.md", "path": "../../../sdkwork-specs/PRIVACY_SPEC.md" },
+    { "file": "INTEGRATION_SPEC.md", "path": "../../../sdkwork-specs/INTEGRATION_SPEC.md" },
+    { "file": "TEST_SPEC.md", "path": "../../../sdkwork-specs/TEST_SPEC.md" },
+    { "file": "QUALITY_GATE_SPEC.md", "path": "../../../sdkwork-specs/QUALITY_GATE_SPEC.md" }
+  ],
+  "contracts": {
+    "layerRole": "backend-provider",
+    "publicExports": ["."],
+    "providedPorts": [
+      {
+        "name": "MemoryRetrieverPort",
+        "export": ".",
+        "scopeAwareMethod": "search_scoped",
+        "capabilityProbe": "supports_bounded_scoped_search",
+        "bounded": true,
+        "retrieverKinds": ["vector"],
+        "legacyUnscopedBehavior": "fail-closed",
+        "scopeSource": "MemoryScopeContext",
+        "limitAuthority": "index-boundary"
+      },
+      {
+        "name": "MemoryIndexPort",
+        "export": ".",
+        "indexKind": "vector",
+        "derivedIndex": true,
+        "canonicalAuthority": false,
+        "rebuildable": true,
+        "unindexedRecordBehavior": "fail-closed-no-fabricated-vector"
+      }
+    ],
+    "requiredPorts": [
+      { "name": "MemoryPluginSpi", "export": ".", "dependency": "sdkwork-memory-spi" }
+    ],
+    "runtimeEntrypoints": [
+      "sdkwork_memory_plugin_search_first_vector::search_first_vector_manifest",
+      "sdkwork_memory_plugin_search_first_vector::SearchFirstVectorRuntime::new",
+      "sdkwork_memory_plugin_search_first_vector::build_search_first_vector_retriever",
+      "sdkwork_memory_plugin_search_first_vector::build_search_first_vector_index"
+    ],
+    "routeManifest": null,
+    "sdkClients": [],
+    "sdkDependencies": [],
+    "permissionComposition": {},
+    "dependencyApiExports": [],
+    "dependencyApiSurfaces": [],
+    "events": [],
+    "configKeys": [],
+    "runtimePlugin": {
+      "manifest": "sdkwork.memory.plugin.json",
+      "manifestKind": "sdkwork.memory.plugin",
+      "deploymentQualification": {
+        "state": "provider-binding-required",
+        "eligibleDeploymentProfiles": ["standalone", "cloud"],
+        "eligibleRuntimeTargets": ["server", "container"],
+        "requiredProviderBindings": ["EmbeddingModelPort"],
+        "optionalProviderBindings": ["LanguageModelPort", "RerankModelPort"],
+        "productionSelection": "requires-reviewed-provider-binding"
+      }
+    }
+  },
+  "verification": {
+    "commands": [
+      "cargo test -p sdkwork-memory-plugin-search-first-vector",
+      "node --test tests/contracts/runtime_plugin_layout_contract_test.mjs"
+    ]
+  }
+}
