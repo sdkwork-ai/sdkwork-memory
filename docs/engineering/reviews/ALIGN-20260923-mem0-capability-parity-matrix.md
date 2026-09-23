@@ -1655,6 +1655,27 @@ provider-free 的用户可感对齐面在本轮**全部关闭**。
 provider 适配器或不可达插件的激活，属同一条用户决策线。**至此，不引入 provider 适配器前提下，
 本仓能关闭的行为对齐面已全部关闭。**
 
+
+**批次 14 补记（2026-09-24，`216ef63`）—— 实体 SPI 端口关闭，缺失计数清零**：
+批次 12 曾以「结构性治理、无行为差异」为由暂缓此项；本轮补齐。`sdkwork-memory-spi` 新增 graph 模块：
+uuid 级命令/记录类型（内部行 id 不再跨越边界）+ `MemoryGraphPort` trait（CRUD、journal 携带的
+写路径、供检索实体信号使用的 provenance link 馈送）；native-sql 完整实现并在实现内部完成
+uuid → 内部 id 解析与服务层先前手工维护的 provenance 校验；服务层以 `Arc<dyn MemoryGraphPort>`
+承载，商业 CRUD、readiness 计数与检索实体信号全部经由端口。行为零变化——商业管理流、
+实体排名翻转端到端测试与全部契约门禁保持绿色。**缺失 1 → 0。**
+
+另：mem0 参考基线自批次 11 后前进至 `0cddc36`，唯一行为变化为 Valkey 向量库后端的 None
+timestamp 防护——本仓不使用该后端，对齐矩阵无需变更。
+
+## 对齐终态（2026-09-24，批次 14 后）
+
+| 判定 | 数量 | 说明 |
+| --- | --- | --- |
+| 缺失 | **0** | 全部关闭（批次 1-14） |
+| 部分 | **4** | `add` 的 infer/prompt、`search` 的 threshold/explain、`update` 实体重链接、时间锚点 —— 四者同源：需要 `LanguageModelPort`/`EmbeddingModelPort` 生产适配器（LLM 抽取激活 + 向量语义通道），属 provider 决策线 |
+| 对齐 + 超越 | 45+ | 见 §9 各批次补记 |
+| 可达性阻断 | **1 → 待定** | 批次 8b/9（向量供应端与打分栈接线）唯一等待输入 = provider 适配器归属与配置/密钥面方案（用户决策） |
+
 ---
 
 ## 附：上游自身的缺陷（**不应复刻**，仅登记）
