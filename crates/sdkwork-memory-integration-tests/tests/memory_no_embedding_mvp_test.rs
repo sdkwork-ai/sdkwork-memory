@@ -5,6 +5,32 @@ use sdkwork_memory_contract::{
     MemoryRecordRequest, MemoryRetrievalRequest, MemoryType,
 };
 
+/// Test double: vectors keyed by topic marker. Texts containing "gantt" land
+/// on one direction, everything else on an orthogonal one, so cosine
+/// similarity is fully determined by the fixture texts.
+struct ScriptedEmbedder;
+
+#[async_trait::async_trait]
+impl EmbeddingModelPort for ScriptedEmbedder {
+    fn provider_code(&self) -> &str {
+        "scripted"
+    }
+
+    fn dimensions(&self) -> usize {
+        2
+    }
+
+    async fn embed(&self, command: EmbeddingCommand) -> Result<Vec<f32>, MemorySpiError> {
+        if command.input.to_lowercase().contains("review") {
+            Ok(vec![0.0, 1.0])
+        } else {
+            Ok(vec![1.0, 0.0])
+        }
+    }
+}
+
+use sdkwork_memory_spi::{EmbeddingCommand, EmbeddingModelPort, MemorySpiError};
+
 fn open_context() -> MemoryOpenApiRequestContext {
     MemoryOpenApiRequestContext::for_open_surface("api-key-001", 100_001, Some(2001))
 }
@@ -845,4 +871,120 @@ async fn entity_provenance_boost_surfaces_graph_linked_memories() {
         Some(0),
         "without the entity profile the lexically stronger memory must lead"
     );
+}
+
+#[tokio::test]
+async fn vector_signal_promotes_the_semantically_near_memory_when_bound() {
+    let store = sdkwork_memory_test_support::space_fixtures::new_seeded_in_memory_store().await;
+    let pool = store.pool().clone();
+    let service =
+        OpenMemoryService::new(store).with_embedder(std::sync::Arc::new(ScriptedEmbedder));
+    let context = open_context();
+
+    let request = |text: &str| MemoryRecordRequest {
+        space_id: 2,
+        scope: "user".to_string(),
+        memory_type: MemoryType::Semantic,
+        subject: None,
+        predicate: None,
+        object_text: Some(text.to_string()),
+        canonical_text: text.to_string(),
+        summary_text: None,
+        user_id: None,
+        language: None,
+        sensitivity_level: None,
+        expires_at: None,
+        metadata: None,
+        tags: None,
+    };
+    let near = service
+        .create_memory(context.clone(), request("Gantt chart review cadence"))
+        .await
+        .expect("create near memory");
+    let rival = service
+        .create_memory(context.clone(), request("Gantt chart checklist"))
+        .await
+        .expect("create lexical rival");
+
+    sqlx::query(
+        r#"
+        INSERT INTO ai_retrieval_profile (
+          id, uuid, tenant_id, space_id, name, strategy, retrievers_json,
+          fusion_policy_json, rerank_policy_json,
+          top_k, context_budget_tokens, status, created_at, updated_at, version
+        )
+        VALUES (5002, '5002', 100001, NULL, 'vector-aware', 'custom_weighted_rrf',
+                '{ "keyword": { "weight": 1.0 }, "vector": { "weight": 1.2 } }',
+                NULL, NULL, 5, 512, 'active',
+                '2026-09-24T00:00:00.000Z', '2026-09-24T00:00:00.000Z', 1)
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed vector-aware profile");
+
+    let request = |retrieval_profile_id: Option<u64>| MemoryRetrievalRequest {
+        query: "gantt chart review".to_string(),
+        space_ids: vec![2],
+        actor_id: None,
+        retrieval_profile_id,
+        memory_types: None,
+        filters: None,
+        top_k: 5,
+        context_budget_tokens: 512,
+        show_expired: None,
+        include_trace: None,
+    };
+
+    let rank_of =
+        |hits: &[sdkwork_memory_contract::MemoryRetrievalHit], target: u64| -> Option<usize> {
+            hits.iter()
+                .position(|hit| hit.memory.as_ref().is_some_and(|m| m.memory_id == target))
+        };
+
+    let with_vector = service
+        .create_retrieval(context.clone(), request(Some(5002)))
+        .await
+        .expect("vector-aware retrieval");
+    let lexical_only = service
+        .create_retrieval(context, request(None))
+        .await
+        .expect("lexical retrieval");
+
+    // The scripted embedder puts the "near" memory on the query vector and
+    // the rival on an orthogonal one, so with the vector profile granted the
+    // "near" hit must carry a vector contribution; the orthogonal rival must
+    // not. Under the lexical-only profile no hit carries one.
+    let has_vector_contribution = |hits: &[sdkwork_memory_contract::MemoryRetrievalHit],
+                                   target: u64| {
+        hits.iter()
+            .filter(|hit| hit.memory.as_ref().is_some_and(|m| m.memory_id == target))
+            .any(|hit| {
+                hit.explanation
+                    .as_ref()
+                    .and_then(|explanation| explanation["contributingRetrievers"].as_array())
+                    .is_some_and(|retrievers| retrievers.iter().any(|name| name == "vector"))
+            })
+    };
+    println!(
+        "HITS={:?}",
+        with_vector
+            .hits
+            .iter()
+            .map(|hit| (&hit.retriever_name, hit.explanation.clone()))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        has_vector_contribution(&with_vector.hits, near.memory_id),
+        "the near memory must be scored by the vector signal when a provider is bound"
+    );
+    assert!(
+        !has_vector_contribution(&with_vector.hits, rival.memory_id),
+        "an orthogonal embedding must not earn a vector contribution"
+    );
+    assert!(!lexical_only.hits.iter().any(|hit| hit
+        .explanation
+        .as_ref()
+        .and_then(|explanation| explanation["contributingRetrievers"].as_array())
+        .is_some_and(|retrievers| retrievers.iter().any(|name| name == "vector"))));
 }

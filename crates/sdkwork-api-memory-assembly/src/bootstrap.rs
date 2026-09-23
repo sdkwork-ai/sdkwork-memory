@@ -245,6 +245,15 @@ async fn assemble_contribution_with_product_from_env(
     {
         product = product.with_drive_export_uploader(uploader);
     }
+    // Batch 8b supply side: binding an embedding provider turns on the vector
+    // similarity signal for profiles that grant `vector` a positive weight.
+    // Without SDKWORK_MEMORY_OPENAI_API_KEY the deployment stays purely
+    // lexical, exactly as before.
+    if let Some(config) = sdkwork_memory_provider_openai::OpenAiProviderConfig::from_env() {
+        let embedder = sdkwork_memory_provider_openai::OpenAiEmbeddings::new(config);
+        product = product.with_embedder(Arc::new(embedder));
+        info!("embedding provider bound (openai-compatible)");
+    }
     product
         .ready_check()
         .await

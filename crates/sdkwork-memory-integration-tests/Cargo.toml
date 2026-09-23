@@ -9,6 +9,7 @@ publish = false
 [lints]
 workspace = true
 [dev-dependencies]
+async-trait.workspace = true
 axum.workspace = true
 http.workspace = true
 serde_json.workspace = true

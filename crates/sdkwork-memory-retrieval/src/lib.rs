@@ -20,7 +20,7 @@ pub use entities::{
 };
 pub use lemmatization::{is_stopword, lemmatize_for_bm25, lemmatize_token};
 pub use retrieval::{
-    dictionary_match_score, event_match_score, fuse_retrieval_candidates,
+    cosine_similarity, dictionary_match_score, event_match_score, fuse_retrieval_candidates,
     fuse_retrieval_candidates_with_policy, keyword_match_score, orchestrate_retrieval_candidates,
     orchestrate_retrieval_candidates_with_entity_boosts,
     orchestrate_retrieval_candidates_with_vector, sql_structured_match_score, time_recency_score,

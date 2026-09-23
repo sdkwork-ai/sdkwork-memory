@@ -8,7 +8,15 @@ use sdkwork_memory_retrieval::RetrievalFusionPolicy;
 // match the query; it runs on in-repo graph data, so unlike `vector` it is
 // provider-free. `vector` stays out of the vocabulary until an embedding
 // provider can actually supply scores (parity matrix §20.4).
-const SUPPORTED_RETRIEVERS: &[&str] = &["keyword", "dictionary", "sql", "time", "event", "entity"];
+const SUPPORTED_RETRIEVERS: &[&str] = &[
+    "keyword",
+    "dictionary",
+    "sql",
+    "time",
+    "event",
+    "entity",
+    "vector",
+];
 
 pub fn validate_retrieval_limits(
     top_k: i32,
@@ -145,10 +153,12 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn rejects_unsupported_vector_retriever() {
-        let err = validate_retrieval_retrievers(&json!({ "vector": { "weight": 1.0 } }))
-            .expect_err("vector retriever must be rejected");
-        assert!(format!("{err:?}").contains("unsupported retriever 'vector'"));
+    fn accepts_vector_retriever_once_the_semantic_channel_is_planned() {
+        // Batch 8b: with an embedding adapter available the vector key is a
+        // first-class profile entry; an actual score still requires a bound
+        // embedder at runtime.
+        validate_retrieval_retrievers(&json!({ "vector": { "weight": 0.7 } }))
+            .expect("vector retriever must be accepted");
     }
 
     #[test]

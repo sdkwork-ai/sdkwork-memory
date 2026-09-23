@@ -1,0 +1,54 @@
+{
+ "schemaVersion": 1,
+ "kind": "sdkwork.component.spec",
+ "component": {
+  "name": "sdkwork-memory-provider-openai",
+  "displayName": "SDKWork Memory OpenAI-Compatible Provider Adapter",
+  "version": "0.1.0",
+  "type": "rust-library",
+  "root": "sdkwork-memory/crates/sdkwork-memory-provider-openai",
+  "domain": "intelligence",
+  "capability": "memory",
+  "surface": "provider-adapter",
+  "languages": [
+   "rust"
+  ],
+  "generated": false,
+  "status": "active",
+  "manifests": [
+   "Cargo.toml",
+   "specs/component.spec.json"
+  ]
+ },
+ "canonicalSpecs": [
+  {
+   "file": "SOUL.md",
+   "path": "../../../sdkwork-specs/SOUL.md"
+  },
+  {
+   "file": "COMPONENT_SPEC.md",
+   "path": "../../../sdkwork-specs/COMPONENT_SPEC.md"
+  },
+  {
+   "file": "CODE_STYLE_SPEC.md",
+   "path": "../../../sdkwork-specs/CODE_STYLE_SPEC.md"
+  },
+  {
+   "file": "INTEGRATION_SPEC.md",
+   "path": "../../../sdkwork-specs/INTEGRATION_SPEC.md"
+  },
+  {
+   "file": "SECURITY_SPEC.md",
+   "path": "../../../sdkwork-specs/SECURITY_SPEC.md"
+  }
+ ],
+ "notes": [
+  "Implements sdkwork-memory-spi EmbeddingModelPort and LanguageModelPort against any OpenAI-compatible REST endpoint.",
+  "Activation is deployment-optional: SDKWORK_MEMORY_OPENAI_API_KEY must be set; without it nothing in this crate is constructed or reachable.",
+  "The API key is a secret: redacted from Debug, never logged, never echoed in error bodies."
+ ],
+ "verification": [
+  "cargo test -p sdkwork-memory-provider-openai",
+  "cargo clippy -p sdkwork-memory-provider-openai --all-targets"
+ ]
+}

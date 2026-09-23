@@ -19,20 +19,20 @@ use sdkwork_memory_plugin_native_sql::{
     NATIVE_SQL_PLUGIN_ID,
 };
 use sdkwork_memory_retrieval::{
-    build_context_pack_from_hits, entity_boosts, extract_entities,
+    build_context_pack_from_hits, cosine_similarity, entity_boosts, extract_entities,
     fuse_retrieval_candidates_with_policy, normalize_entity_text,
     orchestrate_retrieval_candidates_with_entity_boosts, select_query_entities, EntityBoostInput,
     LinkedEntityMatch, MemoryRetrievalStrategy, RetrievalCandidate, RetrievalEventInput,
-    RetrievalFusionPolicy, RetrievalRecordInput,
+    RetrievalFusionPolicy, RetrievalRecordInput, VectorSimilarityInput,
 };
 use sdkwork_memory_spi::parse_metadata_filter;
 use sdkwork_memory_spi::{
     AppendMemoryAuditCommand, AppendMemoryOutboxCommand, AppendMemoryRetrievalTraceCommand,
     CreateCanonicalMemoryCommand, CreateMemoryCandidateCommand, DeleteAllCanonicalMemoryCommand,
-    DeleteCanonicalMemoryCommand, ListMemoryCandidatesQuery, MemoryCanonicalRecord,
-    MemoryCoreRuntime, MemoryDeploymentMode, MemoryDriveExportUploader, MemoryGraphPort,
-    MemoryImplementationKind as SpiMemoryImplementationKind, MemoryMutationJournal,
-    MemoryRetrievalHitDraft, MemoryRetrieverKind as SpiMemoryRetrieverKind,
+    DeleteCanonicalMemoryCommand, EmbeddingCommand, EmbeddingModelPort, ListMemoryCandidatesQuery,
+    MemoryCanonicalRecord, MemoryCoreRuntime, MemoryDeploymentMode, MemoryDriveExportUploader,
+    MemoryGraphPort, MemoryImplementationKind as SpiMemoryImplementationKind,
+    MemoryMutationJournal, MemoryRetrievalHitDraft, MemoryRetrieverKind as SpiMemoryRetrieverKind,
     MemoryRuntimeProfileMetadata, MemoryScopeContext, MemorySensitivityReadScope,
     RetrieveCanonicalMemoryQuery, RetrieveMemoryCandidateDetailQuery,
     RetrieveMemoryRetrievalTraceForTenantQuery, SearchMemoryCandidatesQuery,
@@ -51,6 +51,9 @@ pub struct OpenMemoryService {
     /// Graph (entity/edge) operations go through the SPI port so the graph
     /// capability stays store-agnostic behind the boundary.
     pub(crate) graph: Arc<dyn MemoryGraphPort>,
+    /// Optional embedding provider (batch 8b supply side); `None` keeps the
+    /// deployment embedding-optional with byte-identical lexical rankings.
+    pub(crate) embedder: Option<Arc<dyn EmbeddingModelPort>>,
     pub(crate) core_runtime: MemoryCoreRuntime,
     pub(crate) runtime_data_plane: MemoryRuntimeDataPlane,
     pub(crate) drive_export_uploader: Option<Arc<dyn MemoryDriveExportUploader>>,
@@ -67,6 +70,7 @@ impl OpenMemoryService {
         Self {
             store,
             graph,
+            embedder: None,
             core_runtime,
             runtime_data_plane,
             drive_export_uploader: None,
@@ -93,6 +97,7 @@ impl OpenMemoryService {
         Self {
             store,
             graph,
+            embedder: None,
             core_runtime,
             runtime_data_plane,
             drive_export_uploader: None,
@@ -243,6 +248,7 @@ impl OpenMemoryService {
         Self {
             store,
             graph,
+            embedder: None,
             core_runtime,
             runtime_data_plane,
             drive_export_uploader: None,
@@ -274,6 +280,7 @@ impl OpenMemoryService {
         Ok(Self {
             store,
             graph,
+            embedder: None,
             core_runtime,
             runtime_data_plane,
             drive_export_uploader: None,
@@ -701,8 +708,55 @@ impl OpenMemoryService {
         }
     }
 
+    /// Score every candidate against the query on the provider's embedding
+    /// space. The query is embedded once, candidates in one batch call; both
+    /// vectors arrive unit-normalized, so the cosine is a bounded dot product.
+    pub(crate) async fn compute_vector_similarities(
+        &self,
+        embedder: &dyn EmbeddingModelPort,
+        query: &str,
+        records: &[RetrievalRecordInput],
+    ) -> MemoryServiceResult<Vec<VectorSimilarityInput>> {
+        if records.is_empty() {
+            return Ok(Vec::new());
+        }
+        let query_vector = embedder
+            .embed(EmbeddingCommand {
+                input: query.to_string(),
+            })
+            .await
+            .map_err(map_memory_spi_error)?;
+        let commands = records
+            .iter()
+            .map(|record| EmbeddingCommand {
+                input: record.canonical_text.clone(),
+            })
+            .collect::<Vec<_>>();
+        let vectors = embedder
+            .embed_batch(commands)
+            .await
+            .map_err(map_memory_spi_error)?;
+        Ok(records
+            .iter()
+            .zip(vectors.iter())
+            .map(|(record, vector)| VectorSimilarityInput {
+                memory_id: record.memory_id.clone(),
+                similarity: cosine_similarity(&query_vector, vector),
+            })
+            .filter(|input| input.similarity.is_finite() && input.similarity > 0.0)
+            .collect())
+    }
+
     /// Serialize caller metadata into the stored JSON text form. `None` stays
     /// `None`; a non-serializable value is a storage fault, not a silent drop.
+    /// Bind an embedding provider (batch 8b supply side). Assemblies call
+    /// this when the deployment configures one; `None` keeps retrieval purely
+    /// lexical.
+    pub fn with_embedder(mut self, embedder: Arc<dyn EmbeddingModelPort>) -> Self {
+        self.embedder = Some(embedder);
+        self
+    }
+
     pub(crate) fn serialize_metadata(
         value: Option<&serde_json::Value>,
     ) -> MemoryServiceResult<Option<String>> {
@@ -1544,11 +1598,41 @@ impl MemoryOpenApi for OpenMemoryService {
                     .map(|(memory_id, boost)| EntityBoostInput { memory_id, boost })
                     .collect()
             };
+            // Batch 8b supply side: when an embedding provider is bound,
+            // score every rehydrated candidate against the query. A provider
+            // failure degrades the retrieval (lexical signals continue) rather
+            // than failing the request.
+            let vector_similarities = match &self.embedder {
+                None => Vec::new(),
+                Some(embedder) => {
+                    match self
+                        .compute_vector_similarities(
+                            embedder.as_ref(),
+                            &request.query,
+                            &record_inputs,
+                        )
+                        .await
+                    {
+                        Ok(similarities) => similarities,
+                        Err(error) => {
+                            retrieval_degraded = true;
+                            if !degradation_codes.contains(&"embedding_unavailable".to_string()) {
+                                degradation_codes.push("embedding_unavailable".to_string());
+                            }
+                            tracing::warn!(
+                                error = %error.detail,
+                                "embedding scoring failed; continuing on lexical signals"
+                            );
+                            Vec::new()
+                        }
+                    }
+                }
+            };
             let orchestrated = orchestrate_retrieval_candidates_with_entity_boosts(
                 &request.query,
                 &record_inputs,
                 &event_inputs,
-                &[],
+                &vector_similarities,
                 &entity_boost_inputs,
                 profile_retrievers.as_ref(),
                 candidate_limit as usize,

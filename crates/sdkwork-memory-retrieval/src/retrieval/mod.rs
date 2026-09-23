@@ -444,6 +444,38 @@ fn retriever_weight(profile: Option<&Value>, retriever: &str, default_weight: f6
 /// discards it: an anti-correlated embedding is not evidence for a memory. The upper
 /// clamp mirrors upstream `min(combined / max_possible, 1.0)` -- no single provider may
 /// outrank every lexical signal by reporting an unbounded dot product.
+/// Cosine similarity of two unit-normalized vectors.
+///
+/// Both sides are expected pre-normalized (the embedding adapter normalizes on
+/// the way in), so this is a dot product; a defensive renormalization keeps a
+/// non-unit provider vector from exceeding the shared `[0, 1]` signal scale,
+/// where `vector_similarity_score` clamps it anyway. Mismatched lengths or
+/// zero magnitudes yield `0.0` -- no similarity, not a fault.
+pub fn cosine_similarity(left: &[f32], right: &[f32]) -> f64 {
+    if left.len() != right.len() || left.is_empty() {
+        return 0.0;
+    }
+    let dot: f64 = left
+        .iter()
+        .zip(right.iter())
+        .map(|(a, b)| (*a as f64) * (*b as f64))
+        .sum();
+    let norm_left: f64 = left
+        .iter()
+        .map(|a| (*a as f64) * (*a as f64))
+        .sum::<f64>()
+        .sqrt();
+    let norm_right: f64 = right
+        .iter()
+        .map(|b| (*b as f64) * (*b as f64))
+        .sum::<f64>()
+        .sqrt();
+    if norm_left <= f64::EPSILON || norm_right <= f64::EPSILON {
+        return 0.0;
+    }
+    dot / (norm_left * norm_right)
+}
+
 fn vector_similarity_score(similarity: f64) -> f64 {
     if !similarity.is_finite() {
         return 0.0;

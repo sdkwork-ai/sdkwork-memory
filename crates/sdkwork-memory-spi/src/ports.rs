@@ -1245,6 +1245,17 @@ pub trait EmbeddingModelPort: Send + Sync {
     fn dimensions(&self) -> usize;
 
     async fn embed(&self, command: EmbeddingCommand) -> MemorySpiResult<Vec<f32>>;
+
+    /// Embed a batch of inputs, mirroring mem0's `embed_batch`. Providers
+    /// with a batch endpoint should override this; the default falls back to
+    /// per-item calls so implementations stay correct without it.
+    async fn embed_batch(&self, commands: Vec<EmbeddingCommand>) -> MemorySpiResult<Vec<Vec<f32>>> {
+        let mut vectors = Vec::with_capacity(commands.len());
+        for command in commands {
+            vectors.push(self.embed(command).await?);
+        }
+        Ok(vectors)
+    }
 }
 
 #[async_trait]

@@ -20,6 +20,7 @@ members = [
   "plugins/sdkwork-memory-plugin-native-sql",
   "plugins/sdkwork-memory-plugin-reference-profiles",
   "plugins/sdkwork-memory-plugin-search-first-vector",
+  "crates/sdkwork-memory-provider-openai",
 ]
 
 [workspace.package]
@@ -72,6 +73,7 @@ sdkwork-api-memory-assembly = { path = "crates/sdkwork-api-memory-assembly" }
 sdkwork-memory-spi = { path = "crates/sdkwork-memory-spi" }
 sdkwork-memory-profile-resolver = { path = "crates/sdkwork-memory-profile-resolver" }
 sdkwork-memory-contract = { path = "crates/sdkwork-memory-contract" }
+sdkwork-memory-provider-openai = { path = "crates/sdkwork-memory-provider-openai" }
 sdkwork-memory-retrieval = { path = "crates/sdkwork-memory-retrieval" }
 sdkwork-memory-test-support = { path = "crates/sdkwork-memory-test-support" }
 sdkwork-memory-plugin-native-sql = { path = "plugins/sdkwork-memory-plugin-native-sql" }

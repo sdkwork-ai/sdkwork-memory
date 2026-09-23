@@ -1,0 +1,20 @@
+[package]
+rust-version.workspace = true
+name = "sdkwork-memory-provider-openai"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "OpenAI-compatible provider adapter for SDKWork Memory (embeddings + chat completions)"
+
+[lints]
+workspace = true
+
+[dependencies]
+async-trait.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sdkwork-memory-spi.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true

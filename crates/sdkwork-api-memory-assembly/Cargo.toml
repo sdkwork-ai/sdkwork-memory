@@ -23,6 +23,7 @@ sdkwork-intelligence-memory-service.workspace = true
 sdkwork-intelligence-memory-repository-sqlx.workspace = true
 sdkwork-memory-database-host.workspace = true
 sdkwork-memory-drive.workspace = true
+sdkwork-memory-provider-openai.workspace = true
 sdkwork-routes-memory-support.workspace = true
 tower = { workspace = true, features = ["limit"] }
 sdkwork-routes-memory-app-api.workspace = true
