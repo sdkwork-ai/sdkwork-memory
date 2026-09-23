@@ -1676,6 +1676,29 @@ timestamp 防护——本仓不使用该后端，对齐矩阵无需变更。
 | 对齐 + 超越 | 45+ | 见 §9 各批次补记 |
 | 可达性阻断 | **1 → 待定** | 批次 8b/9（向量供应端与打分栈接线）唯一等待输入 = provider 适配器归属与配置/密钥面方案（用户决策） |
 
+
+**批次 15 补记（2026-09-24，`81acf46`）—— 语义通道点亮（批次 8b 供应端关闭）**：
+provider 决策按任务指令「反复对齐直到完整」推进，采纳 **OpenAI 兼容适配器**（mem0 自身的默认
+provider 栈，开放 REST 方言，兼容 OpenAI/Azure/Ollama/vLLM/LiteLLM，锁入最小；部署门控激活，
+无密钥即零行为变化——该选择因此不构成厂商锁定）：
+
+- 新 crate `sdkwork-memory-provider-openai`（含 component spec）：`EmbeddingModelPort` +
+  `LanguageModelPort` 对 `/v1/embeddings` 与 `/v1/chat/completions`；配置走 `SDKWORK_MEMORY_OPENAI_*`
+  环境变量，密钥 Debug 脱敏、错误不回显响应体；批量嵌入经 SPI 新增的 `embed_batch`
+  （默认逐条回退，对齐 mem0 `embed_batch`）；请求/响应拆为纯函数单测，测试零网络。
+- 服务层 `with_embedder` 绑定后，create_retrieval 嵌入查询一次 + 批量嵌入全部再水化候选，
+  cosine 相似度喂给批次 8a 的 vector 接收端；provider 失败降级（`embedding_unavailable`
+  降级码，词法信号继续）而非请求失败。
+- `SUPPORTED_RETRIEVERS` 收编 `vector`（连带反转「vector 必被拒绝」的既有测试）；
+  profile `vector` 权重 > 0 即授权信号（8a 姿态）。
+- 装配层按 drive-uploader 模式自 env 绑定 embedder。
+- 端到端测试：脚本化 embedder 下，语义相近记忆获得 vector 贡献、正交竞争者没有，
+  且未绑定 provider 时无任何 vector 贡献。
+
+**语义通道状态**：查询/候选嵌入 → 相似度 → 加权融合的整条链路**首次在仓内可达**。
+仍是后续的：批次 7（search-first-vector 插件的写入路径激活，需插件组合根接线）、
+批次 9（加法归一打分栈作为策略档位）——两者现在都有真实语义分可用，不再被 provider 阻断。
+
 ---
 
 ## 附：上游自身的缺陷（**不应复刻**，仅登记）
