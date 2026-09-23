@@ -2587,6 +2587,7 @@ async fn sqlite_retriever_port_applies_scope_type_and_sensitivity_before_limit()
             memory_types: vec!["semantic".to_string()],
             read_scope: MemorySensitivityReadScope::Public,
             metadata_filter: None,
+            include_expired: false,
         },
     )
     .await
@@ -2604,6 +2605,7 @@ async fn sqlite_retriever_port_applies_scope_type_and_sensitivity_before_limit()
             memory_types: vec!["semantic".to_string()],
             read_scope: MemorySensitivityReadScope::Owner,
             metadata_filter: None,
+            include_expired: false,
         },
     )
     .await
@@ -2632,6 +2634,7 @@ async fn sqlite_retriever_port_applies_scope_type_and_sensitivity_before_limit()
                 memory_types: Vec::new(),
                 read_scope: MemorySensitivityReadScope::Owner,
                 metadata_filter: None,
+                include_expired: false,
             },
         )
         .await
@@ -2668,6 +2671,7 @@ async fn sqlite_retriever_marks_known_fulltext_unavailability_as_degraded() {
             memory_types: vec!["semantic".to_string()],
             read_scope: MemorySensitivityReadScope::Public,
             metadata_filter: None,
+            include_expired: false,
         },
     )
     .await
@@ -2726,6 +2730,7 @@ async fn sqlite_event_retriever_returns_linked_canonical_memory_and_respects_tot
             memory_types: vec!["semantic".to_string()],
             read_scope: MemorySensitivityReadScope::Public,
             metadata_filter: None,
+            include_expired: false,
         },
     )
     .await
@@ -5164,5 +5169,134 @@ async fn sqlite_expiration_roundtrip_through_supersede_keeps_old_record_unchange
         old.expires_at.as_deref(),
         Some("2026-01-01T00:00:00Z"),
         "superseding a record must not rewrite the old record's expiration"
+    );
+}
+
+#[tokio::test]
+
+async fn sqlite_retrieval_and_listing_hide_expired_records_unless_asked() {
+    let store = new_contract_store().await;
+
+    let scope = MemoryScopeContext::for_test(1, 1);
+
+    for (memory_id, expires_at) in [
+        ("expired-record", Some("2020-01-01T00:00:00Z".to_string())),
+        ("living-record", Some("2099-01-01T00:00:00Z".to_string())),
+        ("immortal-record", None),
+    ] {
+        MemoryRecordStorePort::create_canonical_atomic(
+            &store,
+            CreateCanonicalMemoryCommand {
+                scope: scope.clone(),
+
+                memory_id: memory_id.to_string(),
+
+                scope_label: "user".to_string(),
+
+                memory_type: "semantic".to_string(),
+
+                subject: Some("account".to_string()),
+
+                predicate: Some("prefers".to_string()),
+
+                object_text: format!("kanata keymap {memory_id}"),
+
+                canonical_text: format!("Kanata keymap {memory_id}"),
+
+                sensitivity_level: "internal".to_string(),
+
+                expires_at,
+
+                journal: mutation_journal(memory_id, &format!("{memory_id}-created")),
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    let visible_ids = |include_expired: bool| {
+        let store = &store;
+
+        let scope = scope.clone();
+
+        async move {
+            let result = store
+                .search_memory_candidates(&SearchMemoryCandidatesQuery {
+                    scope,
+
+                    query: "kanata keymap".to_string(),
+
+                    limit: 10,
+
+                    retriever_kinds: vec![MemoryRetrieverKind::Keyword],
+
+                    memory_types: Vec::new(),
+
+                    read_scope: MemorySensitivityReadScope::Owner,
+
+                    metadata_filter: None,
+
+                    include_expired,
+                })
+                .await
+                .unwrap();
+
+            let mut ids = result
+                .records
+                .iter()
+                .map(|candidate| candidate.memory_id.clone())
+                .collect::<Vec<_>>();
+
+            ids.sort();
+
+            ids
+        }
+    };
+
+    assert_eq!(
+        visible_ids(false).await,
+        vec!["immortal-record".to_string(), "living-record".to_string()],
+        "search must hide expired records by default and keep the rest"
+    );
+
+    assert_eq!(
+        visible_ids(true).await.len(),
+        3,
+        "show_expired=true must bring the expired record back"
+    );
+
+    // Listing: the expired record is filtered out before LIMIT, so a page of
+
+    // size 1 serves the first non-expired record instead of an empty page.
+
+    let page = store
+        .list_record_details(&scope, None, 1, None, SENSITIVITY_READ_OWNER, false)
+        .await
+        .unwrap();
+
+    // The store serves page_size + 1 rows so the service layer can detect
+
+    // `has_more`; with the expired record filtered before LIMIT, neither slot
+
+    // is taken by it and the first served row is the next live record.
+
+    assert_eq!(page.len(), 2);
+
+    assert!(
+        !page.iter().any(|row| row.memory_id == "expired-record"),
+        "an expired record must not consume a page slot"
+    );
+
+    assert_eq!(page[0].memory_id, "immortal-record");
+
+    let full = store
+        .list_record_details(&scope, None, 10, None, SENSITIVITY_READ_OWNER, true)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        full.len(),
+        3,
+        "show_expired=true must list all three records"
     );
 }

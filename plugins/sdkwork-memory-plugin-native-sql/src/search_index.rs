@@ -259,10 +259,12 @@ impl NativeSqlMemoryStore {
             &[],
             MemorySensitivityReadScope::Owner,
             None,
+            false,
         )
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn search_record_details_fulltext_filtered(
         &self,
         scope: &MemoryScopeContext,
@@ -271,6 +273,7 @@ impl NativeSqlMemoryStore {
         memory_types: &[String],
         read_scope: MemorySensitivityReadScope,
         metadata_filter: Option<&MetadataFilterExpression>,
+        include_expired: bool,
     ) -> Result<Vec<NativeSqlMemoryRecordDetail>, NativeSqlStoreError> {
         let trimmed = query.trim();
         if trimmed.is_empty() {
@@ -278,6 +281,13 @@ impl NativeSqlMemoryStore {
         }
         let result_limit = i64::from(top_k.clamp(1, MAX_LIST_PAGE_SIZE));
         let sensitivity_level = Self::read_scope_level(read_scope);
+        // Compared against the same generator that wrote `expires_at`, so the
+        // string comparison stays chronological for the fixed UTC format.
+        let expiration_predicate = if include_expired {
+            String::new()
+        } else {
+            "\n                      AND (r.expires_at IS NULL OR r.expires_at > ?)".to_string()
+        };
         // Translated once, because a filter that only reached the LIKE fallback would stop
         // applying as soon as the full-text index answered instead.
         let filter_predicate = crate::filter_pushdown::translate_metadata_filter(
@@ -307,6 +317,7 @@ impl NativeSqlMemoryStore {
                       r.sensitivity_level,
                       r.created_at,
                       r.updated_at,
+                      r.expires_at,
                       r.version,
                       sup.uuid AS supersedes_uuid,
                       sub.uuid AS superseded_by_uuid
@@ -324,6 +335,7 @@ impl NativeSqlMemoryStore {
                 Self::append_sensitivity_filter(&mut sql, "r");
                 Self::append_memory_type_filter(&mut sql, "r", memory_types);
                 sql.push_str(&filter_predicate.sql);
+                sql.push_str(&expiration_predicate);
                 sql.push_str(
                     " ORDER BY ts_rank(r.search_document, websearch_to_tsquery('simple', ?)) DESC, r.uuid ASC LIMIT ?",
                 );
@@ -338,6 +350,9 @@ impl NativeSqlMemoryStore {
                 }
                 for bind in &filter_predicate.binds {
                     query_builder = query_builder.bind(bind);
+                }
+                if !include_expired {
+                    query_builder = query_builder.bind(crate::store::now_text());
                 }
                 let rows = query_builder
                     .bind(&websearch_query)
@@ -367,6 +382,7 @@ impl NativeSqlMemoryStore {
                       r.sensitivity_level,
                       r.created_at,
                       r.updated_at,
+                      r.expires_at,
                       r.version,
                       sup.uuid AS supersedes_uuid,
                       sub.uuid AS superseded_by_uuid
@@ -385,6 +401,7 @@ impl NativeSqlMemoryStore {
                 Self::append_sensitivity_filter(&mut sql, "r");
                 Self::append_memory_type_filter(&mut sql, "r", memory_types);
                 sql.push_str(&filter_predicate.sql);
+                sql.push_str(&expiration_predicate);
                 sql.push_str(" ORDER BY rank, r.uuid ASC LIMIT ?");
                 let mut query_builder = sqlx::query(&sql)
                     .bind(fts_query)
@@ -397,6 +414,9 @@ impl NativeSqlMemoryStore {
                 }
                 for bind in &filter_predicate.binds {
                     query_builder = query_builder.bind(bind);
+                }
+                if !include_expired {
+                    query_builder = query_builder.bind(crate::store::now_text());
                 }
                 let rows = query_builder
                     .bind(result_limit)

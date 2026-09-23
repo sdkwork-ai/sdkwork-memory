@@ -686,6 +686,10 @@ pub struct SearchMemoryCandidatesQuery {
     pub memory_types: Vec<String>,
     pub read_scope: MemorySensitivityReadScope,
     pub metadata_filter: Option<MetadataFilterExpression>,
+    /// When `false` (the default in every caller-facing surface), records whose
+    /// `expires_at` has passed are hidden from search and list results, mirroring
+    /// mem0's `show_expired` semantics. Single-record retrieval ignores this.
+    pub include_expired: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

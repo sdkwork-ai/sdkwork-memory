@@ -305,6 +305,10 @@ pub struct ListMemoriesQuery {
     pub space_id: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory_type: Option<String>,
+    /// When true, records whose `expiresAt` has passed stay visible in the
+    /// listing. Defaults to false, mirroring mem0's `show_expired` semantics.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_expired: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -330,6 +334,10 @@ pub struct MemoryRetrievalRequest {
     pub filters: Option<Value>,
     pub top_k: i32,
     pub context_budget_tokens: i32,
+    /// When true, records whose `expiresAt` has passed stay retrievable.
+    /// Defaults to false, mirroring mem0's `show_expired` semantics.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_expired: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub include_trace: Option<bool>,
 }

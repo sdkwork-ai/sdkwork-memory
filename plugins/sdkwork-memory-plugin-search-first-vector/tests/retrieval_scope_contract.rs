@@ -61,6 +61,7 @@ fn query(
         memory_types: Vec::new(),
         read_scope,
         metadata_filter: None,
+        include_expired: false,
     }
 }
 

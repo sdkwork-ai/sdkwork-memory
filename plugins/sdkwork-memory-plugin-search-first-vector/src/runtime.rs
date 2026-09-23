@@ -605,6 +605,7 @@ impl MemoryRetrieverPort for SearchFirstVectorRuntime {
             memory_types: Vec::new(),
             read_scope: MemorySensitivityReadScope::Public,
             metadata_filter: None,
+            include_expired: false,
         };
 
         let result = self

@@ -906,6 +906,7 @@ async fn claimed_retriever_capability_still_fails_closed_without_search_implemen
             memory_types: Vec::new(),
             read_scope: MemorySensitivityReadScope::Owner,
             metadata_filter: None,
+            include_expired: false,
         })
         .await
         .expect_err("default search implementation must fail closed");

@@ -1362,7 +1362,7 @@ impl OpenMemoryService {
                     object_text,
                     canonical_text: request.canonical_text,
                     sensitivity_level: sensitivity.to_string(),
-                    expires_at: request.expires_at,
+                    expires_at: Self::normalize_expires_at(request.expires_at.as_deref())?,
                     created_journal,
                     superseded_journal,
                 },

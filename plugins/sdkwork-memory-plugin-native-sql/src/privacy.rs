@@ -99,6 +99,7 @@ impl NativeSqlMemoryStore {
                     sdkwork_utils_rust::MAX_LIST_PAGE_SIZE,
                     Some(&cursor),
                     crate::store::SENSITIVITY_READ_OWNER,
+                    false,
                 )
                 .await?;
             if rows.is_empty() {
@@ -344,6 +345,7 @@ impl NativeSqlMemoryStore {
                         sdkwork_utils_rust::MAX_LIST_PAGE_SIZE,
                         Some(&cursor),
                         sensitivity_scope,
+                        false,
                     )
                     .await?;
                 if rows.is_empty() {

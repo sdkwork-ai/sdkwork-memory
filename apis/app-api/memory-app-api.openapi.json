@@ -933,6 +933,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "showExpired",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "When true, records whose expiresAt has passed stay visible in the listing. Defaults to false, mirroring mem0 show_expired semantics."
           }
         ],
         "responses": {
@@ -7720,6 +7729,17 @@
             "type": "integer",
             "format": "int32",
             "minimum": 1
+          },
+          "showExpired": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When true, records whose expiresAt has passed stay retrievable. Defaults to false, mirroring mem0 show_expired semantics."
           },
           "includeTrace": {
             "type": "boolean"

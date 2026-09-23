@@ -707,6 +707,7 @@ impl NativeSqlMemoryStore {
         page_size: i32,
         cursor: Option<&str>,
         sensitivity_read_scope: i32,
+        include_expired: bool,
     ) -> Result<Vec<NativeSqlMemoryRecordDetail>, NativeSqlStoreError> {
         let page_size = clamp_list_page_size(page_size);
         let sensitivity_read_scope =
@@ -714,8 +715,23 @@ impl NativeSqlMemoryStore {
         let cursor = cursor.unwrap_or("");
         let query = query.unwrap_or("").trim();
 
+        // The expiration predicate is appended before LIMIT so a hidden record
+        // never consumes a page slot, and it compares against the same
+        // generator that wrote `expires_at`, which keeps the string comparison
+        // chronological for the fixed UTC format.
+        let expiration_predicate = if include_expired {
+            String::new()
+        } else {
+            "\n                  AND (r.expires_at IS NULL OR r.expires_at > ?)".to_string()
+        };
+        let expiration_reference = if include_expired {
+            None
+        } else {
+            Some(now_text())
+        };
+
         let rows = if query.is_empty() {
-            sqlx::query(&format!(
+            let mut builder = sqlx::query(&format!(
                 r#"
                 SELECT
                   r.uuid,
@@ -744,7 +760,7 @@ impl NativeSqlMemoryStore {
                   AND r.space_id = ?
                   AND r.status <> 'deleted'
                   AND r.uuid > ?
-                {RECORD_SENSITIVITY_FILTER_SQL}
+                {RECORD_SENSITIVITY_FILTER_SQL}{expiration_predicate}
                 ORDER BY r.uuid ASC
                 LIMIT ?
                 "#
@@ -753,13 +769,14 @@ impl NativeSqlMemoryStore {
             .bind(scope.space_id)
             .bind(cursor)
             .bind(sensitivity_read_scope)
-            .bind(sensitivity_read_scope)
-            .bind(page_size + 1)
-            .fetch_all(&self.pool)
-            .await?
+            .bind(sensitivity_read_scope);
+            if let Some(reference) = &expiration_reference {
+                builder = builder.bind(reference);
+            }
+            builder.bind(page_size + 1).fetch_all(&self.pool).await?
         } else {
             let pattern = crate::privacy::like_pattern(query);
-            sqlx::query(&format!(
+            let mut builder = sqlx::query(&format!(
                 r#"
                 SELECT
                   r.uuid,
@@ -791,7 +808,7 @@ impl NativeSqlMemoryStore {
                   AND (r.canonical_text LIKE ? ESCAPE '\'
                        OR r.object_text LIKE ? ESCAPE '\'
                        OR COALESCE(r.subject, '') LIKE ? ESCAPE '\')
-                {RECORD_SENSITIVITY_FILTER_SQL}
+                {RECORD_SENSITIVITY_FILTER_SQL}{expiration_predicate}
                 ORDER BY r.uuid ASC
                 LIMIT ?
                 "#
@@ -803,10 +820,11 @@ impl NativeSqlMemoryStore {
             .bind(&pattern)
             .bind(&pattern)
             .bind(sensitivity_read_scope)
-            .bind(sensitivity_read_scope)
-            .bind(page_size + 1)
-            .fetch_all(&self.pool)
-            .await?
+            .bind(sensitivity_read_scope);
+            if let Some(reference) = &expiration_reference {
+                builder = builder.bind(reference);
+            }
+            builder.bind(page_size + 1).fetch_all(&self.pool).await?
         };
 
         Ok(rows.into_iter().map(record_detail_from_row).collect())
@@ -922,11 +940,13 @@ impl NativeSqlMemoryStore {
             &[],
             MemorySensitivityReadScope::Owner,
             None,
+            false,
         )
         .await
         .map(|(rows, _degraded)| rows)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn search_record_details_keyword_filtered(
         &self,
         scope: &MemoryScopeContext,
@@ -935,6 +955,7 @@ impl NativeSqlMemoryStore {
         memory_types: &[String],
         read_scope: MemorySensitivityReadScope,
         metadata_filter: Option<&MetadataFilterExpression>,
+        include_expired: bool,
     ) -> Result<(Vec<NativeSqlMemoryRecordDetail>, bool), NativeSqlStoreError> {
         let fulltext_result = self
             .search_record_details_fulltext_filtered(
@@ -944,6 +965,7 @@ impl NativeSqlMemoryStore {
                 memory_types,
                 read_scope,
                 metadata_filter,
+                include_expired,
             )
             .await;
         let degraded = match fulltext_result {
@@ -999,6 +1021,13 @@ impl NativeSqlMemoryStore {
         Self::append_sensitivity_filter(&mut sql, "r");
         Self::append_memory_type_filter(&mut sql, "r", memory_types);
         sql.push_str(&filter_predicate.sql);
+        if !include_expired {
+            // Compared against the same generator that wrote `expires_at`, so
+            // the string comparison stays chronological for the fixed UTC
+            // format. Applied before LIMIT: a hidden record never consumes a
+            // candidate slot.
+            sql.push_str(" AND (r.expires_at IS NULL OR r.expires_at > ?)");
+        }
         sql.push_str(" ORDER BY r.updated_at DESC, r.uuid ASC LIMIT ?");
         let mut query_builder = sqlx::query(&sql)
             .bind(scope.tenant_id)
@@ -1014,6 +1043,9 @@ impl NativeSqlMemoryStore {
         }
         for bind in &filter_predicate.binds {
             query_builder = query_builder.bind(bind);
+        }
+        if !include_expired {
+            query_builder = query_builder.bind(now_text());
         }
         let rows = query_builder
             .bind(top_k.max(1) as i64)
@@ -1218,6 +1250,7 @@ impl NativeSqlMemoryStore {
                     &query.memory_types,
                     query.read_scope,
                     query.metadata_filter.as_ref(),
+                    query.include_expired,
                 )
                 .await?;
             (
@@ -5251,6 +5284,7 @@ impl MemoryRetrieverPort for NativeSqlMemoryStore {
                 memory_types: Vec::new(),
                 read_scope: MemorySensitivityReadScope::Owner,
                 metadata_filter: None,
+                include_expired: false,
             })
             .await
             .map_err(|err| port_error("MemoryRetrieverPort", err))?;

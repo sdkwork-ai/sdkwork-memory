@@ -136,6 +136,7 @@ async fn pushdown_ids(
             memory_types: Vec::new(),
             read_scope: MemorySensitivityReadScope::Owner,
             metadata_filter: filter.cloned(),
+            include_expired: false,
         },
     )
     .await
@@ -286,6 +287,7 @@ async fn sqlite_refuses_a_filter_it_cannot_express_exactly() {
             memory_types: Vec::new(),
             read_scope: MemorySensitivityReadScope::Owner,
             metadata_filter: Some(parsed),
+            include_expired: false,
         },
     )
     .await

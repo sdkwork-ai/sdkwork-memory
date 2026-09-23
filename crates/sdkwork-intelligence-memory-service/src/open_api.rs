@@ -658,6 +658,25 @@ impl OpenMemoryService {
         }
     }
 
+    /// Validate a contract-declared `expiresAt` and canonicalise it to the UTC
+    /// text format the store writes for every other timestamp.
+    ///
+    /// Rejecting unparseable values keeps the caller's contract (an unparsable
+    /// date must not be silently stored and never honoured), and canonicalising
+    /// keeps the SQL string comparison in the retrieval path chronological
+    /// regardless of the offset notation the caller used.
+    pub(crate) fn normalize_expires_at(value: Option<&str>) -> MemoryServiceResult<Option<String>> {
+        let Some(value) = value else {
+            return Ok(None);
+        };
+        match sdkwork_utils_rust::parse_datetime(value, None) {
+            Some(parsed) => Ok(Some(sdkwork_utils_rust::format_datetime(parsed, None))),
+            None => Err(MemoryServiceError::validation(
+                "expiresAt must be an RFC 3339 timestamp such as 2027-01-01T00:00:00Z",
+            )),
+        }
+    }
+
     fn default_retriever_profile(&self) -> Option<serde_json::Value> {
         Some(self.retrieval_strategy.retriever_profile())
     }
@@ -924,6 +943,7 @@ impl MemoryOpenApi for OpenMemoryService {
                 page_size,
                 query.cursor.as_deref(),
                 sensitivity_scope,
+                query.show_expired.unwrap_or(false),
             )
             .await
             .map_err(Self::map_store_error)?;
@@ -1002,7 +1022,7 @@ impl MemoryOpenApi for OpenMemoryService {
                     object_text,
                     canonical_text: request.canonical_text,
                     sensitivity_level: sensitivity.to_string(),
-                    expires_at: request.expires_at,
+                    expires_at: Self::normalize_expires_at(request.expires_at.as_deref())?,
                     journal,
                 },
                 quota_limits.max_records_per_space,
@@ -1288,6 +1308,7 @@ impl MemoryOpenApi for OpenMemoryService {
                         memory_types: memory_type_filter.clone().unwrap_or_default(),
                         read_scope,
                         metadata_filter: metadata_filter.clone(),
+                        include_expired: request.show_expired.unwrap_or(false),
                     })
             })
             .collect();
@@ -1761,6 +1782,7 @@ impl MemoryOpenApi for OpenMemoryService {
                     filters: request.filters.clone(),
                     top_k,
                     context_budget_tokens: request.context_budget_tokens,
+                    show_expired: None,
                     include_trace: Some(false),
                 },
             )

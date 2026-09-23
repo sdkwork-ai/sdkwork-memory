@@ -1110,6 +1110,7 @@ async fn reference_rich_retrieval_is_bounded_filtered_and_fail_closed() {
             memory_types: vec!["semantic".to_string()],
             read_scope: MemorySensitivityReadScope::Public,
             metadata_filter: None,
+            include_expired: false,
         },
     )
     .await
@@ -1127,6 +1128,7 @@ async fn reference_rich_retrieval_is_bounded_filtered_and_fail_closed() {
             memory_types: vec!["semantic".to_string()],
             read_scope: MemorySensitivityReadScope::Owner,
             metadata_filter: None,
+            include_expired: false,
         },
     )
     .await
@@ -1162,6 +1164,7 @@ async fn reference_rich_retrieval_is_bounded_filtered_and_fail_closed() {
             memory_types: vec!["semantic".to_string()],
             read_scope: MemorySensitivityReadScope::Public,
             metadata_filter: None,
+            include_expired: false,
         },
     )
     .await
@@ -1177,6 +1180,7 @@ async fn reference_rich_retrieval_is_bounded_filtered_and_fail_closed() {
             memory_types: Vec::new(),
             read_scope: MemorySensitivityReadScope::Owner,
             metadata_filter: None,
+            include_expired: false,
         },
         SearchMemoryCandidatesQuery {
             scope: primary.clone(),
@@ -1186,6 +1190,7 @@ async fn reference_rich_retrieval_is_bounded_filtered_and_fail_closed() {
             memory_types: Vec::new(),
             read_scope: MemorySensitivityReadScope::Owner,
             metadata_filter: None,
+            include_expired: false,
         },
         SearchMemoryCandidatesQuery {
             scope: primary,
@@ -1195,6 +1200,7 @@ async fn reference_rich_retrieval_is_bounded_filtered_and_fail_closed() {
             memory_types: Vec::new(),
             read_scope: MemorySensitivityReadScope::Owner,
             metadata_filter: None,
+            include_expired: false,
         },
     ] {
         assert!(MemoryRetrieverPort::search_scoped(&runtime, query)
