@@ -88,6 +88,7 @@ sdks/**/*-typescript/src/index.d.ts
 # Local scratch and build residue (do not commit)
 tmp/
 .tmp/
+.tmp_*
 
 # Python bytecode (do not commit)
 __pycache__/

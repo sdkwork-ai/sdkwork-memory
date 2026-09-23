@@ -1,0 +1,230 @@
+/*
+ * SDKWork Memory console presentation.
+ *
+ * Owner: sdkwork-memory. Every user-facing Memory console surface (module page,
+ * drawers, tables, states) is styled here so the package can be embedded by any
+ * host without the host re-implementing or copying Memory UI rules.
+ *
+ * Contract:
+ * - All selectors are scoped under `.sdkwork-memory-console` (the root rendered
+ *   by `MemoryConsoleScope`) so embedding never leaks into or collides with a
+ *   host console that uses its own shell, table, or drawer classes.
+ * - Every design token is declared on the scope root instead of `:root`, so the
+ *   block is self-contained on any host page.
+ * - Admin accent rules key off `[data-memory-surface="backend-admin"]` instead of
+ *   a host shell class.
+ */
+
+.sdkwork-memory-console {
+  --memory-ink: #1a211e;
+  --memory-muted: #65706a;
+  --memory-line: #d8ddd8;
+  --memory-panel: #ffffff;
+  --memory-canvas: #f4f5f2;
+  --memory-accent: #147d64;
+  --memory-accent-soft: #e6f3ee;
+  --memory-admin: #a85816;
+  --memory-admin-soft: #fbecdf;
+  --memory-danger: #b42318;
+
+  position: relative;
+  min-width: 0;
+  color: var(--memory-ink);
+  background: var(--memory-canvas);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  letter-spacing: 0;
+  text-rendering: optimizeLegibility;
+}
+
+.sdkwork-memory-console *,
+.sdkwork-memory-console *::before,
+.sdkwork-memory-console *::after { box-sizing: border-box; letter-spacing: 0; }
+
+.sdkwork-memory-console button,
+.sdkwork-memory-console input,
+.sdkwork-memory-console select,
+.sdkwork-memory-console textarea { font: inherit; }
+
+.sdkwork-memory-console button,
+.sdkwork-memory-console a,
+.sdkwork-memory-console select,
+.sdkwork-memory-console input { outline-offset: 2px; }
+
+.sdkwork-memory-console button:focus-visible,
+.sdkwork-memory-console a:focus-visible,
+.sdkwork-memory-console select:focus-visible,
+.sdkwork-memory-console input:focus-visible,
+.sdkwork-memory-console tr:focus-visible { outline: 2px solid #167a63; }
+
+/* Module navigation: shared by the host-embedded module switcher and the
+   standalone shell, so one visual language covers both. */
+.sdkwork-memory-console .resource-tabs,
+.sdkwork-memory-console .module-nav { display: flex; min-width: 0; gap: 2px; overflow-x: auto; border-bottom: 1px solid var(--memory-line); }
+
+.sdkwork-memory-console .resource-tab,
+.sdkwork-memory-console .module-nav-item { min-height: 37px; flex: 0 0 auto; border: 0; border-bottom: 2px solid transparent; color: var(--memory-muted); background: transparent; padding: 0 12px; cursor: pointer; font-size: 12px; }
+
+.sdkwork-memory-console .resource-tab.active,
+.sdkwork-memory-console .module-nav-item.active { border-bottom-color: var(--memory-accent); color: #105f4e; font-weight: 650; }
+
+.sdkwork-memory-console[data-memory-surface="backend-admin"] .resource-tab.active,
+.sdkwork-memory-console[data-memory-surface="backend-admin"] .module-nav-item.active { border-bottom-color: var(--memory-admin); color: #87440e; }
+
+.sdkwork-memory-console .module-page { min-height: 100%; padding: 24px clamp(16px, 2.5vw, 36px); }
+.sdkwork-memory-console .module-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 18px; }
+.sdkwork-memory-console .module-kicker { margin: 0 0 5px; color: var(--memory-accent); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.sdkwork-memory-console[data-memory-surface="backend-admin"] .module-kicker { color: var(--memory-admin); }
+.sdkwork-memory-console .module-header h1 { margin: 0; color: var(--memory-ink); font-size: 22px; font-weight: 690; line-height: 1.25; }
+
+.sdkwork-memory-console .icon-button { display: inline-grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; border: 1px solid var(--memory-line); border-radius: 6px; color: #46514c; background: var(--memory-panel); cursor: pointer; }
+.sdkwork-memory-console .icon-button:hover:not(:disabled) { border-color: #8e9b95; color: #16201b; }
+.sdkwork-memory-console .icon-button:disabled { cursor: not-allowed; opacity: .38; }
+
+.sdkwork-memory-console .resource-toolbar { display: grid; grid-template-columns: minmax(220px, 1.3fr) minmax(180px, 1fr) 120px; gap: 12px; padding: 16px 0; }
+.sdkwork-memory-console .field-control { display: grid; min-width: 0; gap: 5px; color: #59645f; font-size: 10px; font-weight: 650; text-transform: uppercase; }
+.sdkwork-memory-console .field-control input,
+.sdkwork-memory-console .field-control select,
+.sdkwork-memory-console .search-field > div { width: 100%; height: 36px; border: 1px solid var(--memory-line); border-radius: 6px; color: var(--memory-ink); background: var(--memory-panel); padding: 0 10px; font-size: 12px; font-weight: 400; text-transform: none; }
+.sdkwork-memory-console .field-control textarea { width: 100%; resize: vertical; border: 1px solid var(--memory-line); border-radius: 6px; color: var(--memory-ink); background: var(--memory-panel); padding: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-weight: 400; line-height: 1.5; text-transform: none; }
+.sdkwork-memory-console .resource-actions { display: flex; grid-column: 1 / -1; flex-wrap: wrap; gap: 7px; }
+.sdkwork-memory-console .command-button { display: inline-flex; min-height: 34px; align-items: center; justify-content: center; gap: 7px; border: 1px solid #6f8f82; border-radius: 6px; color: #174f3f; background: #edf7f2; padding: 0 11px; cursor: pointer; font-size: 11px; font-weight: 700; }
+.sdkwork-memory-console .command-button:hover:not(:disabled) { border-color: #2f6f59; background: #e1f1e9; }
+.sdkwork-memory-console .command-button.danger { border-color: #bd7e78; color: #7d2922; background: #fff1ef; }
+.sdkwork-memory-console .command-button.danger:hover:not(:disabled) { border-color: #96473f; background: #fde4e1; }
+.sdkwork-memory-console .command-button:disabled { cursor: not-allowed; opacity: .42; }
+.sdkwork-memory-console .search-field > div { display: flex; align-items: center; gap: 8px; padding: 0 9px; }
+.sdkwork-memory-console .search-field > div input { height: 32px; border: 0; padding: 0; background: transparent; outline: 0; }
+
+.sdkwork-memory-console .resource-stage { min-height: 320px; border: 1px solid var(--memory-line); border-radius: 7px; background: var(--memory-panel); overflow: hidden; }
+.sdkwork-memory-console .table-scroll { width: 100%; overflow: auto; }
+.sdkwork-memory-console table { width: 100%; min-width: 780px; border-collapse: collapse; table-layout: fixed; }
+.sdkwork-memory-console th { height: 38px; border-bottom: 1px solid var(--memory-line); color: #68736e; background: #f7f8f6; padding: 0 12px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.sdkwork-memory-console td { max-width: 280px; height: 45px; border-bottom: 1px solid #e9ece8; padding: 0 12px; overflow: hidden; color: #303a35; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.sdkwork-memory-console tbody tr { cursor: pointer; }
+.sdkwork-memory-console tbody tr:hover { background: #f3f8f5; }
+.sdkwork-memory-console[data-memory-surface="backend-admin"] tbody tr:hover { background: #fcf6f0; }
+.sdkwork-memory-console .loading-line { display: flex; min-height: 320px; align-items: center; justify-content: center; gap: 10px; color: var(--memory-muted); font-size: 12px; }
+.sdkwork-memory-console .spinner { width: 15px; height: 15px; border: 2px solid #c9d2cd; border-top-color: var(--memory-accent); border-radius: 50%; animation: sdkwork-memory-spin .8s linear infinite; }
+.sdkwork-memory-console[data-memory-surface="backend-admin"] .spinner { border-top-color: var(--memory-admin); }
+@keyframes sdkwork-memory-spin { to { transform: rotate(360deg); } }
+.sdkwork-memory-console .status-state { display: grid; min-height: 320px; place-content: center; justify-items: center; gap: 10px; color: #7b8781; text-align: center; }
+.sdkwork-memory-console .status-state p { max-width: 520px; margin: 0; padding: 0 20px; font-size: 12px; line-height: 1.6; }
+.sdkwork-memory-console .status-state.danger { color: var(--memory-danger); }
+
+.sdkwork-memory-console .pagination-bar { display: flex; min-height: 52px; align-items: center; justify-content: space-between; color: var(--memory-muted); font-size: 11px; }
+.sdkwork-memory-console .pagination-bar > div { display: flex; gap: 6px; }
+
+.sdkwork-memory-console .detail-drawer { position: fixed; z-index: 20; top: 0; right: 0; width: min(520px, calc(100vw - 32px)); height: 100vh; overflow: auto; border-left: 1px solid #cdd4cf; background: #fff; box-shadow: -12px 0 32px rgba(21, 29, 25, .12); }
+.sdkwork-memory-console .detail-drawer header { position: sticky; top: 0; display: flex; min-height: 64px; align-items: center; justify-content: space-between; padding: 0 18px; border-bottom: 1px solid var(--memory-line); background: #fff; }
+.sdkwork-memory-console .detail-drawer h2 { margin: 0; font-size: 15px; }
+.sdkwork-memory-console .detail-drawer dl { margin: 0; padding: 8px 18px 24px; }
+.sdkwork-memory-console .detail-drawer dl > div { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 14px; padding: 11px 0; border-bottom: 1px solid #edf0ed; }
+.sdkwork-memory-console .detail-drawer dt { color: #718079; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.sdkwork-memory-console .detail-drawer dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: #2d3732; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.55; white-space: pre-wrap; }
+
+.sdkwork-memory-console .command-drawer { position: fixed; z-index: 30; top: 0; right: 0; display: flex; width: min(560px, calc(100vw - 24px)); height: 100vh; flex-direction: column; gap: 16px; overflow: auto; border-left: 1px solid #cdd4cf; background: #fff; padding: 0 18px 20px; box-shadow: -12px 0 32px rgba(21, 29, 25, .14); }
+.sdkwork-memory-console .command-drawer header { position: sticky; top: 0; display: flex; min-height: 64px; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--memory-line); background: #fff; }
+.sdkwork-memory-console .command-drawer h2 { margin: 0; font-size: 15px; }
+.sdkwork-memory-console .command-drawer footer { display: flex; justify-content: flex-end; padding-top: 4px; }
+.sdkwork-memory-console .command-impact { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; margin: 0; border-left: 3px solid #6f8f82; background: #f4f7f5; padding: 10px 12px; }
+.sdkwork-memory-console .command-impact div { min-width: 0; }
+.sdkwork-memory-console .command-impact dt { color: #718079; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+.sdkwork-memory-console .command-impact dd { margin: 3px 0 0; overflow-wrap: anywhere; color: #2d3732; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+.sdkwork-memory-console .command-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.sdkwork-memory-console .command-fields .field-control:has(textarea),
+.sdkwork-memory-console .command-fields .action-boolean { grid-column: 1 / -1; }
+.sdkwork-memory-console .advanced-json { border-top: 1px solid var(--memory-line); padding-top: 10px; }
+.sdkwork-memory-console .advanced-json summary { cursor: pointer; color: #536159; font-size: 11px; font-weight: 700; }
+.sdkwork-memory-console .advanced-json .field-control { margin-top: 10px; }
+.sdkwork-memory-console .confirm-control { display: flex; align-items: flex-start; gap: 9px; color: #5b302c; font-size: 12px; line-height: 1.4; }
+.sdkwork-memory-console .confirm-control input { width: 16px; height: 16px; flex: 0 0 16px; margin: 0; accent-color: #8f3932; }
+.sdkwork-memory-console .command-error { margin: 0; color: #982f28; font-size: 11px; }
+
+.sdkwork-memory-console .permission-state { display: grid; min-height: 320px; place-content: center; justify-items: center; color: #6e7973; text-align: center; }
+.sdkwork-memory-console .permission-state h1 { margin: 14px 0 5px; color: var(--memory-ink); font-size: 18px; }
+.sdkwork-memory-console .permission-state p { margin: 0; font-size: 12px; }
+
+@media (max-width: 800px) {
+  .sdkwork-memory-console .module-page { padding-top: 18px; }
+  .sdkwork-memory-console .resource-toolbar { grid-template-columns: 1fr 1fr; }
+  .sdkwork-memory-console .page-size-field { grid-column: span 2; }
+}
+
+@media (max-width: 520px) {
+  .sdkwork-memory-console .resource-toolbar { grid-template-columns: 1fr; }
+  .sdkwork-memory-console .page-size-field { grid-column: auto; }
+  .sdkwork-memory-console .scope-field,
+  .sdkwork-memory-console .search-field { min-width: 0; }
+  .sdkwork-memory-console .module-header h1 { font-size: 19px; }
+  .sdkwork-memory-console .detail-drawer dl > div { grid-template-columns: 1fr; gap: 5px; }
+  .sdkwork-memory-console .command-fields,
+  .sdkwork-memory-console .command-impact { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sdkwork-memory-console *,
+  .sdkwork-memory-console *::before,
+  .sdkwork-memory-console *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+/*
+ * Dark scheme.
+ *
+ * The scope tokens above are light by default. A host console that switches to
+ * dark announces it with the root `.dark` class (the Tailwind `dark` custom
+ * variant convention: `.dark` on <html>), so the block follows the host instead
+ * of the host having to restate Memory tokens. Selectors keep the
+ * `.sdkwork-memory-console` prefix so nothing leaks outward, and the standalone
+ * Memory application (which never sets `.dark`) keeps its light appearance.
+ */
+.dark .sdkwork-memory-console {
+  --memory-ink: #e4e9e6;
+  --memory-muted: #9aa5a0;
+  --memory-line: #2f3633;
+  --memory-panel: #1b1f1d;
+  --memory-canvas: #121514;
+  --memory-accent: #46c39f;
+  --memory-accent-soft: #14302a;
+  --memory-admin: #d59150;
+  --memory-admin-soft: #33241a;
+  --memory-danger: #f0837a;
+}
+
+.dark .sdkwork-memory-console .resource-tab.active,
+.dark .sdkwork-memory-console .module-nav-item.active { color: #7dddbd; }
+
+.dark .sdkwork-memory-console[data-memory-surface="backend-admin"] .resource-tab.active,
+.dark .sdkwork-memory-console[data-memory-surface="backend-admin"] .module-nav-item.active { color: #e8b283; }
+
+.dark .sdkwork-memory-console .icon-button { color: #c3ccc7; }
+.dark .sdkwork-memory-console .icon-button:hover:not(:disabled) { border-color: #5c6660; color: #f2f5f3; }
+.dark .sdkwork-memory-console .field-control { color: #9aa5a0; }
+
+.dark .sdkwork-memory-console .command-button { border-color: #3f6b5c; color: #a8e6d1; background: #16302a; }
+.dark .sdkwork-memory-console .command-button:hover:not(:disabled) { border-color: #55a184; background: #1c3d34; }
+.dark .sdkwork-memory-console .command-button.danger { border-color: #7a4640; color: #f0a49c; background: #331d1b; }
+.dark .sdkwork-memory-console .command-button.danger:hover:not(:disabled) { border-color: #a75c53; background: #402220; }
+
+.dark .sdkwork-memory-console th { color: #9aa5a0; background: #1f2422; }
+.dark .sdkwork-memory-console td { border-bottom-color: #262b29; color: #cbd4cf; }
+.dark .sdkwork-memory-console tbody tr:hover { background: #1e2a26; }
+.dark .sdkwork-memory-console[data-memory-surface="backend-admin"] tbody tr:hover { background: #2a231c; }
+
+.dark .sdkwork-memory-console .spinner { border-color: #39413d; }
+.dark .sdkwork-memory-console .status-state { color: #8d968f; }
+
+.dark .sdkwork-memory-console .detail-drawer,
+.dark .sdkwork-memory-console .command-drawer { border-left-color: #333a37; background: #191d1b; box-shadow: -12px 0 32px rgba(0, 0, 0, .45); }
+.dark .sdkwork-memory-console .detail-drawer header,
+.dark .sdkwork-memory-console .command-drawer header { background: #191d1b; }
+.dark .sdkwork-memory-console .detail-drawer dl > div { border-bottom-color: #262b29; }
+.dark .sdkwork-memory-console .detail-drawer dt,
+.dark .sdkwork-memory-console .command-impact dt { color: #8d968f; }
+.dark .sdkwork-memory-console .detail-drawer dd,
+.dark .sdkwork-memory-console .command-impact dd { color: #cbd4cf; }
+.dark .sdkwork-memory-console .command-impact { border-left-color: #3f6b5c; background: #1c2320; }
+.dark .sdkwork-memory-console .advanced-json summary { color: #a3ada8; }
+.dark .sdkwork-memory-console .confirm-control { color: #f0a49c; }
+.dark .sdkwork-memory-console .command-error { color: #f0837a; }
+.dark .sdkwork-memory-console .permission-state { color: #8d968f; }

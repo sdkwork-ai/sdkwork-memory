@@ -1,3 +1,5 @@
+import "@sdkwork/memory-pc-commons/styles.css";
+
 import { MemorySurfaceWorkspace, type MemoryPcModuleDefinition, type MemoryResourceRegistry } from "@sdkwork/memory-pc-commons";
 
 export interface MemoryConsoleShellProps {

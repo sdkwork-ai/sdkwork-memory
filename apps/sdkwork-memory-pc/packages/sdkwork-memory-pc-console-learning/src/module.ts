@@ -9,7 +9,7 @@ export const consoleLearningModule = {
   titleKey: "memory.console-learning.title",
   descriptionKey: "memory.console-learning.description",
   permission: "memory.candidates.read",
-  resources: ["candidates","habits","learningSettings"],
+  resources: ["candidates","habits","learningSettings","extractionJobs"],
   messages: { "en-US": enUS, "zh-CN": zhCN },
 } as const satisfies MemoryPcModuleDefinition;
 

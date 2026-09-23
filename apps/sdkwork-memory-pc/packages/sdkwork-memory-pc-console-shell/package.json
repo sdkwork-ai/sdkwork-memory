@@ -14,6 +14,12 @@
   "dependencies": {
     "@sdkwork/memory-pc-commons": "workspace:*",
     "@sdkwork/memory-pc-console-core": "workspace:*",
+    "@sdkwork/memory-pc-console-governance": "workspace:*",
+    "@sdkwork/memory-pc-console-knowledge": "workspace:*",
+    "@sdkwork/memory-pc-console-learning": "workspace:*",
+    "@sdkwork/memory-pc-console-memory": "workspace:*",
+    "@sdkwork/memory-pc-console-overview": "workspace:*",
+    "@sdkwork/memory-pc-console-retrieval": "workspace:*",
     "react": "catalog:",
     "react-router-dom": "^7.14.0"
   },

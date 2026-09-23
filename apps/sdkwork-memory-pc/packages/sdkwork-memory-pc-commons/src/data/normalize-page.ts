@@ -30,6 +30,21 @@ export function emptyMemoryPage(): MemoryPageResult {
   return { items: [], pageInfo: { mode: "cursor", hasMore: false } };
 }
 
+/**
+ * Normalizes a single-resource response into the plain record the detail drawer renders.
+ *
+ * Unwraps the SDKWork envelope (`data.item`, then `data`) the same way the list
+ * normalizer does, and rejects anything that is not an object: a detail loader must not
+ * be able to hand the drawer a shape the contract never promised.
+ */
+export function normalizeMemoryRecord(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) throw contractError("resource response must be an object");
+  const data = isRecord(value.data) ? value.data : value;
+  const item = isRecord(data.item) ? data.item : data;
+  if (!isRecord(item)) throw contractError("resource response data.item must be an object");
+  return item;
+}
+
 function normalizePageInfo(value: Record<string, unknown>): MemoryPageInfo {
   if (value.mode !== "cursor" && value.mode !== "offset") {
     throw contractError("pageInfo.mode must be cursor or offset");

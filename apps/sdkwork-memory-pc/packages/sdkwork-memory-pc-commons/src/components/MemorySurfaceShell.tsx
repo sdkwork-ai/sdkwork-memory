@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 
 import { useMemoryI18n } from "../i18n/runtime.tsx";
 import type { MemoryPcModuleDefinition, MemoryPcSurface } from "../types.ts";
+import { MEMORY_CONSOLE_SURFACE_ATTRIBUTE, memoryConsoleScopeClassName } from "./MemoryConsoleScope.tsx";
 
 const icons: Record<string, LucideIcon> = {
   overview: Gauge,
@@ -33,7 +34,10 @@ export function MemorySurfaceShell({ activeRoute, children, modules, onSignOut, 
   const SurfaceIcon = surface === "backend-admin" ? Activity : HeartPulse;
 
   return (
-    <div className={`app-frame ${surface === "backend-admin" ? "admin-frame" : "console-frame"}`}>
+    <div
+      className={memoryConsoleScopeClassName(surface, `app-frame ${surface === "backend-admin" ? "admin-frame" : "console-frame"}`)}
+      {...{ [MEMORY_CONSOLE_SURFACE_ATTRIBUTE]: surface }}
+    >
       <aside className="primary-sidebar">
         <Link to={basePath} className="brand-lockup" aria-label={translate("memory.commons.applicationName")}>
           <span className="brand-mark"><BrainCircuit size={21} /></span>

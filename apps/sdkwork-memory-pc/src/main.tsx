@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { bootstrapMemoryPcRuntime } from "./bootstrap/runtime.ts";
 import "./index.css";
+import "@sdkwork/memory-pc-commons/styles.css";
 
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Application root element is missing");

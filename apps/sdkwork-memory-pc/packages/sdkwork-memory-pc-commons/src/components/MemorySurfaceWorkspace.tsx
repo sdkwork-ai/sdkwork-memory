@@ -1,9 +1,8 @@
-import { ShieldAlert } from "lucide-react";
 import { Navigate, useLocation } from "react-router-dom";
 
-import { useMemoryI18n } from "../i18n/runtime.tsx";
 import type { MemoryPcModuleDefinition, MemoryPcSurface, MemoryResourceRegistry } from "../types.ts";
 import { MemoryModulePage } from "./MemoryModulePage.tsx";
+import { MemoryPermissionState } from "./MemoryPermissionState.tsx";
 import { MemorySurfaceShell } from "./MemorySurfaceShell.tsx";
 
 export interface MemorySurfaceWorkspaceProps {
@@ -16,7 +15,6 @@ export interface MemorySurfaceWorkspaceProps {
 }
 
 export function MemorySurfaceWorkspace(props: MemorySurfaceWorkspaceProps) {
-  const { translate } = useMemoryI18n();
   const location = useLocation();
   const basePath = props.surface === "backend-admin" ? "/admin" : "/console";
   const activeRoute = location.pathname.slice(basePath.length).split("/").filter(Boolean)[0];
@@ -30,9 +28,7 @@ export function MemorySurfaceWorkspace(props: MemorySurfaceWorkspaceProps) {
   const allowed = hasPermissionHint(props.permissionScope, module.permission);
   return (
     <MemorySurfaceShell activeRoute={module.route} modules={props.modules} onSignOut={props.onSignOut} surface={props.surface} userLabel={props.userLabel}>
-      {allowed ? <MemoryModulePage module={module} registry={props.registry} /> : (
-        <section className="permission-state"><ShieldAlert size={28} /><h1>{translate(module.titleKey)}</h1><p>{translate("memory.commons.permissionDenied")}</p></section>
-      )}
+      {allowed ? <MemoryModulePage module={module} registry={props.registry} /> : <MemoryPermissionState titleKey={module.titleKey} />}
     </MemorySurfaceShell>
   );
 }

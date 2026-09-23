@@ -10,13 +10,7 @@ import { memoryModule as adminProvidersModule } from "@sdkwork/memory-pc-admin-p
 import { memoryModule as adminRetrievalModule } from "@sdkwork/memory-pc-admin-retrieval";
 import { MemoryI18nProvider, type MemoryPcModuleDefinition } from "@sdkwork/memory-pc-commons";
 import { MemoryConsoleSdkProvider, createMemoryConsoleResourceRegistry } from "@sdkwork/memory-pc-console-core";
-import { memoryModule as consoleGovernanceModule } from "@sdkwork/memory-pc-console-governance";
-import { memoryModule as consoleKnowledgeModule } from "@sdkwork/memory-pc-console-knowledge";
-import { memoryModule as consoleLearningModule } from "@sdkwork/memory-pc-console-learning";
-import { memoryModule as consoleMemoryModule } from "@sdkwork/memory-pc-console-memory";
-import { memoryModule as consoleOverviewModule } from "@sdkwork/memory-pc-console-overview";
-import { memoryModule as consoleRetrievalModule } from "@sdkwork/memory-pc-console-retrieval";
-import { MemoryConsoleShell } from "@sdkwork/memory-pc-console-shell";
+import { MemoryConsoleShell, memoryConsoleModules as consoleModules } from "@sdkwork/memory-pc-console-shell";
 import { assertUniqueMemoryModules, type MemoryLocale } from "@sdkwork/memory-pc-core";
 import { lazy, Suspense, useMemo, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
@@ -24,15 +18,12 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import type { BootstrappedMemoryPcRuntime } from "./bootstrap/runtime.ts";
 import { MemoryAuthGate } from "./auth/MemoryAuthGate.tsx";
 
-const consoleModules = assertUniqueMemoryModules([
-  consoleOverviewModule,
-  consoleMemoryModule,
-  consoleLearningModule,
-  consoleRetrievalModule,
-  consoleKnowledgeModule,
-  consoleGovernanceModule,
-] satisfies readonly MemoryPcModuleDefinition[]);
-
+/**
+ * The user-console catalog is imported from the console shell package, which owns
+ * module membership, ordering, routes, and permission gates. Listing the modules
+ * here as well would create a second source of truth that silently drifts the
+ * moment a capability package is added.
+ */
 const adminModules = assertUniqueMemoryModules([
   adminOverviewModule,
   adminMemoryModule,

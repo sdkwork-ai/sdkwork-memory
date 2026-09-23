@@ -3,9 +3,10 @@ import { useEffect, useMemo, useState } from "react";
 import { uuid } from "@sdkwork/utils/id";
 
 import { useMemoryI18n } from "../i18n/runtime.tsx";
-import type { MemoryListQuery, MemoryPageResult, MemoryPcModuleDefinition, MemoryPcResourceKey, MemoryResourceAction, MemoryResourceRegistry } from "../types.ts";
+import type { MemoryListQuery, MemoryPageResult, MemoryPcModuleDefinition, MemoryPcResourceKey, MemoryResourceAction, MemoryResourceFilterDefinition, MemoryResourceRegistry } from "../types.ts";
 
 const DEFAULT_PAGE: MemoryPageResult = { items: [], pageInfo: { mode: "cursor", hasMore: false } };
+const EMPTY_FILTERS: readonly MemoryResourceFilterDefinition[] = [];
 
 export interface MemoryModulePageProps {
   module: MemoryPcModuleDefinition;
@@ -17,12 +18,16 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
   const [resource, setResource] = useState<MemoryPcResourceKey>(module.resources[0] ?? "spaces");
   const [q, setQ] = useState("");
   const [spaceId, setSpaceId] = useState("");
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const [cursor, setCursor] = useState<string>();
   const [cursorHistory, setCursorHistory] = useState<string[]>([]);
   const [pageSize, setPageSize] = useState(20);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [page, setPage] = useState(DEFAULT_PAGE);
-  const [selectedItem, setSelectedItem] = useState<Record<string, unknown> | null>(null);
+  const [detailRow, setDetailRow] = useState<Record<string, unknown> | null>(null);
+  const [detailPayload, setDetailPayload] = useState<Record<string, unknown> | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [activeAction, setActiveAction] = useState<MemoryResourceAction>();
@@ -33,7 +38,28 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
   const [actionRunning, setActionRunning] = useState(false);
   const [actionError, setActionError] = useState<string>();
   const dataSource = registry[resource];
+  /**
+   * The record shown in the detail drawer: the authoritative detail payload once the
+   * owning API has answered, otherwise the list projection that opened the drawer.
+   */
+  const selectedItem = detailPayload ?? detailRow;
   const parsedActionBody = useMemo(() => parseActionBody(actionBody), [actionBody]);
+  // Stable identity while the resource stays the same: an inline `[]` default would
+  // change every render and re-trigger the load effect forever.
+  const declaredFilters = dataSource?.filters ?? EMPTY_FILTERS;
+
+  /**
+   * Filter values the active resource actually declares.
+   *
+   * Switching resource tabs must not leak a foreign parameter into the request, so
+   * values are filtered against the declared set instead of being sent verbatim.
+   */
+  const activeFilterValues = useMemo(() => {
+    const entries = declaredFilters
+      .map((filter) => [filter.param, filterValues[filter.param]?.trim() ?? ""] as const)
+      .filter(([, value]) => value.length > 0);
+    return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+  }, [declaredFilters, filterValues]);
 
   function message(key: string, fallback: string): string {
     const value = translate(key);
@@ -48,6 +74,23 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
     return message(`memory.fields.${value}`, formatResourceName(value));
   }
 
+  function filterLabel(filter: MemoryResourceFilterDefinition): string {
+    return message(filter.labelKey, formatResourceName(filter.param));
+  }
+
+  function filterOptionLabel(filter: MemoryResourceFilterDefinition, option: string): string {
+    return message(`memory.filters.${filter.param}.${option}`, formatResourceName(option));
+  }
+
+  function updateFilterValue(param: string, value: string): void {
+    setFilterValues((current) => {
+      if (value) return { ...current, [param]: value };
+      const next = { ...current };
+      delete next[param];
+      return next;
+    });
+  }
+
   function actionLabel(action: MemoryResourceAction): string {
     const verb = message(`memory.actions.${action.id}`, action.label);
     const target = resourceLabel(resource);
@@ -57,9 +100,11 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
   useEffect(() => {
     setCursor(undefined);
     setCursorHistory([]);
-    setSelectedItem(null);
+    setDetailRow(null);
+    setDetailPayload(null);
+    setDetailError(undefined);
     closeAction();
-  }, [resource, q, spaceId, pageSize]);
+  }, [resource, q, spaceId, filterValues, pageSize]);
 
   useEffect(() => {
     if (!dataSource) {
@@ -74,6 +119,7 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
       ...(q.trim() ? { q: q.trim() } : {}),
       ...(spaceId.trim() ? { spaceId: spaceId.trim() } : {}),
       ...(cursor ? { cursor } : {}),
+      ...(activeFilterValues ? { filterValues: activeFilterValues } : {}),
     };
     setLoading(true);
     setError(undefined);
@@ -85,7 +131,33 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
       if (!controller.signal.aborted) setLoading(false);
     });
     return () => controller.abort();
-  }, [cursor, dataSource, pageSize, q, refreshVersion, spaceId]);
+  }, [activeFilterValues, cursor, dataSource, pageSize, q, refreshVersion, spaceId]);
+
+  // The drawer opens on the list projection immediately and is then replaced by the
+  // authoritative single-record payload. Resources without a detail operation keep
+  // showing the row, so the drawer never blocks on a capability the resource lacks.
+  useEffect(() => {
+    if (!detailRow || !dataSource?.loadDetail) return;
+    const controller = new AbortController();
+    const query: MemoryListQuery = {
+      pageSize,
+      ...(spaceId.trim() ? { spaceId: spaceId.trim() } : {}),
+      ...(activeFilterValues ? { filterValues: activeFilterValues } : {}),
+    };
+    setDetailLoading(true);
+    setDetailError(undefined);
+    void dataSource.loadDetail(detailRow, query, controller.signal).then((detail) => {
+      if (!controller.signal.aborted) setDetailPayload(detail);
+    }).catch((reason: unknown) => {
+      if (!controller.signal.aborted) setDetailError(readSafeError(reason, translate));
+    }).finally(() => {
+      if (!controller.signal.aborted) setDetailLoading(false);
+    });
+    return () => controller.abort();
+    // `translate` is intentionally absent: hosts may pass a fresh `setLocale` closure
+    // on every render, so depending on the memoized translator would re-run this effect
+    // forever. The list effect above omits it for the same reason.
+  }, [activeFilterValues, dataSource, detailRow, pageSize, spaceId]);
 
   const columns = useMemo(() => resolveColumns(page.items), [page.items]);
   const nextCursor = page.pageInfo.nextCursor;
@@ -102,6 +174,19 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
       setCursor(previous || undefined);
       return history.slice(0, -1);
     });
+  }
+
+  function openDetail(item: Record<string, unknown>): void {
+    setDetailRow(item);
+    // Drop the previous payload so the drawer cannot flash a stale record while the
+    // authoritative one is still in flight.
+    setDetailPayload(null);
+  }
+
+  function closeDetail(): void {
+    setDetailRow(null);
+    setDetailPayload(null);
+    setDetailError(undefined);
   }
 
   function openAction(action: MemoryResourceAction): void {
@@ -162,7 +247,7 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
         ...(auditReason.trim() ? { auditReason: auditReason.trim() } : {}),
         ...(idempotencyKey.trim() ? { idempotencyKey: idempotencyKey.trim() } : {}),
       });
-      if (result && typeof result === "object") setSelectedItem(result as Record<string, unknown>);
+      if (result && typeof result === "object") setDetailPayload(result as Record<string, unknown>);
       setRefreshVersion((version) => version + 1);
       closeAction();
     } catch (reason) {
@@ -205,6 +290,19 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
           <span>{translate("memory.commons.spaceId")}</span>
           <input value={spaceId} onChange={(event) => setSpaceId(event.target.value)} placeholder={translate("memory.commons.spaceIdPlaceholder")} />
         </label>
+        {declaredFilters.map((filter) => (
+          <label className="field-control filter-field" key={filter.param}>
+            <span>{filterLabel(filter)}</span>
+            {filter.options?.length ? (
+              <select value={filterValues[filter.param] ?? ""} onChange={(event) => updateFilterValue(filter.param, event.target.value)}>
+                <option value="">{translate("memory.commons.filterAny")}</option>
+                {filter.options.map((option) => <option key={option} value={option}>{filterOptionLabel(filter, option)}</option>)}
+              </select>
+            ) : (
+              <input value={filterValues[filter.param] ?? ""} onChange={(event) => updateFilterValue(filter.param, event.target.value)} />
+            )}
+          </label>
+        ))}
         <label className="field-control page-size-field">
           <span>{translate("memory.commons.pageSize")}</span>
           <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
@@ -234,7 +332,7 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
             <table>
               <thead><tr>{columns.map((column) => <th key={column}>{fieldLabel(column)}</th>)}</tr></thead>
               <tbody>{page.items.map((item, rowIndex) => (
-                <tr key={readRowKey(item, rowIndex)} tabIndex={0} onClick={() => setSelectedItem(item)} onKeyDown={(event) => { if (event.key === "Enter") setSelectedItem(item); }}>
+                <tr key={readRowKey(item, rowIndex)} tabIndex={0} onClick={() => openDetail(item)} onKeyDown={(event) => { if (event.key === "Enter") openDetail(item); }}>
                   {columns.map((column) => <td key={column}>{formatValue(item[column])}</td>)}
                 </tr>
               ))}</tbody>
@@ -253,7 +351,9 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
 
       {selectedItem ? (
         <aside className="detail-drawer" aria-label={translate("memory.commons.details")}>
-          <header><h2>{translate("memory.commons.details")}</h2><button className="icon-button" type="button" title={translate("memory.commons.close")} aria-label={translate("memory.commons.close")} onClick={() => setSelectedItem(null)}><X size={17} /></button></header>
+          <header><h2>{translate("memory.commons.details")}</h2><button className="icon-button" type="button" title={translate("memory.commons.close")} aria-label={translate("memory.commons.close")} onClick={closeDetail}><X size={17} /></button></header>
+          {detailLoading ? <p className="detail-status" role="status">{translate("memory.commons.detailLoading")}</p> : null}
+          {detailError ? <p className="command-error">{detailError}</p> : null}
           <dl>{Object.entries(selectedItem).map(([key, value]) => <div key={key}><dt>{fieldLabel(key)}</dt><dd>{formatLongValue(value)}</dd></div>)}</dl>
         </aside>
       ) : null}

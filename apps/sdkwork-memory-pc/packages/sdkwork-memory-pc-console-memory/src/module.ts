@@ -9,7 +9,7 @@ export const consoleMemoryModule = {
   titleKey: "memory.console-memory.title",
   descriptionKey: "memory.console-memory.description",
   permission: "memory.records.read",
-  resources: ["spaces","memories"],
+  resources: ["spaces","memories","events"],
   messages: { "en-US": enUS, "zh-CN": zhCN },
 } as const satisfies MemoryPcModuleDefinition;
 
