@@ -29,10 +29,11 @@ use sdkwork_memory_spi::parse_metadata_filter;
 use sdkwork_memory_spi::{
     AppendMemoryAuditCommand, AppendMemoryOutboxCommand, AppendMemoryRetrievalTraceCommand,
     CreateCanonicalMemoryCommand, CreateMemoryCandidateCommand, DeleteAllCanonicalMemoryCommand,
-    DeleteCanonicalMemoryCommand, EmbeddingCommand, EmbeddingModelPort, ListMemoryCandidatesQuery,
-    MemoryCanonicalRecord, MemoryCoreRuntime, MemoryDeploymentMode, MemoryDriveExportUploader,
-    MemoryGraphPort, MemoryImplementationKind as SpiMemoryImplementationKind,
-    MemoryMutationJournal, MemoryRetrievalHitDraft, MemoryRetrieverKind as SpiMemoryRetrieverKind,
+    DeleteCanonicalMemoryCommand, EmbeddingCommand, EmbeddingModelPort, LanguageModelCommand,
+    LanguageModelPort, ListMemoryCandidatesQuery, MemoryCanonicalRecord, MemoryCoreRuntime,
+    MemoryDeploymentMode, MemoryDriveExportUploader, MemoryGraphPort,
+    MemoryImplementationKind as SpiMemoryImplementationKind, MemoryMutationJournal,
+    MemoryRetrievalHitDraft, MemoryRetrieverKind as SpiMemoryRetrieverKind,
     MemoryRuntimeProfileMetadata, MemoryScopeContext, MemorySensitivityReadScope,
     RetrieveCanonicalMemoryQuery, RetrieveMemoryCandidateDetailQuery,
     RetrieveMemoryRetrievalTraceForTenantQuery, SearchMemoryCandidatesQuery,
@@ -54,6 +55,9 @@ pub struct OpenMemoryService {
     /// Optional embedding provider (batch 8b supply side); `None` keeps the
     /// deployment embedding-optional with byte-identical lexical rankings.
     pub(crate) embedder: Option<Arc<dyn EmbeddingModelPort>>,
+    /// Optional chat provider (batch 7); when bound, extraction jobs run the
+    /// ADD-only LLM extraction instead of the deterministic pass-through.
+    pub(crate) llm: Option<Arc<dyn LanguageModelPort>>,
     pub(crate) core_runtime: MemoryCoreRuntime,
     pub(crate) runtime_data_plane: MemoryRuntimeDataPlane,
     pub(crate) drive_export_uploader: Option<Arc<dyn MemoryDriveExportUploader>>,
@@ -71,6 +75,7 @@ impl OpenMemoryService {
             store,
             graph,
             embedder: None,
+            llm: None,
             core_runtime,
             runtime_data_plane,
             drive_export_uploader: None,
@@ -98,6 +103,7 @@ impl OpenMemoryService {
             store,
             graph,
             embedder: None,
+            llm: None,
             core_runtime,
             runtime_data_plane,
             drive_export_uploader: None,
@@ -249,6 +255,7 @@ impl OpenMemoryService {
             store,
             graph,
             embedder: None,
+            llm: None,
             core_runtime,
             runtime_data_plane,
             drive_export_uploader: None,
@@ -281,6 +288,7 @@ impl OpenMemoryService {
             store,
             graph,
             embedder: None,
+            llm: None,
             core_runtime,
             runtime_data_plane,
             drive_export_uploader: None,
@@ -765,6 +773,13 @@ impl OpenMemoryService {
         self
     }
 
+    /// Bind a chat provider (batch 7). Assemblies call this when the
+    /// deployment configures one; `None` keeps extraction deterministic.
+    pub fn with_llm(mut self, llm: Arc<dyn LanguageModelPort>) -> Self {
+        self.llm = Some(llm);
+        self
+    }
+
     /// Override the retrieval strategy (batch 9): `AdditiveHybrid` ranks via
     /// mem0's semantic+BM25+entity additive fusion instead of RRF.
     pub fn with_retrieval_strategy(mut self, strategy: MemoryRetrievalStrategy) -> Self {
@@ -835,6 +850,17 @@ impl OpenMemoryService {
             .collect()
     }
 
+    /// Run an extraction synchronously and return the raw outcome. The HTTP
+    /// endpoint enqueues a job for the background worker; this entry exists for
+    /// operators and tests that drive extraction inline.
+    pub async fn run_extraction_now(
+        &self,
+        context: MemoryOpenApiRequestContext,
+        request: MemoryExtractionRequest,
+    ) -> MemoryServiceResult<serde_json::Value> {
+        self.execute_extraction_work(context, request).await
+    }
+
     pub(crate) async fn execute_extraction_work(
         &self,
         context: MemoryOpenApiRequestContext,
@@ -861,6 +887,7 @@ impl OpenMemoryService {
         let scope = Self::scope(&context, request.space_id)?;
         let mut created_candidates = 0_u32;
         let mut missing_events = 0_u32;
+        let mut contents: Vec<(u64, String)> = Vec::new();
 
         for event_id in &request.input_events {
             if let Some(payload) = self
@@ -880,23 +907,125 @@ impl OpenMemoryService {
                     })?
                     .to_string();
                 assert_memory_text_is_safe(&[("proposedText", &proposed)])?;
+                contents.push((*event_id, proposed));
+            } else {
+                missing_events += 1;
+            }
+        }
+
+        // Batch 7: when a chat provider is bound and the caller did not force
+        // the deterministic mode, run the ADD-only LLM extraction over the
+        // event contents. Each accepted fact becomes its own candidate so the
+        // approval flow stays per-memory, exactly as one mem0 `add` yields
+        // many memories.
+        let llm_requested = request
+            .extraction_mode
+            .as_deref()
+            .map(str::trim)
+            .map(|mode| mode != "deterministic")
+            .unwrap_or(true);
+        if let (Some(llm), true) = (&self.llm, llm_requested) {
+            let turns = contents
+                .iter()
+                .map(|(event_id, content)| {
+                    sdkwork_memory_plugin_search_first_vector::ConversationTurn::new(
+                        "user",
+                        format!("{content} [event:{event_id}]"),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let extraction_request =
+                sdkwork_memory_plugin_search_first_vector::AdditiveExtractionRequest {
+                    summary: None,
+                    recent_memories: Vec::new(),
+                    existing_memories: Vec::new(),
+                    last_k_messages: Vec::new(),
+                    new_messages: turns,
+                    observation_date: None,
+                    current_date: None,
+                    custom_instructions: request.custom_instructions.clone(),
+                    agent_id: None,
+                    user_id: None,
+                };
+            let prompt =
+                sdkwork_memory_plugin_search_first_vector::build_additive_extraction_prompt(
+                    &extraction_request,
+                );
+            let response = llm
+                .generate(LanguageModelCommand { prompt })
+                .await
+                .map_err(map_memory_spi_error)?;
+            let report =
+                sdkwork_memory_plugin_search_first_vector::parse_additive_response(&response)
+                    .map_err(|error| {
+                        MemoryServiceError::validation(format!(
+                            "extraction response was not parseable: {error}"
+                        ))
+                    })?;
+            for memory in &report.memories {
+                assert_memory_text_is_safe(&[("proposedText", &memory.text)])?;
                 let candidate_id = self.next_id()?.to_string();
+                let attribution = memory
+                    .attributed_to
+                    .as_ref()
+                    .map(|who| who.wire_value().to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
                 self.runtime_data_plane
                     .create_candidate(CreateMemoryCandidateCommand {
                         scope: scope.clone(),
                         candidate_id,
                         candidate_type: "extraction".to_string(),
                         memory_type: "semantic".to_string(),
-                        proposed_text: proposed,
-                        proposed_payload_json: Some(payload.to_string()),
-                        evidence_json: Some(format!(r#"["event:{event_id}"]"#)),
-                        confidence: 0.7,
+                        proposed_text: memory.text.clone(),
+                        proposed_payload_json: Some(
+                            serde_json::json!({
+                                "attributedTo": attribution,
+                                "linkedMemoryIds": memory.linked_memory_ids,
+                            })
+                            .to_string(),
+                        ),
+                        evidence_json: Some(
+                            serde_json::json!(request
+                                .input_events
+                                .iter()
+                                .map(|id| format!("event:{id}"))
+                                .collect::<Vec<_>>())
+                            .to_string(),
+                        ),
+                        confidence: 0.9,
                     })
                     .await?;
                 created_candidates += 1;
-            } else {
-                missing_events += 1;
             }
+            if created_candidates == 0 {
+                return Err(MemoryServiceError::validation(
+                    "the extraction model returned no usable memories for the provided input events",
+                ));
+            }
+            return Ok(serde_json::json!({
+                "candidateCount": created_candidates,
+                "missingEventCount": missing_events,
+                "extractionMode": "additive_llm",
+                "refusedCount": report.refused.len(),
+                "truncatedCount": report.truncated,
+            }));
+        }
+
+        for (event_id, proposed) in &contents {
+            let candidate_id = self.next_id()?.to_string();
+            self.runtime_data_plane
+                .create_candidate(CreateMemoryCandidateCommand {
+                    scope: scope.clone(),
+                    candidate_id,
+                    candidate_type: "extraction".to_string(),
+                    memory_type: "semantic".to_string(),
+                    proposed_text: proposed.clone(),
+                    proposed_payload_json: None,
+                    evidence_json: Some(format!(r#"["event:{event_id}"]"#)),
+                    confidence: 0.7,
+                })
+                .await?;
+            created_candidates += 1;
         }
 
         if created_candidates == 0 {

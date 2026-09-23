@@ -1,8 +1,9 @@
 use sdkwork_intelligence_memory_service::OpenMemoryService;
 use sdkwork_memory_contract::{
-    DeleteAllMemoriesRequest, ListMemoriesQuery, MemoryContextPackRequest,
-    MemoryImplementationKind, MemoryOpenApi, MemoryOpenApiRequestContext, MemoryRecordPatch,
-    MemoryRecordRequest, MemoryRetrievalRequest, MemoryType,
+    DeleteAllMemoriesRequest, ListCandidatesQuery, ListMemoriesQuery, MemoryContextPackRequest,
+    MemoryEventRequest, MemoryExtractionRequest, MemoryImplementationKind, MemoryOpenApi,
+    MemoryOpenApiRequestContext, MemoryRecordPatch, MemoryRecordRequest, MemoryRetrievalRequest,
+    MemoryType,
 };
 
 /// Test double: vectors keyed by topic marker. Texts containing "gantt" land
@@ -30,7 +31,9 @@ impl EmbeddingModelPort for ScriptedEmbedder {
 }
 
 use sdkwork_memory_retrieval::MemoryRetrievalStrategy;
-use sdkwork_memory_spi::{EmbeddingCommand, EmbeddingModelPort, MemorySpiError};
+use sdkwork_memory_spi::{
+    EmbeddingCommand, EmbeddingModelPort, LanguageModelCommand, LanguageModelPort, MemorySpiError,
+};
 
 fn open_context() -> MemoryOpenApiRequestContext {
     MemoryOpenApiRequestContext::for_open_surface("api-key-001", 100_001, Some(2001))
@@ -1102,4 +1105,148 @@ async fn additive_hybrid_strategy_gates_on_semantic_threshold_and_explains() {
     );
 
     let _ = rival;
+}
+
+/// Test double LLM: returns a fixed additive envelope with two facts, one
+/// attributed to the user and one to the assistant.
+struct ScriptedLlm;
+
+#[async_trait::async_trait]
+impl LanguageModelPort for ScriptedLlm {
+    fn provider_code(&self) -> &str {
+        "scripted"
+    }
+
+    async fn generate(&self, _command: LanguageModelCommand) -> Result<String, MemorySpiError> {
+        Ok(String::from(
+            r#"{"memory": [
+                {"id": "0", "text": "User prefers Portland roasters", "attributed_to": "user", "linked_memory_ids": []},
+                {"id": "1", "text": "Assistant recommended Stumptown", "attributed_to": "assistant", "linked_memory_ids": []}
+            ]}"#,
+        ))
+    }
+}
+
+#[tokio::test]
+async fn extraction_runs_llm_additive_pipeline_when_a_provider_is_bound() {
+    let store = sdkwork_memory_test_support::space_fixtures::new_seeded_in_memory_store().await;
+    let service = OpenMemoryService::new(store).with_llm(std::sync::Arc::new(ScriptedLlm));
+    let context = open_context();
+
+    let event = service
+        .create_event(
+            context.clone(),
+            MemoryEventRequest {
+                space_id: 2,
+                user_id: None,
+                actor_type: Some("user".to_string()),
+                actor_id: Some("9001".to_string()),
+                session_id: None,
+                trace_id: None,
+                event_type: "conversation.turn".to_string(),
+                source_type: "conversation".to_string(),
+                source_ref: None,
+                event_time: "2026-09-24T00:00:00.000Z".to_string(),
+                payload: serde_json::json!({
+                    "content": "I tried Portland roasters and loved it"
+                }),
+                sensitivity_level: None,
+            },
+        )
+        .await
+        .expect("create conversation event");
+    let event_id = event.event_id;
+
+    // LLM mode (the default when a provider is bound): every accepted fact
+    // becomes its own candidate.
+    let result = service
+        .run_extraction_now(
+            context.clone(),
+            MemoryExtractionRequest {
+                space_id: 2,
+                input_events: vec![event_id],
+                extraction_mode: None,
+                custom_instructions: Some("Focus on coffee preferences".to_string()),
+            },
+        )
+        .await
+        .expect("llm extraction");
+    assert_eq!(result["extractionMode"], "additive_llm");
+    assert_eq!(result["candidateCount"], 2);
+    assert_eq!(result["refusedCount"], 0);
+
+    let listed = service
+        .list_candidates(
+            context.clone(),
+            ListCandidatesQuery {
+                space_id: Some(2),
+                cursor: None,
+                page_size: None,
+            },
+        )
+        .await
+        .expect("list candidates");
+    assert!(listed
+        .items
+        .iter()
+        .any(|candidate| { candidate.proposed_text.contains("Portland roasters") }));
+
+    // Deterministic mode stays available as the explicit fallback.
+    let deterministic = service
+        .run_extraction_now(
+            context,
+            MemoryExtractionRequest {
+                space_id: 2,
+                input_events: vec![event_id],
+                extraction_mode: Some("deterministic".to_string()),
+                custom_instructions: None,
+            },
+        )
+        .await
+        .expect("deterministic extraction");
+    assert_eq!(deterministic["extractionMode"], "deterministic");
+    assert_eq!(deterministic["candidateCount"], 1);
+}
+
+#[tokio::test]
+async fn extraction_without_a_provider_keeps_the_deterministic_path() {
+    let store = sdkwork_memory_test_support::space_fixtures::new_seeded_in_memory_store().await;
+    let service = OpenMemoryService::new(store);
+    let context = open_context();
+
+    let event = service
+        .create_event(
+            context.clone(),
+            MemoryEventRequest {
+                space_id: 2,
+                user_id: None,
+                actor_type: None,
+                actor_id: None,
+                session_id: None,
+                trace_id: None,
+                event_type: "conversation.turn".to_string(),
+                source_type: "conversation".to_string(),
+                source_ref: None,
+                event_time: "2026-09-24T00:00:00.000Z".to_string(),
+                payload: serde_json::json!({ "content": "plain deterministic content" }),
+                sensitivity_level: None,
+            },
+        )
+        .await
+        .expect("create event");
+
+    let result = service
+        .run_extraction_now(
+            context,
+            MemoryExtractionRequest {
+                space_id: 2,
+                input_events: vec![event.event_id],
+                extraction_mode: None,
+                custom_instructions: None,
+            },
+        )
+        .await
+        .expect("deterministic extraction without provider");
+    assert_eq!(result["extractionMode"], "deterministic");
+    assert_eq!(result["candidateCount"], 1);
 }

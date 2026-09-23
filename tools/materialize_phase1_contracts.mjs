@@ -2188,6 +2188,7 @@ function baseSchemas() {
         spaceId: idSchema,
         inputEvents: { type: "array", items: idSchema },
         extractionMode: { type: "string", enum: ["deterministic", "llm_assisted", "hybrid"] },
+        customInstructions: nullableString,
         reviewRequired: { type: "boolean" },
         metadata: nullableJsonObject
       }

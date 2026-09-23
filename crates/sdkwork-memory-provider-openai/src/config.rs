@@ -22,6 +22,7 @@ const DEFAULT_CHAT_MODEL: &str = "gpt-4o-mini";
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
 /// Connection settings for an OpenAI-compatible endpoint.
+#[derive(Clone)]
 pub struct OpenAiProviderConfig {
     /// Root of the REST API, without a trailing slash
     /// (e.g. `https://api.openai.com/v1`).

@@ -580,6 +580,10 @@ pub struct MemoryExtractionRequest {
     pub input_events: Vec<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extraction_mode: Option<String>,
+    /// Deployment/caller extraction rules, folded into the LLM extraction
+    /// prompt as its highest-priority instructions (mem0's `add(prompt=...)`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_instructions: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

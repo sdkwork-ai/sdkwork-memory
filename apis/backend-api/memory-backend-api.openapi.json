@@ -13100,6 +13100,16 @@
               "hybrid"
             ]
           },
+          "customInstructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "reviewRequired": {
             "type": "boolean"
           },

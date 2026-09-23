@@ -250,9 +250,11 @@ async fn assemble_contribution_with_product_from_env(
     // Without SDKWORK_MEMORY_OPENAI_API_KEY the deployment stays purely
     // lexical, exactly as before.
     if let Some(config) = sdkwork_memory_provider_openai::OpenAiProviderConfig::from_env() {
-        let embedder = sdkwork_memory_provider_openai::OpenAiEmbeddings::new(config);
+        let embedder = sdkwork_memory_provider_openai::OpenAiEmbeddings::new(config.clone());
         product = product.with_embedder(Arc::new(embedder));
-        info!("embedding provider bound (openai-compatible)");
+        let llm = sdkwork_memory_provider_openai::OpenAiLlm::new(config);
+        product = product.with_llm(Arc::new(llm));
+        info!("embedding + chat providers bound (openai-compatible)");
     }
     product
         .ready_check()
