@@ -205,9 +205,11 @@ impl NativeSqlMemoryStore {
     }
 
     async fn schema_is_initialized(&self) -> Result<bool, NativeSqlStoreError> {
+        // The check key must equal the final entry of the dialect's MIGRATIONS list so a
+        // completed compatibility bootstrap is never replayed on startup.
         let latest_version = match self.dialect() {
             MemorySqlDialect::Sqlite => "0010",
-            MemorySqlDialect::Postgres => "0009",
+            MemorySqlDialect::Postgres => "baseline",
         };
         match sqlx::query_scalar::<_, i32>(
             "SELECT 1 FROM ops_memory_schema_version WHERE version = ? LIMIT 1",

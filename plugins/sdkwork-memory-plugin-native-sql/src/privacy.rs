@@ -90,21 +90,31 @@ impl NativeSqlMemoryStore {
     ) -> Result<ForgetScopeStats, NativeSqlStoreError> {
         let mut stats = ForgetScopeStats::default();
         let mut cursor = String::new();
+        let batch_size = i64::from(sdkwork_utils_rust::MAX_LIST_PAGE_SIZE);
 
         loop {
-            let rows = self
-                .list_record_details(
-                    scope,
-                    None,
-                    sdkwork_utils_rust::MAX_LIST_PAGE_SIZE,
-                    Some(&cursor),
-                    crate::store::SENSITIVITY_READ_OWNER,
-                    false,
-                )
-                .await?;
+            // Forget is a physical privacy purge: it must enumerate every record in the
+            // scope regardless of lifecycle status or sensitivity so soft-deleted rows and
+            // their evidence sources cannot survive the workflow.
+            let rows = sqlx::query(
+                r#"
+                SELECT uuid
+                FROM ai_record
+                WHERE tenant_id = ? AND space_id = ? AND uuid > ?
+                ORDER BY uuid ASC
+                LIMIT ?
+                "#,
+            )
+            .bind(scope.tenant_id)
+            .bind(scope.space_id)
+            .bind(&cursor)
+            .bind(batch_size)
+            .fetch_all(self.pool())
+            .await?;
             if rows.is_empty() {
                 break;
             }
+
             let page_limit = sdkwork_utils_rust::MAX_LIST_PAGE_SIZE as usize;
             let has_more = rows.len() > page_limit;
             let batch = if has_more {
@@ -114,8 +124,9 @@ impl NativeSqlMemoryStore {
             };
 
             for row in batch {
+                let memory_id: String = row.get("uuid");
                 let outcome = self
-                    .hard_delete_record_with_cleanup(scope, &row.memory_id)
+                    .hard_delete_record_with_cleanup(scope, &memory_id)
                     .await?;
                 if outcome.deleted {
                     stats.deleted_records += 1;
@@ -126,7 +137,8 @@ impl NativeSqlMemoryStore {
             if !has_more {
                 break;
             }
-            cursor.clone_from(&batch.last().expect("batch non-empty").memory_id);
+            let last_uuid: String = batch.last().expect("batch non-empty").get("uuid");
+            cursor.clone_from(&last_uuid);
         }
 
         stats.purged_events += self
@@ -269,7 +281,6 @@ impl NativeSqlMemoryStore {
                 FROM ai_record
                 WHERE tenant_id = ?
                   AND space_id = ?
-                  AND status <> 'deleted'
                   AND (
                     canonical_text LIKE ? ESCAPE '\'
                     OR object_text LIKE ? ESCAPE '\'
@@ -448,6 +459,8 @@ impl NativeSqlMemoryStore {
         tenant_id: i64,
         space_id: i64,
     ) -> Result<u32, NativeSqlStoreError> {
+        self.delete_sources_referencing_space_events(tenant_id, space_id)
+            .await?;
         let purged = sqlx::query(
             r#"
             DELETE FROM ai_event
@@ -462,11 +475,52 @@ impl NativeSqlMemoryStore {
         Ok(purged as u32)
     }
 
+    /// Removes evidence-source rows that reference the events about to be purged,
+    /// including sources that point at records outside the forget scope (an event
+    /// authored by the forgotten subject can have sourced another actor's record).
+    /// Without this purge the `ai_record_source.event_id` foreign key would abort
+    /// the event deletion and permanently block the forget workflow.
+    async fn delete_sources_referencing_space_events(
+        &self,
+        tenant_id: i64,
+        space_id: i64,
+    ) -> Result<(), NativeSqlStoreError> {
+        sqlx::query(
+            r#"
+            DELETE FROM ai_record_source
+            WHERE tenant_id = ?
+              AND event_id IN (
+                SELECT id FROM ai_event WHERE tenant_id = ? AND space_id = ?
+              )
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(tenant_id)
+        .bind(space_id)
+        .execute(self.pool())
+        .await?;
+        Ok(())
+    }
+
     async fn delete_events_for_user_all_spaces(
         &self,
         tenant_id: i64,
         user_id: i64,
     ) -> Result<u32, NativeSqlStoreError> {
+        sqlx::query(
+            r#"
+            DELETE FROM ai_record_source
+            WHERE tenant_id = ?
+              AND event_id IN (
+                SELECT id FROM ai_event WHERE tenant_id = ? AND user_id = ?
+              )
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(tenant_id)
+        .bind(user_id)
+        .execute(self.pool())
+        .await?;
         let purged = sqlx::query(
             r#"
             DELETE FROM ai_event
@@ -487,6 +541,21 @@ impl NativeSqlMemoryStore {
         user_id: i64,
         space_id: i64,
     ) -> Result<u32, NativeSqlStoreError> {
+        sqlx::query(
+            r#"
+            DELETE FROM ai_record_source
+            WHERE tenant_id = ?
+              AND event_id IN (
+                SELECT id FROM ai_event WHERE tenant_id = ? AND user_id = ? AND space_id = ?
+              )
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(tenant_id)
+        .bind(user_id)
+        .bind(space_id)
+        .execute(self.pool())
+        .await?;
         let purged = sqlx::query(
             r#"
             DELETE FROM ai_event

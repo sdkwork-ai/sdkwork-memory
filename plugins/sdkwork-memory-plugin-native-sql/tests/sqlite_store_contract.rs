@@ -5490,3 +5490,129 @@ async fn sqlite_metadata_roundtrip_survives_write_read_and_supersede() {
         "caller metadata must survive the write/read roundtrip"
     );
 }
+
+#[tokio::test]
+async fn sqlite_forget_all_records_in_space_purges_soft_deleted_records_and_event_sources() {
+    let store = new_contract_store().await;
+    let scope = MemoryScopeContext::for_test(1, 1);
+    let now = "2026-07-12T00:00:00Z";
+
+    store
+        .create_record_open_api(
+            &scope,
+            "forget-live-record",
+            "user",
+            "semantic",
+            None,
+            None,
+            "live forget value",
+            "The live forget value",
+            "internal",
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    store
+        .create_record_open_api(
+            &scope,
+            "forget-soft-record",
+            "user",
+            "semantic",
+            None,
+            None,
+            "soft forget value",
+            "The soft forget value",
+            "internal",
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    store
+        .mark_record_deleted(&scope, "forget-soft-record")
+        .await
+        .unwrap();
+
+    // A soft-deleted record keeps its `ai_record_source` row. Seed one evidence
+    // event plus source rows for both the live and the soft-deleted record: the
+    // forget workflow must purge every source referencing the space's events or
+    // the `ai_record_source.event_id` foreign key aborts the event purge.
+    sqlx::query(
+        r#"
+        INSERT INTO ai_event (
+          id, uuid, tenant_id, space_id, actor_type, event_type, source_type,
+          event_time, payload_json, payload_hash, sensitivity_level,
+          ingestion_status, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        "#,
+    )
+    .bind(912_001_i64)
+    .bind("forget-event")
+    .bind(scope.tenant_id)
+    .bind(scope.space_id)
+    .bind("user")
+    .bind("memory.created")
+    .bind("api")
+    .bind(now)
+    .bind(r#"{"kind":"forget-evidence"}"#)
+    .bind("hash-forget-event")
+    .bind("internal")
+    .bind("committed")
+    .bind(now)
+    .execute(store.pool())
+    .await
+    .unwrap();
+    for (source_id, source_uuid, memory_uuid) in [
+        (912_002_i64, "forget-source-live", "forget-live-record"),
+        (912_003_i64, "forget-source-soft", "forget-soft-record"),
+    ] {
+        sqlx::query(
+            r#"
+            INSERT INTO ai_record_source (
+              id, uuid, tenant_id, memory_id, event_id, source_role, created_at
+            )
+            SELECT ?, ?, ?, record.id, event.id, ?, ?
+            FROM ai_record record
+            JOIN ai_event event ON event.tenant_id = record.tenant_id
+            WHERE record.tenant_id = ? AND record.uuid = ?
+              AND event.tenant_id = ? AND event.uuid = ?
+            "#,
+        )
+        .bind(source_id)
+        .bind(source_uuid)
+        .bind(scope.tenant_id)
+        .bind("origin")
+        .bind(now)
+        .bind(scope.tenant_id)
+        .bind(memory_uuid)
+        .bind(scope.tenant_id)
+        .bind("forget-event")
+        .execute(store.pool())
+        .await
+        .unwrap();
+    }
+
+    let stats = store.forget_all_records_in_space(&scope).await.unwrap();
+    assert_eq!(stats.deleted_records, 2, "soft-deleted records must be purged too");
+    assert_eq!(stats.purged_events, 1);
+
+    for (table, condition) in [
+        ("ai_record", "uuid = 'forget-soft-record'"),
+        ("ai_record", "uuid = 'forget-live-record'"),
+        ("ai_record_source", "uuid = 'forget-source-soft'"),
+        ("ai_record_source", "uuid = 'forget-source-live'"),
+        ("ai_event", "uuid = 'forget-event'"),
+    ] {
+        // `table` and `condition` are literal pairs from the list above; the
+        // audited escape hatch satisfies sqlx 0.9's `SqlSafeStr` bound.
+        let count: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            "SELECT COUNT(*) FROM {table} WHERE {condition}"
+        )))
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+        assert_eq!(count, 0, "{table} must not survive the space forget");
+    }
+}

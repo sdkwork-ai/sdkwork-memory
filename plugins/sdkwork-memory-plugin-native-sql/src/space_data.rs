@@ -102,42 +102,44 @@ impl MemorySpaceStorePort for NativeSqlMemoryStore {
     }
 }
 
-/// PostgreSQL locks one stable migration row with `FOR UPDATE`. SQLite performs
-/// a no-op update as the transaction's first write, acquiring the database
-/// writer lock before the quota count. This deliberately serializes all space
-/// creation until a per-owner quota ledger is introduced through a reviewed
-/// schema migration.
+/// PostgreSQL serializes space creation with a transaction-scoped advisory lock so
+/// quota admission never depends on migration-bookkeeping tables inside the
+/// application-root lifecycle schema. SQLite performs a no-op update as the
+/// transaction's first write, acquiring the database writer lock before the quota
+/// count; the version table it touches is guaranteed to exist because every SQLite
+/// database is initialized through this plugin's embedded migration runner. This
+/// deliberately serializes all space creation until a per-owner quota ledger is
+/// introduced through a reviewed schema migration.
 async fn lock_space_quota_serialization_row(
     dialect: MemorySqlDialect,
     tx: &mut sqlx::Transaction<'_, sqlx::Any>,
 ) -> Result<(), NativeSqlStoreError> {
-    let locked =
-        match dialect {
-            MemorySqlDialect::Postgres => sqlx::query(
-                "SELECT version FROM ops_memory_schema_version WHERE version = ? FOR UPDATE",
-            )
-            .bind(SPACE_QUOTA_LOCK_VERSION)
-            .fetch_optional(&mut **tx)
-            .await?
-            .is_some(),
-            MemorySqlDialect::Sqlite => sqlx::query(
+    match dialect {
+        MemorySqlDialect::Postgres => {
+            sqlx::query("SELECT pg_advisory_xact_lock(714895751361736729)")
+                .execute(&mut **tx)
+                .await?;
+            Ok(())
+        }
+        MemorySqlDialect::Sqlite => {
+            let locked = sqlx::query(
                 "UPDATE ops_memory_schema_version SET applied_at = applied_at WHERE version = ?",
             )
             .bind(SPACE_QUOTA_LOCK_VERSION)
             .execute(&mut **tx)
             .await?
             .rows_affected()
-                == 1,
-        };
-
-    if !locked {
-        return Err(NativeSqlStoreError::InvariantViolation {
-            message: format!(
-                "space quota serialization row {SPACE_QUOTA_LOCK_VERSION} is not installed"
-            ),
-        });
+                == 1;
+            if !locked {
+                return Err(NativeSqlStoreError::InvariantViolation {
+                    message: format!(
+                        "space quota serialization row {SPACE_QUOTA_LOCK_VERSION} is not installed"
+                    ),
+                });
+            }
+            Ok(())
+        }
     }
-    Ok(())
 }
 
 async fn count_active_user_spaces_on_tx(
