@@ -55,7 +55,15 @@ ENV SDKWORK_MEMORY_RUNTIME_TARGET=container
 ENV SDKWORK_MEMORY_APPLICATION_PUBLIC_INGRESS_BIND=0.0.0.0:8080
 # Default rate limits (overridable at deploy time).
 ENV SDKWORK_MEMORY_MAX_BODY_BYTES=1048576
-ENV SDKWORK_MEMORY_MAX_CONCURRENCY=256
+# Default admission ceiling. It MUST satisfy the budget formula
+#   admission <= 2 x database pool connections (SDKWORK_DATABASE_MAX_CONNECTIONS)
+# so a saturated pod queues on its pool for a bounded time instead of piling
+# unbounded waiters the pool can never serve. With the documented default pool
+# of 32 the ceiling is 64 — the same value pinned in
+# deployments/kubernetes/deployment.yaml. Raise the pool first (and re-check
+# the PostgreSQL max_connections budget: replicas x pool + reserve <=
+# max_connections, see deployments/kubernetes/hpa.yaml) before raising this.
+ENV SDKWORK_MEMORY_MAX_CONCURRENCY=64
 EXPOSE 8080
 USER 10001:10001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

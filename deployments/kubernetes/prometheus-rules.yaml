@@ -119,3 +119,42 @@ spec:
               Export payloads are approaching the absolute 256 MiB cap. Review
               export bounds and consider streaming multipart before raising any
               limits.
+    - name: sdkwork-memory.workload-health
+      rules:
+        # kube-state-metrics required. job_name matches the migration Job in
+        # migration-job.yaml (sdkwork-memory-db-migrate) plus the historical
+        # sdkwork-memory-migration naming; adjust if the Job is renamed.
+        - alert: MemoryMigrationJobFailed
+          expr: kube_job_status_failed{job_name=~"sdkwork-memory-(db-migrate|migration).*"} > 0
+          for: 0m
+          labels:
+            severity: critical
+            service: sdkwork-api-memory-standalone-gateway
+          annotations:
+            summary: SDKWork Memory schema migration Job failed
+            description: >-
+              A sdkwork-memory database migration Job is in failed state. New
+              rollouts MUST NOT proceed until the migration completes (runtime
+              pods run with SDKWORK_DATABASE_AUTO_MIGRATE=false). Inspect
+              `kubectl logs job/sdkwork-memory-db-migrate` and
+              RUNBOOK-migration-rollback.md before retrying.
+        # Restart storm detection for the gateway pods. The pod regex covers
+        # the ReplicaSet suffix; add namespace="<your-namespace>" to scope the
+        # rule when the same Prometheus serves multiple namespaces.
+        - alert: MemoryGatewayPodRestartStorm
+          expr: >-
+            increase(kube_pod_container_status_restarts_total{pod=~"sdkwork-api-memory-standalone-gateway(-[0-9a-z]+)*-[0-9a-z]{5}",container="standalone-gateway"}[30m])
+            > 3
+          for: 5m
+          labels:
+            severity: warning
+            service: sdkwork-api-memory-standalone-gateway
+          annotations:
+            summary: SDKWork Memory gateway pods are restarting repeatedly
+            description: >-
+              Gateway containers restarted more than 3 times in 30 minutes,
+              which points at crash-looping (failing readiness, OOMKill, or
+              database connectivity). Check `kubectl describe pod`, previous
+              container logs, and PostgreSQL connection budget headroom
+              (replicas x SDKWORK_DATABASE_MAX_CONNECTIONS + reserve <=
+              max_connections, see hpa.yaml).
