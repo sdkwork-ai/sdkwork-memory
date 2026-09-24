@@ -454,7 +454,7 @@ impl MemoryAppApi for OpenMemoryService {
         let tenant_id = platform::tenant_id_i64(context.tenant_id)?;
         let page_size = crate::platform::validated_page_size(query.page_size)?;
         let cursor_space_id = self
-            .resolve_space_list_cursor(tenant_id, query.cursor.as_deref())
+            .resolve_space_list_cursor(tenant_id, platform::decode_list_cursor(query.cursor.as_deref())?.as_deref())
             .await?;
         let actor_scope = context.actor_id.map(|value| value.to_string());
         let rows = self
@@ -677,7 +677,7 @@ impl MemoryAppApi for OpenMemoryService {
                 tenant_id,
                 &memory_uuid,
                 page_size,
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
                 query.q.as_deref(),
             )
             .await
@@ -899,7 +899,7 @@ impl MemoryAppApi for OpenMemoryService {
                 "forget_job",
                 Some(actor_id.as_str()),
                 page_size,
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
             )
             .await
             .map_err(OpenMemoryService::map_store_error)?;
@@ -1152,7 +1152,7 @@ impl MemoryAppApi for OpenMemoryService {
                 "export_job",
                 Some(actor_id.as_str()),
                 page_size,
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
             )
             .await
             .map_err(OpenMemoryService::map_store_error)?;
@@ -1208,7 +1208,7 @@ impl MemoryAppApi for OpenMemoryService {
                 tenant_id,
                 space_id: Some(platform::space_id_i64(space_id)?),
                 page_size: page_size as u32,
-                cursor: query.cursor,
+                cursor: platform::decode_list_cursor(query.cursor.as_deref())?,
             })
             .await?;
         let items = page
@@ -1393,7 +1393,7 @@ impl MemoryAppApi for OpenMemoryService {
                 query.stage.as_deref(),
                 query.q.as_deref(),
                 page_size,
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
             )
             .await
             .map_err(OpenMemoryService::map_store_error)?;
@@ -1587,7 +1587,7 @@ impl MemoryBackendApi for OpenMemoryService {
         let tenant_id = platform::tenant_id_i64(context.tenant_id)?;
         let page_size = crate::platform::validated_page_size(query.page_size)?;
         let cursor_space_id = self
-            .resolve_space_list_cursor(tenant_id, query.cursor.as_deref())
+            .resolve_space_list_cursor(tenant_id, platform::decode_list_cursor(query.cursor.as_deref())?.as_deref())
             .await?;
         let rows = self
             .store
@@ -1698,7 +1698,7 @@ impl MemoryBackendApi for OpenMemoryService {
                 tenant_id,
                 query.space_id.map(|value| value as i64),
                 page_size,
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
             )
             .await
             .map_err(OpenMemoryService::map_store_error)?;
@@ -1743,7 +1743,7 @@ impl MemoryBackendApi for OpenMemoryService {
                 tenant_id,
                 space_id: query.space_id.map(platform::space_id_i64).transpose()?,
                 page_size: page_size as u32,
-                cursor: query.cursor,
+                cursor: platform::decode_list_cursor(query.cursor.as_deref())?,
             })
             .await?;
         let items = page
@@ -1850,7 +1850,7 @@ impl MemoryBackendApi for OpenMemoryService {
                 tenant_id,
                 query.space_id.map(|value| value as i64),
                 page_size,
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
             )
             .await
             .map_err(OpenMemoryService::map_store_error)?;
@@ -1905,7 +1905,7 @@ impl MemoryBackendApi for OpenMemoryService {
                 tenant_id,
                 query.action.as_deref(),
                 page_size,
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
             )
             .await
             .map_err(OpenMemoryService::map_store_error)?;

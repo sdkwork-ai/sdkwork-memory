@@ -339,14 +339,95 @@ pub fn clamp_retrieval_top_k(top_k: i32) -> i32 {
 }
 
 /// Standard cursor-mode pagination metadata for memory list responses.
+/// Cursor tokens are opaque, tamper-evident MACs over the store's keyset key
+/// (PAGINATION_SPEC section 3: clients MUST NOT parse or construct cursors).
+/// `SDKWORK_MEMORY_CURSOR_SIGNING_KEY` sets the per-deployment key; the
+/// built-in fallback keeps tokens opaque but must not be relied on across
+/// deployments.
+const CURSOR_TOKEN_PREFIX: &str = "v1";
+
+fn cursor_signing_key() -> &'static Vec<u8> {
+    static KEY: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+    KEY.get_or_init(|| {
+        match std::env::var("SDKWORK_MEMORY_CURSOR_SIGNING_KEY") {
+            Ok(value) if !value.trim().is_empty() => value.into_bytes(),
+            _ => {
+                tracing::warn!(
+                    "SDKWORK_MEMORY_CURSOR_SIGNING_KEY is not set; list cursors fall back to                      the built-in signing key. Set a per-deployment key so cursors cannot be                      verified across deployments."
+                );
+                b"sdkwork-memory-cursor-v1".to_vec()
+            }
+        }
+    })
+}
+
+fn cursor_mac(raw: &str) -> String {
+    use hmac::Mac;
+    type HmacSha256 = hmac::Hmac<sha2::Sha256>;
+    let mut mac = HmacSha256::new_from_slice(cursor_signing_key())
+        .expect("HMAC accepts any key length");
+    mac.update(raw.as_bytes());
+    use base64::Engine as _;
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes())
+}
+
+/// Wraps a store-issued keyset key in an opaque, MAC-protected token.
+pub fn encode_list_cursor(raw: &str) -> String {
+    use base64::Engine as _;
+    let data = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw.as_bytes());
+    format!("{CURSOR_TOKEN_PREFIX}.{data}.{}", cursor_mac(raw))
+}
+
+/// Validates and unwraps a client-supplied cursor token.
+///
+/// `None` and the empty string mean "first page" and pass through. Anything
+/// else must be a well-formed token with a valid MAC: a client-forged or
+/// stale-key cursor is rejected as an invalid parameter instead of leaking a
+/// forgeable pagination primitive.
+pub fn decode_list_cursor(cursor: Option<&str>) -> MemoryServiceResult<Option<String>> {
+    use base64::Engine as _;
+    let Some(cursor) = cursor else {
+        return Ok(None);
+    };
+    let cursor = cursor.trim();
+    if cursor.is_empty() {
+        return Ok(None);
+    }
+    let malformed = || {
+        MemoryServiceError::validation(
+            "cursor must be a server-issued opaque token; cursor forgery is not supported",
+        )
+    };
+    let mut parts = cursor.split('.');
+    let prefix = parts.next().ok_or_else(malformed)?;
+    let data = parts.next().ok_or_else(malformed)?;
+    let signature = parts.next().ok_or_else(malformed)?;
+    if parts.next().is_some() || prefix != CURSOR_TOKEN_PREFIX {
+        return Err(malformed());
+    }
+    let raw = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(data.as_bytes())
+        .map_err(|_| malformed())?;
+    let raw = String::from_utf8(raw).map_err(|_| malformed())?;
+    if cursor_mac(&raw) != signature {
+        return Err(malformed());
+    }
+    Ok(Some(raw))
+}
+
 pub fn memory_cursor_page_info(
+
     page_size: i32,
     has_more: bool,
     next_cursor: Option<String>,
 ) -> PageInfo {
     cursor_window_page_info(
         Some(usize::try_from(page_size).unwrap_or(DEFAULT_PAGE_SIZE as usize)),
-        if has_more { next_cursor } else { None },
+        if has_more {
+        next_cursor.as_deref().map(encode_list_cursor)
+    } else {
+        None
+    },
         has_more,
     )
 }

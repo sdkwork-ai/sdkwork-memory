@@ -124,7 +124,7 @@ impl super::open_api::OpenMemoryService {
                 tenant_id,
                 subject_type,
                 query.status.as_deref(),
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
                 page_size,
             )
             .await
@@ -312,7 +312,7 @@ impl super::open_api::OpenMemoryService {
                 query.target_space_id.map(|v| v as i64),
                 binding_kind,
                 query.status.as_deref(),
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
                 page_size,
             )
             .await
@@ -441,7 +441,7 @@ impl super::open_api::OpenMemoryService {
                 target_type,
                 query.target_id.map(|v| v as i64),
                 query.status.as_deref(),
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
                 page_size,
             )
             .await
@@ -510,7 +510,7 @@ impl super::open_api::OpenMemoryService {
                 target_type_str,
                 query.target_id as i64,
                 page_size,
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
             )
             .await
             .map_err(Self::map_store_error)?;
@@ -666,7 +666,7 @@ impl super::open_api::OpenMemoryService {
                 entity_type: query.entity_type,
                 status: query.status,
                 page_size,
-                cursor: query.cursor,
+                cursor: platform::decode_list_cursor(query.cursor.as_deref())?,
                 sensitivity_read_scope: sensitivity_read_scope_from_i32(sensitivity_scope),
             })
             .await
@@ -859,7 +859,7 @@ impl super::open_api::OpenMemoryService {
                 relation_type: query.relation_type,
                 source_entity_id: query.source_entity_id,
                 page_size,
-                cursor: query.cursor,
+                cursor: platform::decode_list_cursor(query.cursor.as_deref())?,
                 sensitivity_read_scope: SpiMemorySensitivityReadScope::Owner,
             })
             .await
@@ -1033,7 +1033,7 @@ impl super::open_api::OpenMemoryService {
                 tenant_id,
                 query.policy_type.as_deref(),
                 query.scope.as_deref(),
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
                 page_size,
             )
             .await
@@ -1187,7 +1187,7 @@ impl super::open_api::OpenMemoryService {
                 target_type,
                 query.target_id.map(|value| value as i64),
                 query.policy_id.as_deref(),
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
                 page_size,
             )
             .await

@@ -8,6 +8,9 @@ edition.workspace = true
 [lints]
 workspace = true
 [dependencies]
+base64 = "0.22.1"
+hmac = "0.12.1"
+sha2 = "0.10.9"
 async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true

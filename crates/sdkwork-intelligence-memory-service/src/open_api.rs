@@ -1192,7 +1192,7 @@ impl MemoryOpenApi for OpenMemoryService {
                 &scope,
                 query.q.as_deref(),
                 page_size,
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
                 sensitivity_scope,
                 query.show_expired.unwrap_or(false),
             )
@@ -2526,7 +2526,7 @@ impl MemoryOpenApi for OpenMemoryService {
                 tenant_id,
                 space_id: Some(platform::space_id_i64(space_id)?),
                 page_size: page_size as u32,
-                cursor: query.cursor,
+                cursor: platform::decode_list_cursor(query.cursor.as_deref())?,
             })
             .await?;
         let items = page

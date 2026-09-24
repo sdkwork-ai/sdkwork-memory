@@ -49,7 +49,7 @@ impl OpenMemoryService {
                 resource_type,
                 None,
                 page_size,
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
             )
             .await
             .map_err(OpenMemoryService::map_store_error)?;
@@ -450,7 +450,7 @@ impl OpenMemoryService {
                 tenant_id,
                 Self::optional_space_id_i64(query.space_id)?,
                 page_size,
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
             )
             .await
             .map_err(OpenMemoryService::map_store_error)?;
@@ -636,7 +636,7 @@ impl OpenMemoryService {
                 tenant_id,
                 Self::optional_space_id_i64(query.space_id)?,
                 page_size,
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
             )
             .await
             .map_err(OpenMemoryService::map_store_error)?;
@@ -763,7 +763,7 @@ impl OpenMemoryService {
             .list_mem_implementation_profiles_for_tenant(
                 tenant_id,
                 page_size,
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
             )
             .await
             .map_err(OpenMemoryService::map_store_error)?;
@@ -874,7 +874,7 @@ impl OpenMemoryService {
         let page_size = Self::page_size_from_query(&query)?;
         let rows = self
             .store
-            .list_mem_provider_bindings_for_tenant(tenant_id, page_size, query.cursor.as_deref())
+            .list_mem_provider_bindings_for_tenant(tenant_id, page_size, platform::decode_list_cursor(query.cursor.as_deref())?.as_deref())
             .await
             .map_err(OpenMemoryService::map_store_error)?;
         let has_more = rows.len() > page_size as usize;
@@ -966,7 +966,7 @@ impl OpenMemoryService {
         let page_size = Self::page_size_from_query(&query)?;
         let rows = self
             .store
-            .list_mem_eval_runs_for_tenant(tenant_id, page_size, query.cursor.as_deref())
+            .list_mem_eval_runs_for_tenant(tenant_id, page_size, platform::decode_list_cursor(query.cursor.as_deref())?.as_deref())
             .await
             .map_err(OpenMemoryService::map_store_error)?;
         let has_more = rows.len() > page_size as usize;
@@ -1107,7 +1107,7 @@ impl OpenMemoryService {
                 "extraction",
                 space_id,
                 page_size,
-                query.cursor.as_deref(),
+                platform::decode_list_cursor(query.cursor.as_deref())?.as_deref(),
             )
             .await
             .map_err(OpenMemoryService::map_store_error)?;
