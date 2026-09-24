@@ -985,7 +985,10 @@ impl MemoryAppApi for OpenMemoryService {
         let exported_records = payload.records.len() as u32;
         let exported_events = payload.events.len() as u32;
         let export_body = Self::encode_export_payload(&request.format, &payload)?;
-        validate_export_payload_size(&export_body, max_payload_bytes)?;
+        let export_payload_size_bytes =
+            validate_export_payload_size(&export_body, max_payload_bytes)?;
+        crate::domain_metrics::memory_domain_metrics()
+            .record_export_payload_bytes(export_payload_size_bytes);
         drop(payload);
 
         if let Some(drive_target_ref) = &request.drive_target_ref {
@@ -2231,7 +2234,7 @@ fn export_payload_byte_limit(drive_export: bool) -> usize {
 fn validate_export_payload_size(
     payload: &serde_json::Value,
     max_payload_bytes: usize,
-) -> MemoryServiceResult<()> {
+) -> MemoryServiceResult<usize> {
     let mut writer = ExportSizeGuard {
         bytes: 0,
         max_bytes: max_payload_bytes,
@@ -2258,7 +2261,7 @@ fn validate_export_payload_size(
             "export payload exceeds the configured {max_payload_bytes} byte limit"
         )));
     }
-    Ok(())
+    Ok(encoded)
 }
 
 struct ExportSizeGuard {

@@ -2033,7 +2033,7 @@ impl MemoryOpenApi for OpenMemoryService {
             space_count = request.space_ids.len(),
             "memory retrieval completed"
         );
-        crate::domain_metrics::memory_domain_metrics().record_retrieval_completed();
+        crate::domain_metrics::memory_domain_metrics().record_retrieval_completed(latency_ms);
 
         Ok(MemoryRetrievalResult {
             retrieval_id,

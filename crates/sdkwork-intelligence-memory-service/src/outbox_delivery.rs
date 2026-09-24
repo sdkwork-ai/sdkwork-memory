@@ -141,13 +141,18 @@ pub async fn deliver_outbox_event(
                     .map(|(_, client)| client)
                 })
                 .await?;
+            let delivery_started = std::time::Instant::now();
             let response = client
                 .post(url)
                 .header("content-type", "application/json")
                 .json(&envelope)
                 .send()
-                .await
-                .map_err(|error| format!("outbox delivery request failed: {error}"))?;
+                .await;
+            crate::domain_metrics::memory_domain_metrics().record_outbox_delivery_completed(
+                crate::platform::elapsed_millis_i64(delivery_started),
+            );
+            let response =
+                response.map_err(|error| format!("outbox delivery request failed: {error}"))?;
             if response.status().is_success() {
                 tracing::info!(
                     tenant_id = row.tenant_id,

@@ -71,3 +71,51 @@ spec:
               Outbox events have exceeded max retries and are now in dead-letter
               state. Inspect failed events in the ai_outbox_event table and
               requeue after fixing downstream issues.
+    - name: sdkwork-memory.latency
+      rules:
+        - alert: MemoryRetrievalP99BudgetBreach
+          expr: >-
+            histogram_quantile(
+              0.99,
+              sum by (le) (rate(memory_retrieval_latency_ms_bucket{service="sdkwork-api-memory-standalone-gateway"}[5m]))
+            ) > 200
+          for: 15m
+          labels:
+            severity: warning
+            service: sdkwork-api-memory-standalone-gateway
+          annotations:
+            summary: Memory retrieval p99 latency exceeds the 200 ms budget
+            description: >-
+              Retrieval p99 stayed above the PRD budget of 200 ms for 15 minutes.
+              Check retrieval trace queries, database index coverage, and provider
+              degradation before escalating.
+        - alert: MemoryOutboxDeliveryP99BudgetBreach
+          expr: >-
+            histogram_quantile(
+              0.99,
+              sum by (le) (rate(memory_outbox_delivery_latency_ms_bucket{service="sdkwork-api-memory-standalone-gateway"}[5m]))
+            ) > 5000
+          for: 15m
+          labels:
+            severity: warning
+            service: sdkwork-api-memory-standalone-gateway
+          annotations:
+            summary: Memory outbox delivery p99 latency is elevated
+            description: >-
+              Outbox webhook delivery p99 exceeded 5 seconds for 15 minutes, which
+              risks lease expiry and duplicate delivery. Check the downstream
+              endpoint and RUNBOOK-outbox-backlog.md.
+        - alert: MemoryExportPayloadNearHardCap
+          expr: >-
+            increase(memory_export_payload_bytes_sum{service="sdkwork-api-memory-standalone-gateway"}[15m])
+            > 268435456
+          for: 1m
+          labels:
+            severity: warning
+            service: sdkwork-api-memory-standalone-gateway
+          annotations:
+            summary: Memory export payloads near the 256 MiB hard cap
+            description: >-
+              Export payloads are approaching the absolute 256 MiB cap. Review
+              export bounds and consider streaming multipart before raising any
+              limits.
