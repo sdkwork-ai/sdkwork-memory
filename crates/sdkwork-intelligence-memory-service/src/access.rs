@@ -564,6 +564,26 @@ pub async fn assert_actor_can_access_space_i64(
     .await
 }
 
+pub async fn assert_actor_can_access_space_for_write_i64(
+    data_plane: &MemoryRuntimeDataPlane,
+    context: &MemoryOpenApiRequestContext,
+    space_id: i64,
+) -> MemoryServiceResult<()> {
+    if space_id < 0 {
+        return Err(MemoryServiceError::validation(
+            "spaceId must be non-negative",
+        ));
+    }
+    assert_actor_can_access_space_for_write(
+        data_plane,
+        context,
+        u64::try_from(space_id).map_err(|_| {
+            MemoryServiceError::validation("spaceId must fit in an unsigned 64-bit integer")
+        })?,
+    )
+    .await
+}
+
 pub fn validate_user_space_owner(
     context: &MemoryOpenApiRequestContext,
     owner_subject_type: &str,

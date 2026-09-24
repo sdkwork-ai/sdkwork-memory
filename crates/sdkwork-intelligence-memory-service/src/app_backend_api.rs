@@ -433,7 +433,9 @@ impl OpenMemoryService {
         context: &MemoryAppRequestContext,
         row: &NativeSqlHabitRow,
     ) -> MemoryServiceResult<()> {
-        crate::access::assert_actor_can_access_space_i64(
+        // Every caller mutates habit state (update/confirm/reject): the write
+        // gate applies, not read-level access.
+        crate::access::assert_actor_can_access_space_for_write_i64(
             &self.runtime_data_plane,
             &Self::to_open_context(context),
             row.space_id,
@@ -544,7 +546,8 @@ impl MemoryAppApi for OpenMemoryService {
         request: MemorySpaceRequest,
     ) -> MemoryServiceResult<MemorySpace> {
         let tenant_id = platform::tenant_id_i64(context.tenant_id)?;
-        crate::access::assert_actor_can_access_space(
+        // Space mutation (rename/default-scope change) requires the write gate.
+        crate::access::assert_actor_can_access_space_for_write(
             &self.runtime_data_plane,
             &Self::to_open_context(&context),
             space_id,
@@ -727,7 +730,9 @@ impl MemoryAppApi for OpenMemoryService {
                     organization_id: context.organization_id.map(|value| value as i64),
                     user_id: context.actor_id.map(|value| value as i64),
                 };
-                crate::access::assert_actor_can_access_space(
+                // Forget is a destructive physical purge: it requires the same
+                // write-role and memory.write capability gate as deletion.
+                crate::access::assert_actor_can_access_space_for_write(
                     &self.runtime_data_plane,
                     &Self::to_open_context(&context),
                     space_id,
@@ -766,7 +771,8 @@ impl MemoryAppApi for OpenMemoryService {
                 let space_id = request.space_id.ok_or_else(|| {
                     MemoryServiceError::validation("spaceId is required when scope is space")
                 })?;
-                crate::access::assert_actor_can_access_space(
+                // Whole-space purge is destructive: enforce the write gate.
+                crate::access::assert_actor_can_access_space_for_write(
                     &self.runtime_data_plane,
                     &Self::to_open_context(&context),
                     space_id,
@@ -799,7 +805,8 @@ impl MemoryAppApi for OpenMemoryService {
                 let space_id = request.space_id.ok_or_else(|| {
                     MemoryServiceError::validation("spaceId is required when scope is query")
                 })?;
-                access::assert_actor_can_access_space(
+                // Query-scoped matches are physically deleted: enforce the write gate.
+                access::assert_actor_can_access_space_for_write(
                     &self.runtime_data_plane,
                     &Self::to_open_context(&context),
                     space_id,
@@ -1285,7 +1292,9 @@ impl MemoryAppApi for OpenMemoryService {
             })
             .await?
             .ok_or_else(|| MemoryServiceError::not_found("candidate not found"))?;
-        crate::access::assert_actor_can_access_space_i64(
+        // Approval promotes the candidate into a canonical record: it is a write
+        // on the space and must pass the write-role and capability gate.
+        crate::access::assert_actor_can_access_space_for_write_i64(
             &self.runtime_data_plane,
             &Self::to_open_context(&context),
             existing.space_id,
@@ -1318,7 +1327,8 @@ impl MemoryAppApi for OpenMemoryService {
             })
             .await?
             .ok_or_else(|| MemoryServiceError::not_found("candidate not found"))?;
-        crate::access::assert_actor_can_access_space_i64(
+        // Rejection mutates candidate state on the space: enforce the write gate.
+        crate::access::assert_actor_can_access_space_for_write_i64(
             &self.runtime_data_plane,
             &Self::to_open_context(&context),
             existing.space_id,
