@@ -1,7 +1,7 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { MemoryCandidate, MemoryContextPack, MemoryContextPackRequest, MemoryEntity, MemoryEntityPatch, MemoryEntityRequest, MemoryEvent, MemoryEventRequest, MemoryExportJob, MemoryExportRequest, MemoryExtractionRequest, MemoryFeedback, MemoryFeedbackRequest, MemoryForgetJob, MemoryForgetRequest, MemoryHabit, MemoryHabitRequest, MemoryLearningJob, MemoryLearningSettings, MemoryLearningSettingsRequest, MemoryPolicyAssignment, MemoryPolicyAssignmentPatch, MemoryPolicyAssignmentRequest, MemoryRecord, MemoryRecordRequest, MemoryRecordSource, MemoryRetrievalRequest, MemoryRetrievalResult, MemoryReviewRequest, MemorySpace, MemorySpaceRequest, PageInfo } from '../types';
+import type { DeleteAllMemoriesRequest, MemoryCandidate, MemoryContextPack, MemoryContextPackRequest, MemoryEntity, MemoryEntityPatch, MemoryEntityRequest, MemoryEvent, MemoryEventRequest, MemoryExportJob, MemoryExportRequest, MemoryExtractionRequest, MemoryFeedback, MemoryFeedbackRequest, MemoryForgetJob, MemoryForgetRequest, MemoryHabit, MemoryHabitRequest, MemoryLearningJob, MemoryLearningSettings, MemoryLearningSettingsRequest, MemoryPolicyAssignment, MemoryPolicyAssignmentPatch, MemoryPolicyAssignmentRequest, MemoryRecord, MemoryRecordRequest, MemoryRecordSource, MemoryRetrievalRequest, MemoryRetrievalResult, MemoryReviewRequest, MemorySpace, MemorySpaceRequest, PageInfo, SdkWorkCommandData } from '../types';
 
 
 export interface MemoryPolicyAssignmentsListParams {
@@ -523,6 +523,7 @@ export interface MemoryListParams {
   pageSize?: number;
   spaceId: string;
   memoryType?: string;
+  showExpired?: boolean;
 }
 
 export interface MemoryCreateParams {
@@ -539,6 +540,10 @@ export interface MemoryUpdateParams {
 
 export interface MemoryDeleteParams {
   spaceId: string;
+}
+
+export interface MemoryDeleteAllParams {
+  idempotencyKey: string;
 }
 
 export class MemoryApi {
@@ -584,6 +589,7 @@ async list(params: MemoryListParams, requestOptions?: ApiRequestOptions): Promis
       { name: 'page_size', value: params.pageSize, style: 'form', explode: true, allowReserved: false },
       { name: 'space_id', value: params.spaceId, style: 'form', explode: true, allowReserved: false },
       { name: 'memory_type', value: params.memoryType, style: 'form', explode: true, allowReserved: false },
+      { name: 'show_expired', value: params.showExpired, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryRecord[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/memory/memories`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
@@ -617,6 +623,16 @@ async delete(memoryId: string, params: MemoryDeleteParams, requestOptions?: ApiR
       { name: 'space_id', value: params.spaceId, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<void>(appendQueryString(appApiPath(`/memory/memories/${serializePathParameter(memoryId, { name: 'memoryId', style: 'simple', explode: false })}`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
+  }
+
+async deleteAll(body: DeleteAllMemoriesRequest, params: MemoryDeleteAllParams, requestOptions?: ApiRequestOptions): Promise<SdkWorkCommandData> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<SdkWorkCommandData>(appApiPath(`/memory/memories/delete_all`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'command' });
   }
 }
 

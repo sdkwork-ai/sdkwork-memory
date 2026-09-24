@@ -3,6 +3,7 @@ export interface MemoryEdgeRequest {
   sourceEntityId: string;
   targetEntityId: string;
   relationType: string;
+  sourceMemoryId?: string | null;
   weight?: number | null;
   validFrom?: string | null;
   validTo?: string | null;

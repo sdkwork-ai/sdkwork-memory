@@ -23,6 +23,8 @@ export type { MemoryRetrievalRequest } from './memory-retrieval-request';
 export type { MemoryRetrievalResult } from './memory-retrieval-result';
 export type { MemoryRetrievalTrace } from './memory-retrieval-trace';
 export type { MemoryRetrievalTraceList } from './memory-retrieval-trace-list';
+export type { DeleteAllMemoriesRequest } from './delete-all-memories-request';
+export type { DeleteAllMemoriesResult } from './delete-all-memories-result';
 export type { MemoryRetrievalHit } from './memory-retrieval-hit';
 export type { MemoryContextPackRequest } from './memory-context-pack-request';
 export type { MemoryContextPack } from './memory-context-pack';

@@ -1166,7 +1166,7 @@
         "x-sdkwork-rate-limit-tier": "authCritical"
       }
     },
-    "/mem/v3/api/memory/memories/delete-all": {
+    "/mem/v3/api/memory/memories/delete_all": {
       "post": {
         "operationId": "memories.deleteAll",
         "tags": [

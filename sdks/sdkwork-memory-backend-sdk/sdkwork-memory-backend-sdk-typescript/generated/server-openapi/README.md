@@ -18,7 +18,7 @@ pnpm add @sdkwork/memory-backend-sdk
 import { SdkworkMemoryBackendClient } from '@sdkwork/memory-backend-sdk';
 
 const client = new SdkworkMemoryBackendClient({
-  baseUrl: 'http://localhost:8080',
+  baseUrl: 'https://api.sdkwork.com',
   timeout: 30000,
 });
 
@@ -44,7 +44,7 @@ Access-Token: <accessToken>
 import { SdkworkMemoryBackendClient } from '@sdkwork/memory-backend-sdk';
 
 const client = new SdkworkMemoryBackendClient({
-  baseUrl: 'http://localhost:8080',
+  baseUrl: 'https://api.sdkwork.com',
   timeout: 30000, // Request timeout in ms
   headers: {      // Custom headers
     'X-Custom-Header': 'value',

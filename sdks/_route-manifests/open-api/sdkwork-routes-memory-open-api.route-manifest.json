@@ -197,7 +197,7 @@
     },
     {
       "method": "POST",
-      "path": "/mem/v3/api/memory/memories/delete-all",
+      "path": "/mem/v3/api/memory/memories/delete_all",
       "operationId": "memories.deleteAll",
       "tags": [
         "memory"

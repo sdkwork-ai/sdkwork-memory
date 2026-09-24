@@ -7,5 +7,8 @@ export interface MemoryRetrievalRequest {
   filters?: Record<string, unknown> | null;
   topK: number;
   contextBudgetTokens: number;
+  showExpired?: boolean;
+  threshold?: number | null;
+  explain?: boolean;
   includeTrace?: boolean;
 }

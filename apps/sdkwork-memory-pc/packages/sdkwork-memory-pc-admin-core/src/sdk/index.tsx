@@ -22,7 +22,16 @@ export function useMemoryAdminSdk(): MemoryAdminSdkClient {
 }
 
 export function createMemoryAdminResourceRegistry(client: MemoryAdminSdkClient): MemoryResourceRegistry {
-  const idempotency = (context: MemoryResourceActionContext) => ({ idempotencyKey: context.idempotencyKey });
+  // Generated contracts require a string idempotency key on every command
+  // operation; fail closed with the same guard the console registry applies so
+  // a host bypassing the command drawer cannot emit unguarded writes.
+  const idempotency = (context: MemoryResourceActionContext) => {
+    const idempotencyKey = context.idempotencyKey?.trim();
+    if (!idempotencyKey) {
+      throw new Error("Memory admin action requires an idempotency key before execution");
+    }
+    return { idempotencyKey };
+  };
   return {
     spaces: withActions(listSource((query) => client.memory.spaces.list(toListParams(query))), [
       action("update", "Update space", { ownerSubjectType: "user", ownerSubjectId: "", spaceType: "personal", displayName: "", lifecycleStatus: "active", version: "" }, (context) => client.memory.spaces.update(selectedId(context, "spaceId"), context.body as unknown as Parameters<typeof client.memory.spaces.update>[1]), { selection: true }),

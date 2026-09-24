@@ -3177,7 +3177,7 @@ function writeOpenApi() {
     responseSchema: "MemoryRecord",
     status: "204"
   }));
-  addPath(paths, `${P}/memories/delete-all`, "post", openOperation({
+  addPath(paths, `${P}/memories/delete_all`, "post", openOperation({
     method: "post",
     authority,
     operationId: "memories.deleteAll",
@@ -3316,7 +3316,7 @@ function writeAppOpenApi() {
   addPath(paths, `${P}/memories/{memoryId}`, "get", operation({ method: "get", authority, operationId: "memories.retrieve", permission: "memory.records.read", auditEvent: "memory.record.read", pathParams: [pathParam("memoryId")], queryParams: [requiredSpaceIdQueryParam()], responseSchema: "MemoryRecord" }));
   addPath(paths, `${P}/memories/{memoryId}`, "patch", operation({ method: "patch", authority, operationId: "memories.update", permission: "memory.records.write", auditEvent: "memory.record.updated", pathParams: [pathParam("memoryId")], queryParams: [requiredSpaceIdQueryParam()], requestSchema: "MemoryRecordRequest", responseSchema: "MemoryRecord" }));
   addPath(paths, `${P}/memories/{memoryId}`, "delete", operation({ method: "delete", authority, operationId: "memories.delete", permission: "memory.records.write", auditEvent: "memory.record.deleted", pathParams: [pathParam("memoryId")], queryParams: [requiredSpaceIdQueryParam()], responseSchema: "MemoryRecord", status: "204" }));
-addPath(paths, `${P}/memories/delete-all`, "post", operation({ method: "post", authority, operationId: "memories.deleteAll", permission: "memory.records.write", auditEvent: "memory.record.deleted", requestSchema: "DeleteAllMemoriesRequest", responseSchema: "DeleteAllMemoriesResult", idempotent: true }));
+addPath(paths, `${P}/memories/delete_all`, "post", operation({ method: "post", authority, operationId: "memories.deleteAll", permission: "memory.records.write", auditEvent: "memory.record.deleted", requestSchema: "DeleteAllMemoriesRequest", responseSchema: "DeleteAllMemoriesResult", idempotent: true }));
   addPath(paths, `${P}/memories/{memoryId}/sources`, "get", operation({ method: "get", authority, operationId: "memories.sources.list", permission: "memory.records.read", auditEvent: "memory.record.sources.list", pathParams: [pathParam("memoryId")], queryParams: listParams(), responseSchema: "MemoryRecordSourceList" }));
 
   addPath(paths, `${P}/forget_requests`, "get", operation({ method: "get", authority, operationId: "forgetRequests.list", permission: "memory.forget.read", auditEvent: "memory.forget.list", queryParams: cursorListParams(), responseSchema: "MemoryForgetJobList" }));

@@ -4,6 +4,7 @@ export interface MemoryEdge {
   sourceEntityId: string;
   targetEntityId: string;
   relationType: string;
+  sourceMemoryId?: string | null;
   weight?: number | null;
   status: string;
   validFrom?: string | null;

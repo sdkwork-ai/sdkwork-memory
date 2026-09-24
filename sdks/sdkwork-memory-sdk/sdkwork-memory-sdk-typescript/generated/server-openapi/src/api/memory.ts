@@ -1,7 +1,7 @@
 import { customApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { MemoryCandidate, MemoryCapabilities, MemoryContextPack, MemoryContextPackRequest, MemoryEdge, MemoryEdgePatch, MemoryEdgeRequest, MemoryEntity, MemoryEntityPatch, MemoryEntityRequest, MemoryEvent, MemoryEventRequest, MemoryExtractionRequest, MemoryFeedback, MemoryFeedbackRequest, MemoryLearningJob, MemoryProviderHealth, MemoryRecord, MemoryRecordRequest, MemoryRetrievalRequest, MemoryRetrievalResult, PageInfo } from '../types';
+import type { DeleteAllMemoriesRequest, MemoryCandidate, MemoryCapabilities, MemoryContextPack, MemoryContextPackRequest, MemoryEdge, MemoryEdgePatch, MemoryEdgeRequest, MemoryEntity, MemoryEntityPatch, MemoryEntityRequest, MemoryEvent, MemoryEventRequest, MemoryExtractionRequest, MemoryFeedback, MemoryFeedbackRequest, MemoryLearningJob, MemoryProviderHealth, MemoryRecord, MemoryRecordRequest, MemoryRetrievalRequest, MemoryRetrievalResult, PageInfo, SdkWorkCommandData } from '../types';
 
 
 export interface MemoryEdgesListParams {
@@ -309,6 +309,7 @@ export interface MemoryListParams {
   spaceId: string;
   memoryType?: string;
   externalSubjectRef?: string;
+  showExpired?: boolean;
 }
 
 export interface MemoryCreateParams {
@@ -325,6 +326,10 @@ export interface MemoryUpdateParams {
 
 export interface MemoryDeleteParams {
   spaceId: string;
+}
+
+export interface MemoryDeleteAllParams {
+  idempotencyKey: string;
 }
 
 export class MemoryApi {
@@ -363,6 +368,7 @@ async list(params: MemoryListParams, requestOptions?: ApiRequestOptions): Promis
       { name: 'space_id', value: params.spaceId, style: 'form', explode: true, allowReserved: false },
       { name: 'memory_type', value: params.memoryType, style: 'form', explode: true, allowReserved: false },
       { name: 'external_subject_ref', value: params.externalSubjectRef, style: 'form', explode: true, allowReserved: false },
+      { name: 'show_expired', value: params.showExpired, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryRecord[]; pageInfo: PageInfo; }>(appendQueryString(customApiPath(`/memory/memories`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
@@ -396,6 +402,16 @@ async delete(memoryId: string, params: MemoryDeleteParams, requestOptions?: ApiR
       { name: 'space_id', value: params.spaceId, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<void>(appendQueryString(customApiPath(`/memory/memories/${serializePathParameter(memoryId, { name: 'memoryId', style: 'simple', explode: false })}`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
+  }
+
+async deleteAll(body: DeleteAllMemoriesRequest, params: MemoryDeleteAllParams, requestOptions?: ApiRequestOptions): Promise<SdkWorkCommandData> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<SdkWorkCommandData>(customApiPath(`/memory/memories/delete_all`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'command' });
   }
 }
 
