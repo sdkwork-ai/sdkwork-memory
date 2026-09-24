@@ -886,12 +886,14 @@ CREATE INDEX IF NOT EXISTS idx_ai_outbox_event_delivery_lease
 ALTER TABLE ai_learning_job
   ADD COLUMN IF NOT EXISTS lease_owner VARCHAR(128),
   ADD COLUMN IF NOT EXISTS lease_token VARCHAR(128),
-  ADD COLUMN IF NOT EXISTS lease_expires_at TEXT;
+  ADD COLUMN IF NOT EXISTS lease_expires_at TEXT,
+  ADD COLUMN IF NOT EXISTS attempt_count BIGINT NOT NULL DEFAULT 0;
 
 ALTER TABLE ai_eval_run
   ADD COLUMN IF NOT EXISTS lease_owner VARCHAR(128),
   ADD COLUMN IF NOT EXISTS lease_token VARCHAR(128),
-  ADD COLUMN IF NOT EXISTS lease_expires_at TEXT;
+  ADD COLUMN IF NOT EXISTS lease_expires_at TEXT,
+  ADD COLUMN IF NOT EXISTS attempt_count BIGINT NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS idx_ai_learning_job_execution_lease
   ON ai_learning_job (state, lease_expires_at, priority, id);

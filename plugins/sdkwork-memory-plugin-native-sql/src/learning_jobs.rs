@@ -102,13 +102,37 @@ impl NativeSqlMemoryStore {
 
     pub async fn requeue_stale_running_learning_jobs(
         &self,
-        _stale_after_seconds: u64,
+        max_attempts: u64,
     ) -> Result<u64, NativeSqlStoreError> {
         let timestamp = now_text();
+        let max_attempts = i64::try_from(max_attempts).unwrap_or(i64::MAX);
+        // Rows past the attempt ceiling converge on the terminal `dead` state so a
+        // crash-looping or panicking job cannot consume the queue forever.
+        sqlx::query(
+            r#"
+            UPDATE ai_learning_job
+            SET state = 'dead',
+                error_json = ?,
+                lease_owner = NULL,
+                lease_token = NULL,
+                lease_expires_at = NULL,
+                updated_at = ?
+            WHERE state = 'running'
+              AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
+              AND attempt_count >= ?
+            "#,
+        )
+        .bind(r#"{"error":"max_attempts_exceeded"}"#)
+        .bind(&timestamp)
+        .bind(&timestamp)
+        .bind(max_attempts)
+        .execute(self.pool())
+        .await?;
         let result = sqlx::query(
             r#"
             UPDATE ai_learning_job
             SET state = 'queued',
+                attempt_count = attempt_count + 1,
                 started_at = NULL,
                 lease_owner = NULL,
                 lease_token = NULL,
@@ -116,10 +140,12 @@ impl NativeSqlMemoryStore {
                 updated_at = ?
             WHERE state = 'running'
               AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
+              AND attempt_count < ?
             "#,
         )
         .bind(&timestamp)
         .bind(&timestamp)
+        .bind(max_attempts)
         .execute(self.pool())
         .await?;
         Ok(result.rows_affected())
@@ -412,13 +438,35 @@ impl NativeSqlMemoryStore {
 
     pub async fn requeue_stale_running_eval_runs(
         &self,
-        _stale_after_seconds: u64,
+        max_attempts: u64,
     ) -> Result<u64, NativeSqlStoreError> {
         let timestamp = now_text();
+        let max_attempts = i64::try_from(max_attempts).unwrap_or(i64::MAX);
+        // Same bounded-retry contract as learning jobs: past the ceiling the run
+        // is terminal `dead` instead of being requeued forever.
+        sqlx::query(
+            r#"
+            UPDATE ai_eval_run
+            SET state = 'dead',
+                lease_owner = NULL,
+                lease_token = NULL,
+                lease_expires_at = NULL,
+                updated_at = ?
+            WHERE state = 'running'
+              AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
+              AND attempt_count >= ?
+            "#,
+        )
+        .bind(&timestamp)
+        .bind(&timestamp)
+        .bind(max_attempts)
+        .execute(self.pool())
+        .await?;
         let result = sqlx::query(
             r#"
             UPDATE ai_eval_run
             SET state = 'queued',
+                attempt_count = attempt_count + 1,
                 started_at = NULL,
                 lease_owner = NULL,
                 lease_token = NULL,
@@ -426,10 +474,12 @@ impl NativeSqlMemoryStore {
                 updated_at = ?
             WHERE state = 'running'
               AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
+              AND attempt_count < ?
             "#,
         )
         .bind(&timestamp)
         .bind(&timestamp)
+        .bind(max_attempts)
         .execute(self.pool())
         .await?;
         Ok(result.rows_affected())

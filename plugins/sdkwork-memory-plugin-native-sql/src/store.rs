@@ -208,7 +208,7 @@ impl NativeSqlMemoryStore {
         // The check key must equal the final entry of the dialect's MIGRATIONS list so a
         // completed compatibility bootstrap is never replayed on startup.
         let latest_version = match self.dialect() {
-            MemorySqlDialect::Sqlite => "0010",
+            MemorySqlDialect::Sqlite => "0011",
             MemorySqlDialect::Postgres => "baseline",
         };
         match sqlx::query_scalar::<_, i32>(
@@ -4069,6 +4069,12 @@ impl NativeSqlMemoryStore {
                 "0010",
                 include_str!(
                     "../../../tests/fixtures/database/sqlite/migrations/0010_memory_job_execution_lease.up.sql"
+                ),
+            ),
+            (
+                "0011",
+                include_str!(
+                    "../../../tests/fixtures/database/sqlite/migrations/0011_memory_job_attempt_accounting.up.sql"
                 ),
             ),
         ];

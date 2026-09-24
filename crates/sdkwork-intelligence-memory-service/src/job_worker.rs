@@ -205,9 +205,10 @@ async fn process_learning_job_batch(
     worker_id: &str,
     lease_duration_seconds: u64,
 ) -> Result<(), String> {
+    let max_attempts = platform::read_env_u64("SDKWORK_MEMORY_JOB_MAX_ATTEMPTS", 5).clamp(1, 20);
     let _ = service
         .store
-        .requeue_stale_running_learning_jobs(lease_duration_seconds)
+        .requeue_stale_running_learning_jobs(max_attempts)
         .await
         .map_err(|error| error.to_string())?;
     let lease_token = platform::next_numeric_id()
@@ -232,8 +233,14 @@ async fn process_learning_job_batch(
             lease_duration_seconds,
         ));
     }
+    // A panicking job must not abort its batch siblings: dropping the JoinSet on
+    // the first JoinError would cancel every in-flight claim and strand them
+    // until lease expiry. Isolate the failure and keep draining the batch, the
+    // same way the outbox publisher does.
     while let Some(result) = tasks.join_next().await {
-        result.map_err(|error| format!("memory learning job task failed: {error}"))?;
+        if let Err(error) = result {
+            tracing::error!(error = %error, "memory learning job task panicked; continuing batch");
+        }
     }
     Ok(())
 }
@@ -518,9 +525,10 @@ async fn process_eval_run_batch(
     worker_id: &str,
     lease_duration_seconds: u64,
 ) -> Result<(), String> {
+    let max_attempts = platform::read_env_u64("SDKWORK_MEMORY_EVAL_MAX_ATTEMPTS", 5).clamp(1, 20);
     let _ = service
         .store
-        .requeue_stale_running_eval_runs(lease_duration_seconds)
+        .requeue_stale_running_eval_runs(max_attempts)
         .await
         .map_err(|error| error.to_string())?;
     let lease_token = platform::next_numeric_id()
@@ -545,8 +553,12 @@ async fn process_eval_run_batch(
             lease_duration_seconds,
         ));
     }
+    // Same panic-isolation rule as the learning batch: a panicking eval run must
+    // not abort its batch siblings.
     while let Some(result) = tasks.join_next().await {
-        result.map_err(|error| format!("memory eval task failed: {error}"))?;
+        if let Err(error) = result {
+            tracing::error!(error = %error, "memory eval task panicked; continuing batch");
+        }
     }
     Ok(())
 }
