@@ -66,7 +66,7 @@ Rules:
 - Request schemas do not expose client-writable `tenantId` for current-tenant operations.
 - Routes inject tenant and actor/operator identity from `Memory*RequestContext`.
 - Generated transport packages are private implementation details; composed SDK packages are the consumer boundary.
-- Lists return `data.items` and `data.pageInfo`. SQL-backed histories constrain tenant, scope/type, cursor, and `LIMIT` in the query.
+- Lists return `data.items` and `data.pageInfo`. Cursors are opaque HMAC-protected tokens (`SDKWORK_MEMORY_CURSOR_SIGNING_KEY`); forged or stale tokens fail as invalid parameters. SQL-backed histories constrain tenant, scope/type, cursor, and `LIMIT` in the query, with matching composite indexes.
 - Success and error serialization is delegated to SDKWork web-framework response helpers.
 
 ## PC Package Architecture
@@ -88,9 +88,9 @@ Both surfaces reuse visual primitives but do not share SDK clients, session cont
 
 - Canonical evidence is stored in `ai_event`, `ai_record`, and `ai_record_source`.
 - Learning jobs use `ai_learning_job`; extraction history is keyset-paginated by tenant, type, optional space, and stable row id.
-- Outbox, learning, and evaluation workers use persisted owner/token/expiry leases. Heartbeats extend current leases, and stale completion is fenced at the SQL update.
+- Outbox, learning, and evaluation workers use persisted owner/token/expiry leases. Heartbeats extend current leases, and stale completion is fenced at the SQL update. Stale requeues increment `attempt_count`; rows past the configured ceiling land in a terminal `dead` state instead of looping, and a panicking job isolates to its own task instead of aborting its batch.
 - Forget, export, consolidation, retention, and migration jobs persist typed snapshots in `ai_audit_log`; App history also constrains the authenticated actor in SQL.
-- Entities, edges, policies, subjects, bindings, capability bindings, assignments, and readiness snapshots use dedicated `ai_` tables.
+- Entities, edges, policies, subjects, bindings, capability bindings, assignments, feedback signals (`ai_feedback`), and readiness snapshots use dedicated `ai_` tables with bounded-enum CHECK constraints on state columns.
 - Search indexes and provider projections are derived and rebuildable. Canonical relational data remains authoritative.
 - Outbox writes are part of mutation boundaries where domain event delivery is required.
 - PostgreSQL and SQLite share one logical storage model through `sqlx::Any`: application-generated Snowflake IDs, validated JSON/UTC instants stored as text, and floating algorithm scores stored as `DOUBLE PRECISION`/`REAL`.
