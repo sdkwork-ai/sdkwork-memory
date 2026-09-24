@@ -12,6 +12,7 @@ pub mod manifest;
 pub mod native_sql_phase1_runtime;
 pub mod policy_store;
 pub mod pool_backend;
+mod feedback;
 pub mod privacy;
 pub mod readiness_store;
 pub mod search_index;
@@ -40,6 +41,7 @@ pub use native_sql_phase1_runtime::{
 };
 pub use policy_store::*;
 pub use pool_backend::{connect_any_pool, normalize_memory_database_config, MemorySqlDialect};
+pub use feedback::{NativeSqlInsertFeedbackCommand};
 pub use privacy::{escape_like_pattern, like_pattern, ExportCollectedPayload, ForgetScopeStats};
 pub use readiness_store::*;
 pub use store::*;

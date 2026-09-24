@@ -2399,6 +2399,27 @@ impl MemoryOpenApi for OpenMemoryService {
             space_id,
         )
         .await?;
+        let actor_for_feedback = context.actor_id.as_ref().map(|value| value.to_string());
+        let metadata_for_feedback = request.metadata.as_ref().map(|value| value.to_string());
+        // Persist the durable feedback signal. The audit row records only the
+        // governance event; PRD feedback semantics (type/rating/comment
+        // queryable per target) need the dedicated table.
+        self.store
+            .insert_feedback_record(
+                &scope,
+                sdkwork_memory_plugin_native_sql::NativeSqlInsertFeedbackCommand {
+                    feedback_id: &feedback_id.to_string(),
+                    actor_id: actor_for_feedback.as_deref(),
+                    target_type: &request.target_type,
+                    target_id: platform::space_id_i64(request.target_id)?,
+                    feedback_type: &request.feedback_type,
+                    rating: request.rating,
+                    comment: request.comment.as_deref(),
+                    metadata_json: metadata_for_feedback.as_deref(),
+                },
+            )
+            .await
+            .map_err(Self::map_store_error)?;
         self.runtime_data_plane
             .append_audit(AppendMemoryAuditCommand {
                 scope,

@@ -900,6 +900,30 @@ CREATE INDEX IF NOT EXISTS idx_ai_learning_job_execution_lease
 CREATE INDEX IF NOT EXISTS idx_ai_eval_run_execution_lease
   ON ai_eval_run (state, lease_expires_at, id);
 
+-- Retrieval/record feedback signals (PRD: retrieval feedback). Rows are the
+-- durable, queryable record of user feedback; the audit log keeps only the
+-- governance event.
+CREATE TABLE IF NOT EXISTS ai_feedback (
+  id BIGINT PRIMARY KEY,
+  uuid VARCHAR(64) NOT NULL,
+  tenant_id BIGINT NOT NULL,
+  space_id BIGINT NOT NULL,
+  actor_id VARCHAR(128),
+  target_type VARCHAR(32) NOT NULL,
+  target_id BIGINT NOT NULL,
+  feedback_type VARCHAR(32) NOT NULL,
+  rating INT,
+  comment TEXT,
+  metadata_json TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_ai_feedback_uuid
+  ON ai_feedback (tenant_id, uuid);
+
+CREATE INDEX IF NOT EXISTS idx_ai_feedback_target
+  ON ai_feedback (tenant_id, space_id, target_type, target_id);
+
 -- ----------------------------------------------------------------------------
 -- List/keyset pagination indexes (P0/P1 interactive lists).
 -- Each index matches a documented list contract's WHERE + ORDER BY so the
