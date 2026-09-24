@@ -899,3 +899,32 @@ CREATE INDEX IF NOT EXISTS idx_ai_learning_job_execution_lease
   ON ai_learning_job (state, lease_expires_at, priority, id);
 CREATE INDEX IF NOT EXISTS idx_ai_eval_run_execution_lease
   ON ai_eval_run (state, lease_expires_at, id);
+
+-- ----------------------------------------------------------------------------
+-- List/keyset pagination indexes (P0/P1 interactive lists).
+-- Each index matches a documented list contract's WHERE + ORDER BY so the
+-- keyset seek stays on the index path under production page bounds.
+-- ----------------------------------------------------------------------------
+
+-- ai_record list: tenant+space cursor over uuid (Console default listing).
+CREATE INDEX IF NOT EXISTS idx_ai_record_space_uuid
+  ON ai_record (tenant_id, space_id, uuid);
+
+-- ai_retrieval_trace list: tenant+space newest-first with id tie-breaker.
+CREATE INDEX IF NOT EXISTS idx_ai_retrieval_trace_space_created
+  ON ai_retrieval_trace (tenant_id, space_id, created_at DESC, id DESC);
+
+-- ai_audit_log history: tenant+resource keyset over id.
+CREATE INDEX IF NOT EXISTS idx_ai_audit_resource_id
+  ON ai_audit_log (tenant_id, resource_type, id DESC);
+
+-- ai_learning_job history: tenant+job_type keyset over id.
+CREATE INDEX IF NOT EXISTS idx_ai_learning_job_history
+  ON ai_learning_job (tenant_id, job_type, id DESC);
+
+-- ai_outbox_event claim ordering: pending rows in created_at/id order so a
+-- growing backlog does not re-sort every claim. The leading column is
+-- publish_state by design: outbox workers scan across tenants (documented
+-- cross-tenant worker-scan exception to DB006).
+CREATE INDEX IF NOT EXISTS idx_ai_outbox_claim_order
+  ON ai_outbox_event (publish_state, created_at, id);
