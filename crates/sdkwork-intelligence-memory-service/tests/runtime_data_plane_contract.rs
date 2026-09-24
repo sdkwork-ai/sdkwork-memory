@@ -973,6 +973,8 @@ async fn canonical_record_retrieval_context_and_delete_are_scope_aware() {
             .retrieve_candidates_scoped(
                 tenant_one.clone(),
                 RetrieveMemoryCandidatesCommand {
+                read_scope: MemorySensitivityReadScope::Public,
+                limit: sdkwork_memory_spi::MAX_MEMORY_RETRIEVAL_CANDIDATES,
                     query: "preference".to_string(),
                 },
             )
@@ -1014,6 +1016,8 @@ async fn canonical_record_retrieval_context_and_delete_are_scope_aware() {
         .retrieve_candidates_scoped(
             tenant_one,
             RetrieveMemoryCandidatesCommand {
+                read_scope: MemorySensitivityReadScope::Public,
+                limit: sdkwork_memory_spi::MAX_MEMORY_RETRIEVAL_CANDIDATES,
                 query: "preference".to_string(),
             },
         )

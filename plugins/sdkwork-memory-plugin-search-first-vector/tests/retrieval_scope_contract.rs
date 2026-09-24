@@ -421,6 +421,8 @@ async fn the_legacy_unscoped_retrieve_is_refused() {
 
     let error = runtime
         .retrieve(sdkwork_memory_spi::RetrieveMemoryCandidatesCommand {
+        read_scope: MemorySensitivityReadScope::Public,
+        limit: sdkwork_memory_spi::MAX_MEMORY_RETRIEVAL_CANDIDATES,
             query: "alpha".to_string(),
         })
         .await
@@ -461,6 +463,8 @@ async fn the_legacy_scoped_retrieve_returns_only_public_records() {
         .retrieve_scoped(
             owner,
             sdkwork_memory_spi::RetrieveMemoryCandidatesCommand {
+        read_scope: MemorySensitivityReadScope::Public,
+        limit: sdkwork_memory_spi::MAX_MEMORY_RETRIEVAL_CANDIDATES,
                 query: "alpha".to_string(),
             },
         )

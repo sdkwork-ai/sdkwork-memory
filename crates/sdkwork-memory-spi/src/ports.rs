@@ -683,6 +683,12 @@ pub enum MemorySpaceQuotaAdmission<T> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RetrieveMemoryCandidatesCommand {
     pub query: String,
+    /// Sensitivity ceiling the caller is authorized to read. The store must
+    /// not choose one itself (a hardcoded Owner scope would silently widen
+    /// every future caller's read).
+    pub read_scope: MemorySensitivityReadScope,
+    /// Candidate cap, clamped to the platform bound by stores.
+    pub limit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

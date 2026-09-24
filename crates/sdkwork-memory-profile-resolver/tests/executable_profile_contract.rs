@@ -11,8 +11,7 @@ use sdkwork_memory_spi::{
     MemoryDeploymentMode, MemoryExecutablePluginRuntime, MemoryImplementationKind,
     MemoryPluginManifest, MemoryPluginPorts, MemoryPluginRegistry, MemoryRecord,
     MemoryRecordStorePort, MemoryRetrieverPort, MemoryRetrieverResult, MemoryScopeContext,
-    MemorySpiResult, RetrieveMemoryCandidatesCommand, RetrieveMemoryRecordQuery,
-};
+    MemorySpiResult, RetrieveMemoryCandidatesCommand, RetrieveMemoryRecordQuery,  MemorySensitivityReadScope};
 
 #[derive(Default)]
 struct InMemoryRecordStore {
@@ -163,6 +162,8 @@ async fn executable_reference_search_profile_dispatches_to_each_bound_plugin() {
         retriever
             .retrieve(RetrieveMemoryCandidatesCommand {
                 query: "memory".to_string(),
+            read_scope: MemorySensitivityReadScope::Public,
+            limit: sdkwork_memory_spi::MAX_MEMORY_RETRIEVAL_CANDIDATES,
             })
             .await
             .unwrap()

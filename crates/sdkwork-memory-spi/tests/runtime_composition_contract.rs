@@ -7,8 +7,7 @@ use sdkwork_memory_spi::{
     MemoryGovernanceAccessPort, MemoryImplementationKind, MemoryPluginManifest, MemoryPluginPorts,
     MemoryPluginRegistry, MemoryRetrieverPort, MemoryRetrieverResult, MemoryRuntimeProfileMetadata,
     MemoryScopeContext, MemorySpiError, MemorySpiResult, ResolveMemorySpaceGovernanceQuery,
-    RetrieveMemoryCandidatesCommand,
-};
+    RetrieveMemoryCandidatesCommand, MemorySensitivityReadScope};
 
 struct NamedRetriever {
     code: &'static str,
@@ -61,6 +60,8 @@ async fn scoped_port_methods_fail_closed_until_an_implementation_overrides_them(
         scope.clone(),
         RetrieveMemoryCandidatesCommand {
             query: "isolated".to_string(),
+            read_scope: MemorySensitivityReadScope::Public,
+            limit: sdkwork_memory_spi::MAX_MEMORY_RETRIEVAL_CANDIDATES,
         },
     )
     .await

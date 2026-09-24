@@ -2164,7 +2164,7 @@ impl NativeSqlMemoryStore {
         scope: &MemoryScopeContext,
         journal: &MemoryMutationJournal,
     ) -> Result<(), NativeSqlStoreError> {
-        let insert_result = sqlx::query(
+        sqlx::query(
             r#"
             INSERT INTO ai_outbox_event (
               id, uuid, tenant_id, aggregate_type, aggregate_id,
@@ -3402,7 +3402,7 @@ impl NativeSqlMemoryStore {
             SET publish_state = 'published',
                 published_at = ?,
                 updated_at = ?
-            WHERE tenant_id = ? AND uuid = ? AND publish_state = 'pending'
+            WHERE tenant_id = ? AND uuid = ? AND publish_state IN ('pending','processing')
             "#,
         )
         .bind(now_text())
@@ -3426,7 +3426,7 @@ impl NativeSqlMemoryStore {
             SET publish_state = 'failed',
                 retry_count = retry_count + 1,
                 updated_at = ?
-            WHERE tenant_id = ? AND uuid = ?
+            WHERE tenant_id = ? AND uuid = ? AND publish_state = 'pending'
             "#,
         )
         .bind(now_text())
@@ -5441,7 +5441,7 @@ impl MemoryRetrieverPort for NativeSqlMemoryStore {
             .search_memory_candidates(&SearchMemoryCandidatesQuery {
                 scope,
                 query: command.query,
-                limit: 20,
+                limit: command.limit.clamp(1, sdkwork_memory_spi::MAX_MEMORY_RETRIEVAL_CANDIDATES),
                 retriever_kinds: vec![
                     MemoryRetrieverKind::Sql,
                     MemoryRetrieverKind::Keyword,
@@ -5450,7 +5450,7 @@ impl MemoryRetrieverPort for NativeSqlMemoryStore {
                     MemoryRetrieverKind::Event,
                 ],
                 memory_types: Vec::new(),
-                read_scope: MemorySensitivityReadScope::Owner,
+                read_scope: command.read_scope,
                 metadata_filter: None,
                 include_expired: false,
             })

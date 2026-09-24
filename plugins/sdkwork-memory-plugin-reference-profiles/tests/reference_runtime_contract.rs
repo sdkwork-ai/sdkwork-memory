@@ -125,6 +125,8 @@ async fn reference_runtime_round_trips_core_ports_and_retrieves_by_keyword() {
         scope.clone(),
         RetrieveMemoryCandidatesCommand {
             query: "keyword".to_string(),
+            read_scope: MemorySensitivityReadScope::Public,
+            limit: sdkwork_memory_spi::MAX_MEMORY_RETRIEVAL_CANDIDATES,
         },
     )
     .await
@@ -484,6 +486,8 @@ async fn reference_retrieval_and_context_assembly_are_isolated_by_tenant_and_spa
         &runtime,
         tenant_one.clone(),
         RetrieveMemoryCandidatesCommand {
+            read_scope: MemorySensitivityReadScope::Public,
+            limit: sdkwork_memory_spi::MAX_MEMORY_RETRIEVAL_CANDIDATES,
             query: "isolation keyword".to_string(),
         },
     )
@@ -495,6 +499,8 @@ async fn reference_retrieval_and_context_assembly_are_isolated_by_tenant_and_spa
         &runtime,
         tenant_two.clone(),
         RetrieveMemoryCandidatesCommand {
+            read_scope: MemorySensitivityReadScope::Public,
+            limit: sdkwork_memory_spi::MAX_MEMORY_RETRIEVAL_CANDIDATES,
             query: "isolation keyword".to_string(),
         },
     )
@@ -506,6 +512,8 @@ async fn reference_retrieval_and_context_assembly_are_isolated_by_tenant_and_spa
         &runtime,
         tenant_one_other_space.clone(),
         RetrieveMemoryCandidatesCommand {
+            read_scope: MemorySensitivityReadScope::Public,
+            limit: sdkwork_memory_spi::MAX_MEMORY_RETRIEVAL_CANDIDATES,
             query: "isolation keyword".to_string(),
         },
     )
@@ -554,6 +562,8 @@ async fn reference_retrieval_and_context_assembly_are_isolated_by_tenant_and_spa
     let unscoped_retrieval_error = MemoryRetrieverPort::retrieve(
         &runtime,
         RetrieveMemoryCandidatesCommand {
+            read_scope: MemorySensitivityReadScope::Public,
+            limit: sdkwork_memory_spi::MAX_MEMORY_RETRIEVAL_CANDIDATES,
             query: "isolation keyword".to_string(),
         },
     )
