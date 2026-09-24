@@ -22,7 +22,11 @@ workerConnections = 1024
 [http]
 sendfile = true
 keepaliveTimeout = 75
-clientMaxBodySize = "1100m"
+# Aligned with the application admission ceiling: SDKWORK_MEMORY_MAX_BODY_BYTES
+# defaults to 1 MiB (1048576), so the edge only needs 2m with headroom. The
+# former 1100m value let requests that the gateway always rejects buffer
+# unlimited upload traffic at the edge.
+clientMaxBodySize = "2m"
 serverTokens = "off"
 gzip = true
 

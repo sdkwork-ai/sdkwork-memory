@@ -91,6 +91,11 @@ where
         with_problem_correlation(router),
         build_open_api_framework_layer(resolver),
     )
+    // Innermost body limit: this wins over the framework's own default and is
+    // the single enforced bound (`SDKWORK_MEMORY_MAX_BODY_BYTES`).
+    .layer(axum::extract::DefaultBodyLimit::max(
+        sdkwork_routes_memory_support::memory_request_body_limit_bytes(),
+    ))
 }
 
 /// Wrap router using the IAM database web framework.
@@ -105,6 +110,11 @@ where
         with_problem_correlation(router),
         build_open_api_framework_layer(resolver),
     )
+    // Innermost body limit: this wins over the framework's own default and is
+    // the single enforced bound (`SDKWORK_MEMORY_MAX_BODY_BYTES`).
+    .layer(axum::extract::DefaultBodyLimit::max(
+        sdkwork_routes_memory_support::memory_request_body_limit_bytes(),
+    ))
 }
 
 /// Dispatch router wrapping based on configured auth mode.

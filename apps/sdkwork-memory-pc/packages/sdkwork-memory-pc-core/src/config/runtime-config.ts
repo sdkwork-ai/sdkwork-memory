@@ -1,6 +1,8 @@
+import { MEMORY_SUPPORTED_LOCALES, type MemoryLocale } from "@sdkwork/memory-pc-commons";
+
 export type MemoryLifecycleEnvironment = "development" | "production" | "staging" | "demo" | "test";
 export type MemoryDeploymentProfile = "cloud" | "standalone";
-export type MemoryLocale = "en-US" | "zh-CN";
+export type { MemoryLocale };
 
 export interface MemoryPcRuntimeConfig {
   appApiBaseUrl: string;
@@ -23,10 +25,12 @@ export function parseMemoryPcRuntimeConfig(value: unknown): MemoryPcRuntimeConfi
   if (!isRecord(value)) throw new Error("Runtime configuration must be an object");
   const environment = readEnum(value.environment, ["development", "test", "staging", "demo", "production"] as const, "environment");
   const deploymentProfile = readEnum(value.deploymentProfile, ["standalone", "cloud"] as const, "deploymentProfile");
-  const defaultLocale = readEnum(value.defaultLocale, ["zh-CN", "en-US"] as const, "defaultLocale");
-  const fallbackLocale = readEnum(value.fallbackLocale, ["zh-CN", "en-US"] as const, "fallbackLocale");
+  // Locale acceptance derives from the shared MEMORY_SUPPORTED_LOCALES constant, so a
+  // newly shipped language is valid in runtime configuration without a second list here.
+  const defaultLocale = readEnum(value.defaultLocale, MEMORY_SUPPORTED_LOCALES, "defaultLocale");
+  const fallbackLocale = readEnum(value.fallbackLocale, MEMORY_SUPPORTED_LOCALES, "fallbackLocale");
   const supportedLocales = Array.isArray(value.supportedLocales)
-    ? value.supportedLocales.map((locale) => readEnum(locale, ["zh-CN", "en-US"] as const, "supportedLocales"))
+    ? value.supportedLocales.map((locale) => readEnum(locale, MEMORY_SUPPORTED_LOCALES, "supportedLocales"))
     : [];
   if (!supportedLocales.includes(defaultLocale) || !supportedLocales.includes(fallbackLocale)) {
     throw new Error("defaultLocale and fallbackLocale must be supported");

@@ -65,6 +65,45 @@ pub fn memory_environment_name() -> String {
         .to_ascii_lowercase()
 }
 
+/// Environment names accepted by [`require_explicit_memory_environment`].
+const RECOGNIZED_ENVIRONMENTS: &[&str] = &[
+    "development", "dev", "production", "prod", "staging", "stage", "test",
+];
+
+/// Refuses to run a server process with an unset or unrecognized
+/// `SDKWORK_MEMORY_ENVIRONMENT`.
+///
+/// The security posture (authorization policy, tenant isolation, Redis-backed
+/// rate limiting, request deadlines, CORS hardening) switches on the resolved
+/// environment, and the resolver used to silently default an unset variable to
+/// `development` — so one missed env var turned an intended production replica
+/// into an unhardened dev server with no warning. Server hosts must declare the
+/// environment explicitly; the `test-runner` escape hatch matches the
+/// server-role engine admission rule in the repository bootstrap.
+pub fn require_explicit_memory_environment() -> Result<(), String> {
+    if std::env::var("SDKWORK_MEMORY_RUNTIME_TARGET").as_deref() == Ok("test-runner") {
+        return Ok(());
+    }
+    let raw = std::env::var("SDKWORK_MEMORY_ENVIRONMENT")
+        .or_else(|_| std::env::var("SDKWORK_MEMORY_CONFIG_PROFILE"))
+        .map_err(|_| {
+            "SDKWORK_MEMORY_ENVIRONMENT must be set explicitly for a Memory server process \
+             (development|staging|production); refusing to start with the historical implicit \
+             'development' default because it disables authorization, tenant isolation, \
+             Redis-backed rate limiting, and request deadlines"
+                .to_string()
+        })?;
+    let normalized = raw.trim().to_ascii_lowercase();
+    if RECOGNIZED_ENVIRONMENTS.contains(&normalized.as_str()) {
+        Ok(())
+    } else {
+        Err(format!(
+            "SDKWORK_MEMORY_ENVIRONMENT value '{raw}' is not recognized \
+             (expected one of: development, staging, production)"
+        ))
+    }
+}
+
 /// Returns true for production-like lifecycle profiles that must never use dev inline auth.
 pub fn memory_is_production_like_environment() -> bool {
     matches!(
@@ -118,6 +157,46 @@ mod tests {
             "the scope must restore the environment while unwinding, or a single failing \
              assertion leaks SDKWORK_* values into every sibling test in this binary"
         );
+    }
+
+    #[test]
+    fn explicit_environment_gate_accepts_recognized_names() {
+        let _guard = env_test_lock();
+        for value in ["development", "dev", "staging", "stage", "production", "prod", "test"] {
+            with_env("SDKWORK_MEMORY_RUNTIME_TARGET", None, || {
+                with_env("SDKWORK_MEMORY_ENVIRONMENT", Some(value), || {
+                    assert!(
+                        require_explicit_memory_environment().is_ok(),
+                        "{value} must be accepted"
+                    );
+                });
+            });
+        }
+    }
+
+    #[test]
+    fn explicit_environment_gate_rejects_unset_and_unknown_values() {
+        let _guard = env_test_lock();
+        with_env("SDKWORK_MEMORY_RUNTIME_TARGET", None, || {
+            with_env("SDKWORK_MEMORY_ENVIRONMENT", None, || {
+                with_env("SDKWORK_MEMORY_CONFIG_PROFILE", None, || {
+                    assert!(require_explicit_memory_environment().is_err());
+                });
+            });
+            with_env("SDKWORK_MEMORY_ENVIRONMENT", Some("prodction"), || {
+                assert!(require_explicit_memory_environment().is_err());
+            });
+        });
+    }
+
+    #[test]
+    fn test_runner_escape_hatch_allows_implicit_environment() {
+        let _guard = env_test_lock();
+        with_env("SDKWORK_MEMORY_RUNTIME_TARGET", Some("test-runner"), || {
+            with_env("SDKWORK_MEMORY_ENVIRONMENT", None, || {
+                assert!(require_explicit_memory_environment().is_ok());
+            });
+        });
     }
 
     #[test]

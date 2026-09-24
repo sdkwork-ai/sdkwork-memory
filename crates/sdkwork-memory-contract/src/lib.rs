@@ -26,6 +26,7 @@ pub use ports::{
 };
 pub use runtime_env::{
     env_test_lock, memory_dev_auth_bypass_enabled, memory_environment_name,
+    require_explicit_memory_environment,
     memory_is_production_like_environment, memory_use_dev_inline_auth_resolver, MemoryEnvScope,
 };
 pub use space::{ListSpacesQuery, MemorySpace, MemorySpaceList, MemorySpaceRequest};

@@ -2,7 +2,7 @@ import { Activity, BrainCircuit, Database, FlaskConical, Gauge, GitBranch, Heart
 import { type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
-import { useMemoryI18n } from "../i18n/runtime.tsx";
+import { MEMORY_LOCALE_LABELS, MEMORY_SUPPORTED_LOCALES, useMemoryI18n, type MemoryLocale } from "../i18n/runtime.tsx";
 import type { MemoryPcModuleDefinition, MemoryPcSurface } from "../types.ts";
 import { MEMORY_CONSOLE_SURFACE_ATTRIBUTE, memoryConsoleScopeClassName } from "./MemoryConsoleScope.tsx";
 
@@ -51,7 +51,7 @@ export function MemorySurfaceShell({ activeRoute, children, modules, onSignOut, 
           })}
         </nav>
         <footer className="sidebar-footer">
-          <label><span>{translate("memory.commons.locale")}</span><select value={locale} onChange={(event) => setLocale(event.target.value as "en-US" | "zh-CN")}><option value="zh-CN">简体中文</option><option value="en-US">English</option></select></label>
+          <label><span>{translate("memory.commons.locale")}</span><select value={locale} onChange={(event) => setLocale(event.target.value as MemoryLocale)}>{MEMORY_SUPPORTED_LOCALES.map((candidate) => <option key={candidate} value={candidate}>{MEMORY_LOCALE_LABELS[candidate]}</option>)}</select></label>
           {userLabel ? <p className="user-label"><Users size={14} />{userLabel}</p> : null}
           {onSignOut ? <button type="button" className="sign-out-button" onClick={onSignOut}><ShieldCheck size={15} />{translate("memory.commons.signOut")}</button> : null}
         </footer>

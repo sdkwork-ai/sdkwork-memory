@@ -3,130 +3,142 @@ environment = "production"
 [http]
 
 [[http.server]]
-listen = ["443 ssl", "80"]
+listen = ["443 ssl"]
 serverName = ["memory.sdkwork.com", "memory-app.sdkwork.com", "memory-admin.sdkwork.com", "memory-open.sdkwork.com", "mem.sdkwork.com"]
-include = ["snippets/gateway-locations.production.conf"]
+include = ["snippets/gateway-locations.production.conf", "snippets/hsts.production.conf"]
 
 [http.server.tls]
 cert = "sdkwork.com"
 
 [[http.server]]
-listen = ["443 ssl", "80"]
+listen = ["443 ssl"]
 serverName = ["memory.birdcoder.com", "memory-app.birdcoder.com", "memory-admin.birdcoder.com", "memory-open.birdcoder.com"]
-include = ["snippets/gateway-locations.production.conf"]
+include = ["snippets/gateway-locations.production.conf", "snippets/hsts.production.conf"]
 
 [http.server.tls]
 cert = "birdcoder.com"
 
 [[http.server]]
-listen = ["443 ssl", "80"]
+listen = ["443 ssl"]
 serverName = ["memory.dtupay.com", "memory-app.dtupay.com", "memory-admin.dtupay.com", "memory-open.dtupay.com"]
-include = ["snippets/gateway-locations.production.conf"]
+include = ["snippets/gateway-locations.production.conf", "snippets/hsts.production.conf"]
 
 [http.server.tls]
 cert = "dtupay.com"
 
 [[http.server]]
-listen = ["443 ssl", "80"]
+listen = ["443 ssl"]
 serverName = ["memory.noaper.com", "memory-app.noaper.com", "memory-admin.noaper.com", "memory-open.noaper.com"]
-include = ["snippets/gateway-locations.production.conf"]
+include = ["snippets/gateway-locations.production.conf", "snippets/hsts.production.conf"]
 
 [http.server.tls]
 cert = "noaper.com"
 
 [[http.server]]
-listen = ["443 ssl", "80"]
+listen = ["443 ssl"]
 serverName = ["memory.sdkwork.cn", "memory-app.sdkwork.cn", "memory-admin.sdkwork.cn", "memory-open.sdkwork.cn"]
-include = ["snippets/gateway-locations.production.conf"]
+include = ["snippets/gateway-locations.production.conf", "snippets/hsts.production.conf"]
 
 [http.server.tls]
 cert = "sdkwork.cn"
 
 [[http.server]]
-listen = ["443 ssl", "80"]
+listen = ["443 ssl"]
 serverName = ["memory.birdcoder.cn", "memory-app.birdcoder.cn", "memory-admin.birdcoder.cn", "memory-open.birdcoder.cn"]
-include = ["snippets/gateway-locations.production.conf"]
+include = ["snippets/gateway-locations.production.conf", "snippets/hsts.production.conf"]
 
 [http.server.tls]
 cert = "birdcoder.cn"
 
 [[http.server]]
-listen = ["443 ssl", "80"]
+listen = ["443 ssl"]
 serverName = ["memory.dtupay.cn", "memory-app.dtupay.cn", "memory-admin.dtupay.cn", "memory-open.dtupay.cn"]
-include = ["snippets/gateway-locations.production.conf"]
+include = ["snippets/gateway-locations.production.conf", "snippets/hsts.production.conf"]
 
 [http.server.tls]
 cert = "dtupay.cn"
 
 [[http.server]]
-listen = ["443 ssl", "80"]
+listen = ["443 ssl"]
 serverName = ["memory.noaper.cn", "memory-app.noaper.cn", "memory-admin.noaper.cn", "memory-open.noaper.cn"]
-include = ["snippets/gateway-locations.production.conf"]
+include = ["snippets/gateway-locations.production.conf", "snippets/hsts.production.conf"]
 
 [http.server.tls]
 cert = "noaper.cn"
 
 [[http.server]]
-listen = ["443 ssl", "80"]
+listen = ["443 ssl"]
 serverName = ["memory.skubc.com", "memory-app.skubc.com", "memory-admin.skubc.com", "memory-open.skubc.com"]
-include = ["snippets/gateway-locations.production.conf"]
+include = ["snippets/gateway-locations.production.conf", "snippets/hsts.production.conf"]
 
 [http.server.tls]
 cert = "skubc.com"
 
 [[http.server]]
-listen = ["443 ssl", "80"]
+listen = ["443 ssl"]
 serverName = ["memory.skubc.cn", "memory-app.skubc.cn", "memory-admin.skubc.cn", "memory-open.skubc.cn"]
-include = ["snippets/gateway-locations.production.conf"]
+include = ["snippets/gateway-locations.production.conf", "snippets/hsts.production.conf"]
 
 [http.server.tls]
 cert = "skubc.cn"
 
 [[http.server]]
-listen = ["443 ssl", "80"]
+listen = ["443 ssl"]
 serverName = ["memory.zowalk.com", "memory-app.zowalk.com", "memory-admin.zowalk.com", "memory-open.zowalk.com"]
-include = ["snippets/gateway-locations.production.conf"]
+include = ["snippets/gateway-locations.production.conf", "snippets/hsts.production.conf"]
 
 [http.server.tls]
 cert = "zowalk.com"
 
 [[http.server]]
-listen = ["443 ssl", "80"]
+listen = ["443 ssl"]
 serverName = ["memory.zowalk.cn", "memory-app.zowalk.cn", "memory-admin.zowalk.cn", "memory-open.zowalk.cn"]
-include = ["snippets/gateway-locations.production.conf"]
+include = ["snippets/gateway-locations.production.conf", "snippets/hsts.production.conf"]
 
 [http.server.tls]
 cert = "zowalk.cn"
 
 [[http.server]]
-listen = ["443 ssl", "80"]
+listen = ["443 ssl"]
 serverName = ["memory.offer86.com", "memory-app.offer86.com", "memory-admin.offer86.com", "memory-open.offer86.com"]
-include = ["snippets/gateway-locations.production.conf"]
+include = ["snippets/gateway-locations.production.conf", "snippets/hsts.production.conf"]
 
 [http.server.tls]
 cert = "offer86.com"
 
 [[http.server]]
-listen = ["443 ssl", "80"]
+listen = ["443 ssl"]
 serverName = ["memory.offer86.cn", "memory-app.offer86.cn", "memory-admin.offer86.cn", "memory-open.offer86.cn"]
-include = ["snippets/gateway-locations.production.conf"]
+include = ["snippets/gateway-locations.production.conf", "snippets/hsts.production.conf"]
 
 [http.server.tls]
 cert = "offer86.cn"
 
 [[http.server]]
-listen = ["443 ssl", "80"]
+listen = ["443 ssl"]
 serverName = ["memory.86offer.com", "memory-app.86offer.com", "memory-admin.86offer.com", "memory-open.86offer.com"]
-include = ["snippets/gateway-locations.production.conf"]
+include = ["snippets/gateway-locations.production.conf", "snippets/hsts.production.conf"]
 
 [http.server.tls]
 cert = "86offer.com"
 
 [[http.server]]
-listen = ["443 ssl", "80"]
+listen = ["443 ssl"]
 serverName = ["memory.86offer.cn", "memory-app.86offer.cn", "memory-admin.86offer.cn", "memory-open.86offer.cn"]
-include = ["snippets/gateway-locations.production.conf"]
+include = ["snippets/gateway-locations.production.conf", "snippets/hsts.production.conf"]
 
 [http.server.tls]
 cert = "86offer.cn"
+
+# Port 80 in production serves exactly one purpose: a permanent redirect to the
+# https URL on the same host and path. $host preserves the original Host header
+# and $request_uri preserves path + query, so every production host redirects to
+# its own https origin. default_server makes this block the catch-all for any
+# unmatched Host on port 80; the wildcard names document the covered zones and
+# must stay in sync with the TLS server blocks above.
+[[http.server]]
+listen = ["80 default_server"]
+serverName = ["*.sdkwork.com", "*.birdcoder.com", "*.dtupay.com", "*.noaper.com", "*.sdkwork.cn", "*.birdcoder.cn", "*.dtupay.cn", "*.noaper.cn", "*.skubc.com", "*.skubc.cn", "*.zowalk.com", "*.zowalk.cn", "*.offer86.com", "*.offer86.cn", "*.86offer.com", "*.86offer.cn"]
+returnStatus = 301
+returnBody = "https://$host$request_uri"
 

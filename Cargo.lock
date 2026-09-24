@@ -2893,6 +2893,7 @@ dependencies = [
  "opentelemetry_sdk",
  "sdkwork-api-memory-assembly",
  "sdkwork-database-sqlx",
+ "sdkwork-memory-contract",
  "sdkwork-utils-rust",
  "sdkwork-web-bootstrap",
  "tokio",

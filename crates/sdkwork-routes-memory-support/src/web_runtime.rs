@@ -23,6 +23,14 @@ where
     R: WebRequestContextResolver + Clone,
 {
     if !memory_is_production_like_environment() {
+        // Loud, never silent: an operator running with an unintended dev
+        // environment must see why authorization hardening, Redis-backed rate
+        // limiting, and request deadlines are absent.
+        tracing::error!(
+            "Memory web runtime is NOT production-like; authorization policy, tenant isolation, \
+             Redis rate limiting, idempotency, admission control, and request deadlines are \
+             disabled. Set SDKWORK_MEMORY_ENVIRONMENT explicitly (development|staging|production)."
+        );
         return layer;
     }
 
@@ -85,6 +93,24 @@ fn memory_web_redis_url() -> Result<String, String> {
         })
 }
 
+/// Single source of truth for the Memory HTTP request body limit.
+///
+/// Each API surface applies this bound as the innermost `DefaultBodyLimit`
+/// layer so it always wins over the framework's own default; operators tune it
+/// through `SDKWORK_MEMORY_MAX_BODY_BYTES` and the resolved value is what the
+/// request path actually enforces.
+pub fn memory_request_body_limit_bytes() -> usize {
+    const DEFAULT: usize = 1024 * 1024;
+    const MIN: usize = 64 * 1024;
+    const MAX: usize = 16 * 1024 * 1024;
+    std::env::var("SDKWORK_MEMORY_MAX_BODY_BYTES")
+        .ok()
+        .and_then(|value| sdkwork_utils_rust::parse_int(&value))
+        .and_then(|value| usize::try_from(value).ok())
+        .map(|value| value.clamp(MIN, MAX))
+        .unwrap_or(DEFAULT)
+}
+
 fn memory_request_timeout_seconds() -> u64 {
     std::env::var("SDKWORK_MEMORY_HTTP_REQUEST_TIMEOUT_SECS")
         .ok()
@@ -100,6 +126,25 @@ struct MemoryIamAuditEmitter;
 #[async_trait]
 impl AuditEmitter for MemoryIamAuditEmitter {
     async fn emit(&self, fact: AuditFact) -> Result<(), WebFrameworkError> {
+        let result = self.record(fact).await;
+        // Audit emission runs in the response `after` phase. Returning an error
+        // would let the framework replace an already-committed business
+        // response with a 5xx, so clients would retry successful writes and
+        // duplicate them. Audit failures are logged for alerting instead; the
+        // IAM audit table remains the durability boundary and readiness keeps
+        // gating on the IAM database.
+        if let Err(error) = &result {
+            tracing::error!(
+                error = %error,
+                "memory IAM audit emission failed after business response; audit trail may be incomplete"
+            );
+        }
+        Ok(())
+    }
+}
+
+impl MemoryIamAuditEmitter {
+    async fn record(&self, fact: AuditFact) -> Result<(), WebFrameworkError> {
         let pool = shared_iam_postgres_pool().await.ok_or_else(|| {
             WebFrameworkError::dependency_unavailable("IAM audit database is unavailable")
         })?;
@@ -132,6 +177,21 @@ struct MemoryIamSecurityEventEmitter;
 #[async_trait]
 impl SecurityEventEmitter for MemoryIamSecurityEventEmitter {
     async fn emit(&self, event: SecurityEvent) -> Result<(), WebFrameworkError> {
+        let result = self.record(event).await;
+        // Same post-response rationale as the audit emitter: a security-event
+        // failure must not overwrite an already-committed response with a 5xx.
+        if let Err(error) = &result {
+            tracing::error!(
+                error = %error,
+                "memory IAM security event emission failed after business response"
+            );
+        }
+        Ok(())
+    }
+}
+
+impl MemoryIamSecurityEventEmitter {
+    async fn record(&self, event: SecurityEvent) -> Result<(), WebFrameworkError> {
         let pool = shared_iam_postgres_pool().await.ok_or_else(|| {
             WebFrameworkError::dependency_unavailable("IAM security event database is unavailable")
         })?;

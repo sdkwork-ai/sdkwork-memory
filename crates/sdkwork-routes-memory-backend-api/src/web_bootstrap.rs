@@ -58,6 +58,11 @@ where
         with_problem_correlation(router),
         build_memory_backend_api_framework_layer(resolver),
     )
+    // Innermost body limit: this wins over the framework's own default and is
+    // the single enforced bound (`SDKWORK_MEMORY_MAX_BODY_BYTES`).
+    .layer(axum::extract::DefaultBodyLimit::max(
+        sdkwork_routes_memory_support::memory_request_body_limit_bytes(),
+    ))
 }
 
 pub fn wrap_router_with_iam_database_web_framework<S>(
@@ -71,6 +76,11 @@ where
         with_problem_correlation(router),
         build_memory_backend_api_framework_layer(resolver),
     )
+    // Innermost body limit: this wins over the framework's own default and is
+    // the single enforced bound (`SDKWORK_MEMORY_MAX_BODY_BYTES`).
+    .layer(axum::extract::DefaultBodyLimit::max(
+        sdkwork_routes_memory_support::memory_request_body_limit_bytes(),
+    ))
 }
 
 fn build_memory_backend_api_framework_layer<R>(resolver: R) -> WebFrameworkLayer<R>

@@ -8,7 +8,7 @@ import { memoryModule as adminOverviewModule } from "@sdkwork/memory-pc-admin-ov
 import { memoryModule as adminProvidersModule } from "@sdkwork/memory-pc-admin-providers";
 import { memoryModule as adminRetrievalModule } from "@sdkwork/memory-pc-admin-retrieval";
 import { MemoryAdminShell } from "@sdkwork/memory-pc-admin-shell";
-import { MemoryI18nProvider, type MemoryPcModuleDefinition, type MemoryResourceRegistry } from "@sdkwork/memory-pc-commons";
+import { MemoryI18nProvider, type MemoryLocale, type MemoryPcModuleDefinition, type MemoryResourceRegistry } from "@sdkwork/memory-pc-commons";
 import { memoryModule as consoleGovernanceModule } from "@sdkwork/memory-pc-console-governance";
 import { memoryModule as consoleKnowledgeModule } from "@sdkwork/memory-pc-console-knowledge";
 import { memoryModule as consoleLearningModule } from "@sdkwork/memory-pc-console-learning";
@@ -39,7 +39,7 @@ const fixtureDataSource = {
 const fixtureRegistry = new Proxy({}, { get: () => fixtureDataSource }) as MemoryResourceRegistry;
 
 function VisualFixture() {
-  const [locale, setLocale] = useState<"en-US" | "zh-CN">("zh-CN");
+  const [locale, setLocale] = useState<MemoryLocale>("zh-CN");
   const admin = new URLSearchParams(window.location.search).get("surface") === "admin";
   const modules = admin ? adminModules : consoleModules;
   return (

@@ -23,6 +23,7 @@ path = "src/main.rs"
 [dependencies]
 sdkwork-api-memory-assembly.workspace = true
 sdkwork-database-sqlx.workspace = true
+sdkwork-memory-contract.workspace = true
 axum.workspace = true
 tokio.workspace = true
 tracing.workspace = true

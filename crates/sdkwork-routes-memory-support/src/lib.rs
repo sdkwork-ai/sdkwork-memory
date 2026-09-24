@@ -20,6 +20,7 @@ pub use correlation::{with_problem_correlation, MemoryProblemCorrelation};
 pub use metrics::{
     memory_http_metrics, memory_metric_environment_label, refresh_memory_http_metric_dimensions,
 };
+pub use web_runtime::memory_request_body_limit_bytes;
 pub use principal::{parse_principal_optional_u64, parse_principal_u64};
 pub use problem::{MemoryApiError, MemoryApiProblem, MemoryApiResult};
 pub use query::{MemoryQuery, INVALID_QUERY_DETAIL};

@@ -17,7 +17,14 @@ fn exit_with_error(context: &str, message: impl std::fmt::Display) -> ! {
 async fn main() {
     init_tracing();
 
-    // SDKWork Process-Shared Database Pool Standard section 4: the process entrypoint enables
+    // A Memory server process must declare which environment it serves. The
+    // resolver otherwise falls back to `development`, which silently disables
+    // authorization hardening, tenant isolation policy, Redis-backed rate
+    // limiting, and request deadlines (see
+    // `require_explicit_memory_environment` for the incident this closes).
+    if let Err(error) = sdkwork_memory_contract::require_explicit_memory_environment() {
+        exit_with_error("environment", error);
+    }    // SDKWork Process-Shared Database Pool Standard section 4: the process entrypoint enables
     // strict process-local pool reuse before the first pool creation, so every module embedded in
     // this process (Memory repositories, the database host lifecycle, and the Drive compatibility
     // adapter) reuses one process pool for one normalized database identity instead of opening a

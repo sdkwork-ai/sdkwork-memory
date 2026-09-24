@@ -10,7 +10,7 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{DefaultBodyLimit, Extension},
+    extract::Extension,
     http::StatusCode,
     response::IntoResponse,
     routing::get,
@@ -67,8 +67,6 @@ fn memory_route_manifest() -> HttpRouteManifest {
     HttpRouteManifest::from_owned_routes(routes)
 }
 
-/// Default maximum request body size: 1 MiB.
-const DEFAULT_MAX_BODY_BYTES: usize = 1024 * 1024;
 /// Default maximum concurrent in-flight requests.
 const DEFAULT_MAX_CONCURRENCY: usize = 256;
 
@@ -100,10 +98,13 @@ pub async fn assemble_api_router(
     let app_router = wrap_app_router(app_business_router).await;
     let backend_router = wrap_backend_router(backend_business_router).await;
 
-    let max_body_bytes =
-        platform::read_env_usize("SDKWORK_MEMORY_MAX_BODY_BYTES", DEFAULT_MAX_BODY_BYTES);
-    let max_concurrency =
-        platform::read_env_usize("SDKWORK_MEMORY_MAX_CONCURRENCY", DEFAULT_MAX_CONCURRENCY);
+    // A zero permit count would park every in-flight request forever while
+    // readiness still reports healthy, so the ceiling is bounded below by 1.
+    let max_concurrency = platform::read_env_usize(
+        "SDKWORK_MEMORY_MAX_CONCURRENCY",
+        DEFAULT_MAX_CONCURRENCY,
+    )
+    .clamp(1, 4096);
 
     let router = Router::new()
         .route("/metrics", get(metrics))
@@ -120,8 +121,15 @@ pub async fn assemble_api_router(
         .merge(app_router)
         .merge(backend_router)
         .layer(Extension(product))
-        .layer(DefaultBodyLimit::max(max_body_bytes))
         .layer(ConcurrencyLimitLayer::new(max_concurrency));
+
+    // The request body limit is deliberately NOT layered here. Each surface
+    // applies `memory_request_body_limit_bytes()` as the innermost
+    // DefaultBodyLimit after its framework layer, which is the only position
+    // that wins over the framework's own 16 MiB default — an outer layer here
+    // was silently overridden. Single enforcement point:
+    // `SDKWORK_MEMORY_MAX_BODY_BYTES` read in sdkwork-routes-memory-support.
+    let max_body_bytes = sdkwork_routes_memory_support::memory_request_body_limit_bytes();
 
     info!(
         max_body_bytes,
