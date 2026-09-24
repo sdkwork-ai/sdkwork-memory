@@ -258,11 +258,30 @@ async fn assemble_contribution_with_product_from_env(
     // Without SDKWORK_MEMORY_OPENAI_API_KEY the deployment stays purely
     // lexical, exactly as before.
     if let Some(config) = sdkwork_memory_provider_openai::OpenAiProviderConfig::from_env() {
-        let embedder = sdkwork_memory_provider_openai::OpenAiEmbeddings::new(config.clone());
+        // The provider receives the same SSRF-hardened outbound client the
+        // outbox uses: resolved addresses validated, non-public/mixed DNS
+        // rejected, validated addresses pinned, redirects disabled. This is
+        // what makes the architecture document's outbound-egress claim true
+        // for provider traffic, not only for outbox delivery.
+        let pinned_config = match sdkwork_intelligence_memory_service::endpoint_validation::build_pinned_http_client(
+            &config.base_url,
+            std::time::Duration::from_secs(config.timeout_secs),
+            16,
+        )
+        .await
+        {
+            Ok((_, client)) => config.clone().with_http_client(client),
+            Err(error) => {
+                return Err(format!(
+                    "provider endpoint failed outbound-egress validation: {error}"
+                ));
+            }
+        };
+        let embedder = sdkwork_memory_provider_openai::OpenAiEmbeddings::new(pinned_config.clone());
         product = product.with_embedder(Arc::new(embedder));
-        let llm = sdkwork_memory_provider_openai::OpenAiLlm::new(config);
+        let llm = sdkwork_memory_provider_openai::OpenAiLlm::new(pinned_config);
         product = product.with_llm(Arc::new(llm));
-        info!("embedding + chat providers bound (openai-compatible)");
+        info!("embedding + chat providers bound (openai-compatible, pinned egress client)");
     }
     product
         .ready_check()

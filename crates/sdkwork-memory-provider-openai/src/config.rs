@@ -22,7 +22,7 @@ const DEFAULT_CHAT_MODEL: &str = "gpt-4o-mini";
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
 /// Connection settings for an OpenAI-compatible endpoint.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct OpenAiProviderConfig {
     /// Root of the REST API, without a trailing slash
     /// (e.g. `https://api.openai.com/v1`).
@@ -35,6 +35,9 @@ pub struct OpenAiProviderConfig {
     /// Chat model used for completions.
     pub chat_model: String,
     pub timeout_secs: u64,
+    /// Host-injected HTTP client (SSRF-hardened). `None` builds one from the
+    /// timeout configuration.
+    http_client_override: Option<reqwest::Client>,
 }
 
 impl OpenAiProviderConfig {
@@ -48,6 +51,7 @@ impl OpenAiProviderConfig {
             return None;
         }
         Some(Self {
+            http_client_override: None,
             base_url: std::env::var(ENV_BASE_URL)
                 .ok()
                 .map(|value| value.trim_end_matches('/').to_string())
@@ -74,11 +78,35 @@ impl OpenAiProviderConfig {
     }
 
     /// Build an HTTP client honoring the configured timeout.
+    ///
+    /// Outbound provider traffic follows the same egress rules as every other
+    /// Memory outbound client: redirects are disabled (a redirect must never
+    /// carry the `Authorization` bearer token to a different origin), and the
+    /// configured timeout bounds the whole call. DNS pinning for this client
+    /// is applied by the service layer through [`Self::with_http_client`],
+    /// which injects the shared pinned client built by
+    /// `endpoint_validation::build_pinned_http_client`.
     pub fn http_client(&self) -> reqwest::Client {
         reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
             .timeout(std::time::Duration::from_secs(self.timeout_secs))
             .build()
             .unwrap_or_default()
+    }
+
+    /// Override the HTTP client this provider uses (dependency injection for
+    /// hosts that build the SSRF-hardened, DNS-pinned client).
+    pub fn with_http_client(mut self, http_client: reqwest::Client) -> Self {
+        self.http_client_override = Some(http_client);
+        self
+    }
+
+    /// The HTTP client to use: the injected override when the host provided
+    /// one, otherwise a client built from this configuration.
+    pub fn resolve_http_client(&self) -> reqwest::Client {
+        self.http_client_override
+            .clone()
+            .unwrap_or_else(|| self.http_client())
     }
 }
 

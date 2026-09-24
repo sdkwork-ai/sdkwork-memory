@@ -10,8 +10,19 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: sdkwork-api-memory-standalone-gateway
+  # min 2 mirrors deployment.yaml spec.replicas (one pod per zone spread).
   minReplicas: 2
-  maxReplicas: 6
+  # Database connection budget ceiling. Every gateway pod declares
+  # SDKWORK_DATABASE_MAX_CONNECTIONS=32 (see deployment.yaml), so the service
+  # reserves `replicas x 32` PostgreSQL connections. Before raising
+  # maxReplicas, PostgreSQL max_connections MUST be raised to satisfy
+  #   replicas x SDKWORK_DATABASE_MAX_CONNECTIONS + admin/operator reserve
+  #   <= PostgreSQL max_connections
+  # At max 2 replicas the service reserves 64 (+reserve) against the cluster's
+  # PostgreSQL max_connections. Scaling beyond 2 without headroom on
+  # max_connections exhausts the server's connection slots and fails pod
+  # readiness cluster-wide; expand PostgreSQL first, then this ceiling.
+  maxReplicas: 2
   metrics:
     - type: Resource
       resource:

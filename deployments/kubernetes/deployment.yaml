@@ -95,9 +95,13 @@ spec:
             # multiplier, and module-prefixed forms (SDKWORK_MEMORY_DATABASE_*,
             # SDKWORK_MEMORY_DB_*) are retired migration inputs that runtime
             # startup MUST NOT read. Capacity planning must satisfy
-            #   sum(process pool maxima) + admin reserve + operator reserve
-            #   <= PostgreSQL max_connections
-            # With replicas: 2 this pod declares 32, so the service reserves 64.
+            #   replicas x SDKWORK_DATABASE_MAX_CONNECTIONS
+            #     + admin reserve + operator reserve
+            #     <= PostgreSQL max_connections
+            # With replicas: 2 this pod declares 32, so the service reserves 64
+            # (+reserve). The HPA (hpa.yaml) is capped at maxReplicas: 2 to
+            # keep this bound; scale PostgreSQL max_connections FIRST when
+            # raising either this value or the HPA ceiling.
             - name: SDKWORK_DATABASE_MAX_CONNECTIONS
               value: "32"
             # Fail pool acquisition well inside SDKWORK_MEMORY_HTTP_REQUEST_TIMEOUT_SECS

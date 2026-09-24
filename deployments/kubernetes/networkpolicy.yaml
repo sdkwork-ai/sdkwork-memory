@@ -1,0 +1,95 @@
+# Default-deny network policy for the Memory standalone gateway.
+#
+# Pod labels match deployments/kubernetes/deployment.yaml exactly:
+#   app.kubernetes.io/name: sdkwork-memory
+#   app.kubernetes.io/component: standalone-gateway
+#
+# Ingress: only the ingress-nginx controller may reach the gateway on 8080
+# (deployment.yaml exposes containerPort 8080; service.yaml fronted by
+# ingress.yaml with ingressClassName: nginx).
+#
+# Egress (minimum required by the env declared in deployment.yaml):
+#   - DNS (53/TCP+UDP) to kube-dns — service discovery for every dependency
+#   - PostgreSQL 5432 — SDKWORK_DATABASE_URL secret points at
+#     postgres.database.svc (namespace `database`)
+#   - Redis 6379 — SDKWORK_MEMORY_WEB_REDIS_URL secret; the default below
+#     assumes namespace `redis` — adjust namespaceSelector to your cluster
+#   - OTLP 4318 — pairs with OTEL_EXPORTER_OTLP_ENDPOINT
+#     (otel-collector.observability:4318); remove with the env if tracing is off
+#
+# NOT allowed by this policy (add explicit egress rules when enabled):
+#   - SDKWORK_MEMORY_OUTBOX_DELIVERY_URL (mode=http) — arbitrary external HTTP
+#   - Drive S3 export endpoints (sdkwork-memory-drive secret)
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sdkwork-api-memory-standalone-gateway
+  labels:
+    app.kubernetes.io/name: sdkwork-memory
+    app.kubernetes.io/component: standalone-gateway
+    app.kubernetes.io/part-of: sdkwork-memory
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: sdkwork-memory
+      app.kubernetes.io/component: standalone-gateway
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # ingress-nginx controller pods only; the controller proxies into the
+    # gateway Service (port 80) which targets containerPort 8080.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - port: 8080
+          protocol: TCP
+  egress:
+    # Cluster DNS (kube-dns in kube-system). Required to resolve every
+    # dependency below; without it the policies below cannot be reached by name.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Unified workspace PostgreSQL (SDKWORK_DATABASE_URL -> postgres.database.svc).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: database
+      ports:
+        - port: 5432
+          protocol: TCP
+    # Redis backing store for distributed rate limiting and idempotency
+    # (SDKWORK_MEMORY_WEB_REDIS_URL). Adjust the namespace label to your
+    # cluster's Redis namespace if it is not `redis`.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: redis
+      ports:
+        - port: 6379
+          protocol: TCP
+    # OTLP/HTTP span export (OTEL_EXPORTER_OTLP_ENDPOINT ->
+    # otel-collector.observability:4318). Keep in sync with the endpoint value;
+    # remove both when the cluster has no collector.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - port: 4318
+          protocol: TCP

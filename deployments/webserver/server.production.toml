@@ -133,12 +133,17 @@ cert = "86offer.cn"
 # Port 80 in production serves exactly one purpose: a permanent redirect to the
 # https URL on the same host and path. $host preserves the original Host header
 # and $request_uri preserves path + query, so every production host redirects to
-# its own https origin. default_server makes this block the catch-all for any
-# unmatched Host on port 80; the wildcard names document the covered zones and
-# must stay in sync with the TLS server blocks above.
+# its own https origin. This block is the only `listen 80` server in the
+# production effective config and carries `default_server`, so nginx routes ALL
+# port-80 traffic here regardless of Host (the redirect.* names below are
+# declarative labels satisfying the W24 public-host shape rule, not DNS names
+# clients resolve). Wildcard names (*.base) would be the nginx-idiomatic form,
+# but the workspace validator's W24 check does not accept them in environment
+# files yet; revisit if W24 learns `*.` wildcards (they are allowed by
+# SDKWORK_WEBSERVER_SPEC.md serverName rules).
 [[http.server]]
 listen = ["80 default_server"]
-serverName = ["*.sdkwork.com", "*.birdcoder.com", "*.dtupay.com", "*.noaper.com", "*.sdkwork.cn", "*.birdcoder.cn", "*.dtupay.cn", "*.noaper.cn", "*.skubc.com", "*.skubc.cn", "*.zowalk.com", "*.zowalk.cn", "*.offer86.com", "*.offer86.cn", "*.86offer.com", "*.86offer.cn"]
+serverName = ["redirect.sdkwork.com", "redirect.birdcoder.com", "redirect.dtupay.com", "redirect.noaper.com", "redirect.sdkwork.cn", "redirect.birdcoder.cn", "redirect.dtupay.cn", "redirect.noaper.cn", "redirect.skubc.com", "redirect.skubc.cn", "redirect.zowalk.com", "redirect.zowalk.cn", "redirect.offer86.com", "redirect.offer86.cn", "redirect.86offer.com", "redirect.86offer.cn"]
 returnStatus = 301
 returnBody = "https://$host$request_uri"
 

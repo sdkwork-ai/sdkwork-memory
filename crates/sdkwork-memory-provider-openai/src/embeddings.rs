@@ -13,7 +13,7 @@ pub struct OpenAiEmbeddings {
 
 impl OpenAiEmbeddings {
     pub fn new(config: OpenAiProviderConfig) -> Self {
-        let http = config.http_client();
+        let http = config.resolve_http_client();
         Self { http, config }
     }
 

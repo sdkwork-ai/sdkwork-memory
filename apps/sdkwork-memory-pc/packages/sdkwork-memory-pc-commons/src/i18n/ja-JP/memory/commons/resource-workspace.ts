@@ -20,7 +20,7 @@ export const messages = {
   "memory.commons.error": "リソースを読み込めませんでした。",
   "memory.commons.permissionDenied": "現在のアプリケーションコンテキストにはこの権限が含まれていません。",
   "memory.commons.details": "レコード詳細",
-  "memory.commons.detailLoading": " authoritative レコードを読み込み中",
+  "memory.commons.detailLoading": "正式レコードを読み込み中",
   "memory.commons.filterAny": "すべて",
   "memory.commons.close": "閉じる",
   "memory.commons.locale": "言語",

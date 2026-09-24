@@ -48,13 +48,17 @@ export const MEMORY_COMMONS_CATALOGS: Readonly<Record<MemoryLocale, MemoryMessag
   "zh-CN": zhCNCommons,
 };
 
-interface MemoryI18nContextValue {
+export interface MemoryI18nContextValue {
   locale: MemoryLocale;
   setLocale(locale: MemoryLocale): void;
   translate(key: string): string;
 }
 
-const MemoryI18nContext = createContext<MemoryI18nContextValue | null>(null);
+/**
+ * Exported so class components that must render above or below the provider
+ * (the error boundary) can consume translations through `contextType`.
+ */
+export const MemoryI18nContext = createContext<MemoryI18nContextValue | null>(null);
 
 export interface MemoryI18nProviderProps {
   children: ReactNode;
