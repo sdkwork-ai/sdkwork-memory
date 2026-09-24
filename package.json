@@ -23,6 +23,7 @@
     "check:crate-inventory-standard": "node tools/check-crate-inventory-standard.mjs",
     "check:release-readiness": "node tools/check_sdkwork_memory_release_readiness.mjs",
     "check:pnpm-script-standard": "node ../sdkwork-specs/tools/check-pnpm-script-standard.mjs --root . --product-prefix memory,mem",
+    "check:dependency-pins": "node tools/check-dependency-pins.mjs",
     "check:agent-workflow-standard": "node ../sdkwork-specs/tools/check-agent-workflow-standard.mjs --root .",
     "check:repository-docs": "node ../sdkwork-specs/tools/check-repository-docs-standard.mjs --root .",
     "verify": "pnpm exec sdkwork-app verify",

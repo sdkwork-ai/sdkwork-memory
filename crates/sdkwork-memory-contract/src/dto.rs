@@ -325,6 +325,10 @@ pub struct DeleteAllMemoriesRequest {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteAllMemoriesResult {
+    #[serde(
+        serialize_with = "serialize_u64_as_string",
+        deserialize_with = "deserialize_u64_from_string_or_number"
+    )]
     pub deleted_count: u64,
     pub deleted_memory_ids: Vec<String>,
 }

@@ -153,6 +153,7 @@ mod tests {
             embedding_dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
             chat_model: DEFAULT_CHAT_MODEL.to_string(),
             timeout_secs: DEFAULT_TIMEOUT_SECS,
+            http_client_override: None,
         };
         let debug = format!("{config:?}");
         assert!(!debug.contains("sk-super-secret"));

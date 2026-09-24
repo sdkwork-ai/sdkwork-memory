@@ -13620,8 +13620,9 @@
         ],
         "properties": {
           "deletedCount": {
-            "type": "integer",
-            "format": "int64"
+            "type": "string",
+            "format": "int64",
+            "x-sdkwork-int64-string": true
           },
           "deletedMemoryIds": {
             "type": "array",

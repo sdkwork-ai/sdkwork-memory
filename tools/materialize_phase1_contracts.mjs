@@ -515,7 +515,9 @@ function writeAppManifest() {
       ownerMode: "tenant",
       grantMode: "current",
       platform: "API",
-      appId: null,
+      // IAM bootstrap access token generation resolves the application
+      // identity from this field; it must match app.key.
+      appId: "sdkwork-memory",
       tenantId: "100001",
       organizationId: "0"
     },
@@ -2294,7 +2296,11 @@ function baseSchemas() {
       type: "object",
       required: ["deletedCount", "deletedMemoryIds"],
       properties: {
-        deletedCount: { type: "integer", format: "int64" },
+        deletedCount: {
+          type: "string",
+          format: "int64",
+          "x-sdkwork-int64-string": true
+        },
         deletedMemoryIds: { type: "array", items: { type: "string" } }
       }
     },
@@ -3209,6 +3215,7 @@ function writeOpenApi() {
     auditEvent: "memory.open.record.deleted",
     requestSchema: "DeleteAllMemoriesRequest",
     responseSchema: "DeleteAllMemoriesResult",
+    status: "200",
     idempotent: true
   }));
 
@@ -3344,7 +3351,7 @@ function writeAppOpenApi() {
   addPath(paths, `${P}/memories/{memoryId}`, "get", operation({ method: "get", authority, operationId: "memories.retrieve", permission: "memory.records.read", auditEvent: "memory.record.read", pathParams: [pathParam("memoryId")], queryParams: [requiredSpaceIdQueryParam()], responseSchema: "MemoryRecord" }));
   addPath(paths, `${P}/memories/{memoryId}`, "patch", operation({ method: "patch", authority, operationId: "memories.update", permission: "memory.records.write", auditEvent: "memory.record.updated", pathParams: [pathParam("memoryId")], queryParams: [requiredSpaceIdQueryParam()], requestSchema: "MemoryRecordRequest", responseSchema: "MemoryRecord" }));
   addPath(paths, `${P}/memories/{memoryId}`, "delete", operation({ method: "delete", authority, operationId: "memories.delete", permission: "memory.records.write", auditEvent: "memory.record.deleted", pathParams: [pathParam("memoryId")], queryParams: [requiredSpaceIdQueryParam()], responseSchema: "MemoryRecord", status: "204" }));
-addPath(paths, `${P}/memories/delete_all`, "post", operation({ method: "post", authority, operationId: "memories.deleteAll", permission: "memory.records.write", auditEvent: "memory.record.deleted", requestSchema: "DeleteAllMemoriesRequest", responseSchema: "DeleteAllMemoriesResult", idempotent: true }));
+addPath(paths, `${P}/memories/delete_all`, "post", operation({ method: "post", authority, operationId: "memories.deleteAll", permission: "memory.records.write", auditEvent: "memory.record.deleted", requestSchema: "DeleteAllMemoriesRequest", responseSchema: "DeleteAllMemoriesResult", status: "200", idempotent: true }));
   addPath(paths, `${P}/memories/{memoryId}/sources`, "get", operation({ method: "get", authority, operationId: "memories.sources.list", permission: "memory.records.read", auditEvent: "memory.record.sources.list", pathParams: [pathParam("memoryId")], queryParams: listParams(), responseSchema: "MemoryRecordSourceList" }));
 
   addPath(paths, `${P}/forget_requests`, "get", operation({ method: "get", authority, operationId: "forgetRequests.list", permission: "memory.forget.read", auditEvent: "memory.forget.list", queryParams: cursorListParams(), responseSchema: "MemoryForgetJobList" }));
