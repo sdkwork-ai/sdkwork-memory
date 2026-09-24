@@ -23,7 +23,16 @@ describe("Memory resource contracts", () => {
     const client = { memory: { spaces: { list } } } as unknown as MemoryConsoleSdkClient;
     const source = createMemoryConsoleResourceRegistry(client).spaces;
     await source?.load({ q: "preference", cursor: "opaque", pageSize: 50 });
-    expect(list).toHaveBeenCalledWith({ q: "preference", cursor: "opaque", pageSize: 50 });
+    expect(list).toHaveBeenCalledWith({ q: "preference", cursor: "opaque", pageSize: 50 }, { signal: undefined });
+  });
+
+  it("forwards the abort signal from the console registry to the generated app SDK", async () => {
+    const list = vi.fn().mockResolvedValue({ items: [], pageInfo: { mode: "cursor" } });
+    const client = { memory: { list } } as unknown as MemoryConsoleSdkClient;
+    const controller = new AbortController();
+    const source = createMemoryConsoleResourceRegistry(client).memories;
+    await source?.load({ pageSize: 20, spaceId: "space-1" }, controller.signal);
+    expect(list).toHaveBeenCalledWith({ pageSize: 20, spaceId: "space-1" }, { signal: controller.signal });
   });
 
   it("rejects a missing required memory space without calling the App SDK", async () => {
@@ -39,7 +48,16 @@ describe("Memory resource contracts", () => {
     const client = { memory: { auditLogs: { list } } } as unknown as MemoryAdminSdkClient;
     const source = createMemoryAdminResourceRegistry(client).auditLogs;
     await source?.load({ q: "policy", cursor: "opaque", pageSize: 20 });
-    expect(list).toHaveBeenCalledWith({ q: "policy", cursor: "opaque", pageSize: 20 });
+    expect(list).toHaveBeenCalledWith({ q: "policy", cursor: "opaque", pageSize: 20 }, { signal: undefined });
+  });
+
+  it("forwards the abort signal from the admin registry to the generated backend SDK", async () => {
+    const list = vi.fn().mockResolvedValue({ items: [], pageInfo: { mode: "cursor" } });
+    const client = { memory: { auditLogs: { list } } } as unknown as MemoryAdminSdkClient;
+    const controller = new AbortController();
+    const source = createMemoryAdminResourceRegistry(client).auditLogs;
+    await source?.load({ q: "policy", pageSize: 20 }, controller.signal);
+    expect(list).toHaveBeenCalledWith({ q: "policy", pageSize: 20 }, { signal: controller.signal });
   });
 
   it("exposes guarded Console mutations through the App SDK registry", async () => {

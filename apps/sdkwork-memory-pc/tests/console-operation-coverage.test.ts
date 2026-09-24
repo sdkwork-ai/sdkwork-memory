@@ -69,6 +69,8 @@ const CONSOLE_OPERATION_COVERAGE: Readonly<Record<string, readonly string[]>> = 
 const CONSOLE_EXCLUDED_OPERATIONS: Readonly<Record<string, string>> = {
   "events.retrieve":
     "app-api exposes no event collection, so the console cannot obtain an event id to retrieve; ingestion is exposed as the events.create command.",
+  "memories.deleteAll":
+    "Bulk memory purge is a destructive tenant-wide operation without a row selection; the user console deliberately offers per-memory delete (memories.delete) instead, so delete_all stays out of the user surface.",
   "retrievals.retrieve":
     "Retrievals are commands: retrievals.create already returns the full result, and app-api exposes no retrieval collection to browse.",
   "contextPacks.retrieve":

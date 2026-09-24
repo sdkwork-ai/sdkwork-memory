@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { uuid } from "@sdkwork/utils/id";
 
 import { useMemoryI18n } from "../i18n/runtime.tsx";
-import type { MemoryListQuery, MemoryPageResult, MemoryPcModuleDefinition, MemoryPcResourceKey, MemoryResourceAction, MemoryResourceFilterDefinition, MemoryResourceRegistry } from "../types.ts";
+import type { MemoryListQuery, MemoryPageResult, MemoryPcModuleDefinition, MemoryPcResourceKey, MemoryResourceAction, MemoryResourceFilterDefinition, MemoryResourceRegistry, MemorySpaceOption } from "../types.ts";
 
 const DEFAULT_PAGE: MemoryPageResult = { items: [], pageInfo: { mode: "cursor", hasMore: false } };
 const EMPTY_FILTERS: readonly MemoryResourceFilterDefinition[] = [];
@@ -17,7 +17,11 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
   const { locale, translate } = useMemoryI18n();
   const [resource, setResource] = useState<MemoryPcResourceKey>(module.resources[0] ?? "spaces");
   const [q, setQ] = useState("");
+  // The server-backed list effect consumes the debounced value so typing does not
+  // fire one request per keystroke (FRONTEND_CODE_SPEC §6: debounce network inputs).
+  const debouncedQuery = useDebouncedValue(q.trim(), 300);
   const [spaceId, setSpaceId] = useState("");
+  const [spaceOptions, setSpaceOptions] = useState<readonly MemorySpaceOption[]>([]);
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const [cursor, setCursor] = useState<string>();
   const [cursorHistory, setCursorHistory] = useState<string[]>([]);
@@ -38,6 +42,11 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
   const [actionRunning, setActionRunning] = useState(false);
   const [actionError, setActionError] = useState<string>();
   const dataSource = registry[resource];
+  /** Registry resource that enumerates selectable spaces, when the active source declares one. */
+  const spaceOptionsSource = dataSource?.spaceOptionsSource;
+  // The dropdown replaces the input only while it can represent the current value: a
+  // hand-typed id that is not among the listed spaces falls back to the manual input.
+  const spaceSelectorAvailable = spaceOptions.length > 0 && (spaceId.trim() === "" || spaceOptions.some((option) => option.spaceId === spaceId.trim()));
   /**
    * The record shown in the detail drawer: the authoritative detail payload once the
    * owning API has answered, otherwise the list projection that opened the drawer.
@@ -116,7 +125,7 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
     const controller = new AbortController();
     const query: MemoryListQuery = {
       pageSize,
-      ...(q.trim() ? { q: q.trim() } : {}),
+      ...(debouncedQuery ? { q: debouncedQuery } : {}),
       ...(spaceId.trim() ? { spaceId: spaceId.trim() } : {}),
       ...(cursor ? { cursor } : {}),
       ...(activeFilterValues ? { filterValues: activeFilterValues } : {}),
@@ -131,7 +140,26 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
       if (!controller.signal.aborted) setLoading(false);
     });
     return () => controller.abort();
-  }, [activeFilterValues, cursor, dataSource, pageSize, q, refreshVersion, spaceId]);
+  }, [activeFilterValues, cursor, dataSource, debouncedQuery, pageSize, refreshVersion, spaceId]);
+
+  // Space options come from the registry's own spaces data source, so the scope
+  // selector lists real spaces instead of relying on a hand-typed id. They are an
+  // aid, not a requirement: on failure the manual input stays as the fallback.
+  useEffect(() => {
+    const source = spaceOptionsSource ? registry[spaceOptionsSource] : undefined;
+    if (!spaceOptionsSource || !source) {
+      setSpaceOptions([]);
+      return;
+    }
+    const controller = new AbortController();
+    void source.load({ pageSize: 100 }, controller.signal).then((result) => {
+      if (controller.signal.aborted) return;
+      setSpaceOptions(result.items.map(readSpaceOption).filter((option): option is MemorySpaceOption => option !== null));
+    }).catch(() => {
+      if (!controller.signal.aborted) setSpaceOptions([]);
+    });
+    return () => controller.abort();
+  }, [refreshVersion, registry, spaceOptionsSource]);
 
   // The drawer opens on the list projection immediately and is then replaced by the
   // authoritative single-record payload. Resources without a detail operation keep
@@ -169,11 +197,13 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
   }
 
   function openPreviousPage(): void {
-    setCursorHistory((history) => {
-      const previous = history.at(-1);
-      setCursor(previous || undefined);
-      return history.slice(0, -1);
-    });
+    if (cursorHistory.length === 0) return;
+    // Computed from the current render's state before both setters: calling
+    // setCursor inside the setCursorHistory updater would be a side effect in a
+    // state updater, which React expects to stay pure.
+    const previous = cursorHistory.at(-1);
+    setCursor(previous || undefined);
+    setCursorHistory((history) => history.slice(0, -1));
   }
 
   function openDetail(item: Record<string, unknown>): void {
@@ -288,7 +318,14 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
         </label>
         <label className="field-control scope-field">
           <span>{translate("memory.commons.spaceId")}</span>
-          <input value={spaceId} onChange={(event) => setSpaceId(event.target.value)} placeholder={translate("memory.commons.spaceIdPlaceholder")} />
+          {spaceSelectorAvailable ? (
+            <select value={spaceId} onChange={(event) => setSpaceId(event.target.value)}>
+              <option value="">{translate("memory.commons.spaceSelectPrompt")}</option>
+              {spaceOptions.map((option) => <option key={option.spaceId} value={option.spaceId}>{option.displayName}</option>)}
+            </select>
+          ) : (
+            <input value={spaceId} onChange={(event) => setSpaceId(event.target.value)} placeholder={translate("memory.commons.spaceIdPlaceholder")} />
+          )}
         </label>
         {declaredFilters.map((filter) => (
           <label className="field-control filter-field" key={filter.param}>
@@ -342,7 +379,7 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
       </div>
 
       <footer className="pagination-bar">
-        <span>{page.pageInfo.totalItems ?? `${page.items.length}`}</span>
+        <span>{page.pageInfo.totalItems ?? translate("memory.commons.pageRowsLabel").replace("{n}", String(page.items.length))}</span>
         <div>
           <button className="icon-button" type="button" disabled={cursorHistory.length === 0} title={translate("memory.commons.previous")} aria-label={translate("memory.commons.previous")} onClick={openPreviousPage}><ChevronLeft size={17} /></button>
           <button className="icon-button" type="button" disabled={!nextCursor} title={translate("memory.commons.next")} aria-label={translate("memory.commons.next")} onClick={openNextPage}><ChevronRight size={17} /></button>
@@ -379,6 +416,31 @@ export function MemoryModulePage({ module, registry }: MemoryModulePageProps) {
 
 function StatusState({ icon, message, tone = "neutral" }: { icon: React.ReactNode; message: string; tone?: "danger" | "neutral" }) {
   return <div className={`status-state ${tone}`}>{icon}<p>{message}</p></div>;
+}
+
+/**
+ * Mirrors `value` into state only after typing has settled for `delayMs`.
+ *
+ * Search inputs hit the server through the list effect, so the effect must observe
+ * the debounced value instead of every keystroke. The pending timer is cleared on
+ * every change (and unmount), so only the settled value survives.
+ */
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [delayMs, value]);
+  return debounced;
+}
+
+/** Projects a spaces list row into a selectable option, or null when it has no id. */
+function readSpaceOption(item: Record<string, unknown>): MemorySpaceOption | null {
+  const value = item.spaceId ?? item.id;
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const candidate = item.displayName ?? item.name;
+  const displayName = typeof candidate === "string" && candidate.trim() ? candidate : String(value);
+  return { spaceId: String(value), displayName };
 }
 
 function ActionField({ label, onChange, template, value }: { label: string; onChange(value: unknown): void; template: unknown; value: unknown }) {
