@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Immutable dependency pins for release builds. Each entry is the exact sibling-repository commit SHA this release commit was built and verified against. Release workflows resolve every dependency ref from this file; workflow_dispatch inputs may override an entry only with another full commit SHA. Update an entry by committing the new pin, never by pointing it at a moving ref.",
+  "SDKWORK_APPBASE_REF": "09df5dad84acc16f2801fd6be7a91e376644e3d9",
+  "SDKWORK_WEB_FRAMEWORK_REF": "50686917cba5e441c383af69abe162a01f6a8d63",
+  "SDKWORK_DATABASE_REF": "f745fffaa5c6b0742f5946840d4a7f699b4a7104",
+  "SDKWORK_ID_REF": "7fce2a47106622414e19ab93fce583355aa1e228",
+  "SDKWORK_UTILS_REF": "f519afcc4acfea3398f594b5b9dddab18b0b9634",
+  "SDKWORK_SDK_GENERATOR_REF": "2bfe9d829f1dc1480014c3483fd2cd206d2cb317",
+  "SDKWORK_APP_TOPOLOGY_REF": "429c7e85e1fefbe0fc5f935736c9773717d36054",
+  "SDKWORK_DRIVE_REF": "fb432dfe8f202b1b07b7ab25eb096728a242f18b",
+  "SDKWORK_CORE_REF": "1ab015c664af2fdbeec9588da296f41869ba196a",
+  "SDKWORK_IAM_REF": "37a0860bfa56e43956b63f1b353f29393f4c208c",
+  "SDKWORK_SDK_COMMONS_REF": "ac979230a26aa412e104092defead90bef28ff30",
+  "SDKWORK_UI_REF": "965048ea25a5412a2fb57ea2512540334dd6f8ee"
+}

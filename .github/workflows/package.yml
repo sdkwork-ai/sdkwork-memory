@@ -40,53 +40,53 @@ on:
         default: false
         type: boolean
       sdkwork_appbase_ref:
-        description: sdkwork-appbase commit/ref.
+        description: Optional override for the committed sdkwork-appbase pin; must be a full commit SHA.
         required: false
-        default: main
+        default: ''
       sdkwork_web_framework_ref:
-        description: sdkwork-web-framework commit/ref.
+        description: Optional override for the committed sdkwork-web-framework pin; must be a full commit SHA.
         required: false
-        default: main
+        default: ''
       sdkwork_database_ref:
-        description: sdkwork-database commit/ref.
+        description: Optional override for the committed sdkwork-database pin; must be a full commit SHA.
         required: false
-        default: main
+        default: ''
       sdkwork_id_ref:
-        description: sdkwork-id commit/ref.
+        description: Optional override for the committed sdkwork-id pin; must be a full commit SHA.
         required: false
-        default: main
+        default: ''
       sdkwork_utils_ref:
-        description: sdkwork-utils commit/ref.
+        description: Optional override for the committed sdkwork-utils pin; must be a full commit SHA.
         required: false
-        default: main
+        default: ''
       sdkwork_sdk_generator_ref:
-        description: sdkwork-sdk-generator commit/ref.
+        description: Optional override for the committed sdkwork-sdk-generator pin; must be a full commit SHA.
         required: false
-        default: main
+        default: ''
       sdkwork_app_topology_ref:
-        description: sdkwork-app-topology commit/ref.
+        description: Optional override for the committed sdkwork-app-topology pin; must be a full commit SHA.
         required: false
-        default: main
+        default: ''
       sdkwork_drive_ref:
-        description: sdkwork-drive commit/ref.
+        description: Optional override for the committed sdkwork-drive pin; must be a full commit SHA.
         required: false
-        default: main
+        default: ''
       sdkwork_core_ref:
-        description: sdkwork-core commit/ref.
+        description: Optional override for the committed sdkwork-core pin; must be a full commit SHA.
         required: false
-        default: main
+        default: ''
       sdkwork_iam_ref:
-        description: sdkwork-iam commit/ref.
+        description: Optional override for the committed sdkwork-iam pin; must be a full commit SHA.
         required: false
-        default: main
+        default: ''
       sdkwork_sdk_commons_ref:
-        description: sdkwork-sdk-commons commit/ref.
+        description: Optional override for the committed sdkwork-sdk-commons pin; must be a full commit SHA.
         required: false
-        default: main
+        default: ''
       sdkwork_ui_ref:
-        description: sdkwork-ui commit/ref.
+        description: Optional override for the committed sdkwork-ui pin; must be a full commit SHA.
         required: false
-        default: main
+        default: ''
 
 permissions:
   contents: write
@@ -96,7 +96,56 @@ permissions:
   artifact-metadata: write
 
 jobs:
+  verify-dependency-refs:
+    name: Verify dependency pins
+    runs-on: ubuntu-latest
+    outputs:
+      dependency_refs_json: ${{ steps.resolve.outputs.dependency_refs_json }}
+    steps:
+      - name: Resolve and validate dependency ref pins
+        id: resolve
+        env:
+          SDKWORK_APPBASE_REF: ${{ github.event.inputs.sdkwork_appbase_ref || '' }}
+          SDKWORK_WEB_FRAMEWORK_REF: ${{ github.event.inputs.sdkwork_web_framework_ref || '' }}
+          SDKWORK_DATABASE_REF: ${{ github.event.inputs.sdkwork_database_ref || '' }}
+          SDKWORK_ID_REF: ${{ github.event.inputs.sdkwork_id_ref || '' }}
+          SDKWORK_UTILS_REF: ${{ github.event.inputs.sdkwork_utils_ref || '' }}
+          SDKWORK_SDK_GENERATOR_REF: ${{ github.event.inputs.sdkwork_sdk_generator_ref || '' }}
+          SDKWORK_APP_TOPOLOGY_REF: ${{ github.event.inputs.sdkwork_app_topology_ref || '' }}
+          SDKWORK_DRIVE_REF: ${{ github.event.inputs.sdkwork_drive_ref || '' }}
+          SDKWORK_CORE_REF: ${{ github.event.inputs.sdkwork_core_ref || '' }}
+          SDKWORK_IAM_REF: ${{ github.event.inputs.sdkwork_iam_ref || '' }}
+          SDKWORK_SDK_COMMONS_REF: ${{ github.event.inputs.sdkwork_sdk_commons_ref || '' }}
+          SDKWORK_UI_REF: ${{ github.event.inputs.sdkwork_ui_ref || '' }}
+        run: |
+          set -euo pipefail
+          pins_file="etc/dependency-refs.json"
+          if [ ! -f "$pins_file" ]; then
+            echo "::error::missing committed dependency pin manifest: $pins_file"
+            exit 1
+          fi
+          resolved='{}'
+          for key in SDKWORK_APPBASE_REF SDKWORK_WEB_FRAMEWORK_REF SDKWORK_DATABASE_REF \
+                     SDKWORK_ID_REF SDKWORK_UTILS_REF SDKWORK_SDK_GENERATOR_REF \
+                     SDKWORK_APP_TOPOLOGY_REF SDKWORK_DRIVE_REF SDKWORK_CORE_REF \
+                     SDKWORK_IAM_REF SDKWORK_SDK_COMMONS_REF SDKWORK_UI_REF; do
+            override="${!key:-}"
+            pin="$(node -e "const pins=require('./$pins_file'); const value=pins['$key']; if (typeof value !== 'string') { console.error('missing pin $key'); process.exit(1); } console.log(value);")"
+            ref="${override:-$pin}"
+            if ! echo "$ref" | grep -Eq '^[0-9a-f]{40}$'; then
+              echo "::error::$key must resolve to a full 40-hex commit SHA (got: '$ref'); moving refs like 'main' and org vars are forbidden so release artifacts stay immutable."
+              exit 1
+            fi
+            resolved="$(ONLY_KEY="$key" ONLY_REF="$ref" node -e "const resolved=JSON.parse(process.argv[1]); resolved[process.env.ONLY_KEY]=process.env.ONLY_REF; console.log(JSON.stringify(resolved));" "$resolved")"
+          done
+          {
+            echo 'dependency_refs_json<<EOF_DEPENDENCY_REFS'
+            echo "$resolved"
+            echo 'EOF_DEPENDENCY_REFS'
+          } >> "$GITHUB_OUTPUT"
+
   package:
+    needs: verify-dependency-refs
     uses: sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml@b0829529b9277a3da32b90c2d36ff34ff09fa832
     with:
       config_path: sdkwork.workflow.json
@@ -111,19 +160,5 @@ jobs:
       deploy: ${{ github.event.inputs.deploy == 'true' || github.event_name == 'release' }}
       retention_days: 30
       framework_ref: b0829529b9277a3da32b90c2d36ff34ff09fa832
-      dependency_refs_json: >-
-        {
-          "SDKWORK_APPBASE_REF": "${{ github.event.inputs.sdkwork_appbase_ref || vars.SDKWORK_APPBASE_REF }}",
-          "SDKWORK_WEB_FRAMEWORK_REF": "${{ github.event.inputs.sdkwork_web_framework_ref || vars.SDKWORK_WEB_FRAMEWORK_REF }}",
-          "SDKWORK_DATABASE_REF": "${{ github.event.inputs.sdkwork_database_ref || vars.SDKWORK_DATABASE_REF }}",
-          "SDKWORK_ID_REF": "${{ github.event.inputs.sdkwork_id_ref || vars.SDKWORK_ID_REF }}",
-          "SDKWORK_UTILS_REF": "${{ github.event.inputs.sdkwork_utils_ref || vars.SDKWORK_UTILS_REF }}",
-          "SDKWORK_SDK_GENERATOR_REF": "${{ github.event.inputs.sdkwork_sdk_generator_ref || vars.SDKWORK_SDK_GENERATOR_REF }}",
-          "SDKWORK_APP_TOPOLOGY_REF": "${{ github.event.inputs.sdkwork_app_topology_ref || vars.SDKWORK_APP_TOPOLOGY_REF }}",
-          "SDKWORK_DRIVE_REF": "${{ github.event.inputs.sdkwork_drive_ref || vars.SDKWORK_DRIVE_REF }}",
-          "SDKWORK_CORE_REF": "${{ github.event.inputs.sdkwork_core_ref || vars.SDKWORK_CORE_REF }}",
-          "SDKWORK_IAM_REF": "${{ github.event.inputs.sdkwork_iam_ref || vars.SDKWORK_IAM_REF }}",
-          "SDKWORK_SDK_COMMONS_REF": "${{ github.event.inputs.sdkwork_sdk_commons_ref || vars.SDKWORK_SDK_COMMONS_REF }}",
-          "SDKWORK_UI_REF": "${{ github.event.inputs.sdkwork_ui_ref || vars.SDKWORK_UI_REF }}"
-        }
+      dependency_refs_json: ${{ needs.verify-dependency-refs.outputs.dependency_refs_json }}
     secrets: inherit
