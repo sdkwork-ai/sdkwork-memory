@@ -157,7 +157,7 @@ spec:
             # drain itself instead of being killed mid-write. Work that outlives
             # the budget keeps its database lease and is re-claimed by a peer.
             - name: SDKWORK_MEMORY_SHUTDOWN_DRAIN_SECS
-              value: "25"
+              value: "240"
             # One unified workspace database identity for the whole process.
             # DATABASE_SPEC_PROCESS_SHARED_POOL section 6: modules integrated
             # into one process MUST resolve the same database and schema, and
@@ -246,4 +246,6 @@ spec:
           emptyDir: {}
       # Bounds the whole shutdown: HTTP drain (request timeout above) plus the
       # SDKWORK_MEMORY_SHUTDOWN_DRAIN_SECS background budget.
-      terminationGracePeriodSeconds: 60
+      # >= HTTP request timeout (30 s) + background drain budget
+      # (SDKWORK_MEMORY_SHUTDOWN_DRAIN_SECS = 240 s) + shutdown overhead.
+      terminationGracePeriodSeconds: 300

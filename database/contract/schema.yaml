@@ -64,7 +64,7 @@ tables:
   - name: ai_tenant_preference
     lifecycle_status: active
     owner: memory-platform
-    source_migration: 0003_ai_tenant_preference
+    source_migration: 0003_memory_tenant_preference
   - name: ai_learning_job
     lifecycle_status: active
     owner: memory-platform
@@ -79,7 +79,7 @@ tables:
       - sqlite
     kind: virtual_table
     virtual_engine: fts5
-    source_migration: 0005_ai_record_fulltext_search
+    source_migration: 0005_memory_record_fulltext_search
   # Tables added by migration 0006 (ai_eval_run extend — new columns only, no new table).
   # Tables added by migration 0007 (commercial memory management).
   - name: ai_entity
@@ -130,5 +130,5 @@ engine_overrides:
           nullable: true
           maintained_by: trigger
           trigger: trg_ai_record_search_document
-          source_migration: 0005_ai_record_fulltext_search
+          source_migration: 0005_memory_record_fulltext_search
   sqlite: {}

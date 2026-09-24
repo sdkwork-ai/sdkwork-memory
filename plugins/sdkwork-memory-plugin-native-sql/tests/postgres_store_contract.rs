@@ -542,3 +542,59 @@ async fn postgres_consolidation_recovery_scans_more_than_one_bounded_batch() {
     assert_eq!(recovered.transferred_sources, RECOVERY_ROWS * 2);
     assert_eq!(recovered.deduplicated_sources, RECOVERY_ROWS * 3);
 }
+
+
+/// Regression: the quota-admission path serialized on `ops_memory_schema_version`,
+/// a table the production lifecycle never installs, so every space creation on
+/// a fresh PostgreSQL failed. The advisory-lock replacement must admit through
+/// this path on a real PostgreSQL database.
+#[tokio::test]
+async fn postgres_space_quota_atomic_admission_works_on_production_schema() {
+    let Some(store) = postgres_store(&[]).await else {
+        return;
+    };
+    let command = sdkwork_memory_spi::CreateMemorySpaceCommand {
+        tenant_id: 100_001,
+        space_id: 100_042,
+        organization_id: Some(7),
+        owner_subject_type: "user".to_string(),
+        owner_subject_id: "postgres-quota-owner".to_string(),
+        space_type: "personal".to_string(),
+        display_name: "Quota admission space".to_string(),
+        default_scope: "user".to_string(),
+    };
+
+    let admitted = store
+        .create_space_atomic_with_quota(&command, 2)
+        .await
+        .expect("first space must be admitted through the quota path");
+    let record = match admitted {
+        sdkwork_memory_spi::MemorySpaceQuotaAdmission::Admitted(record) => record,
+        other => panic!("expected admission, got {other:?}"),
+    };
+    assert_eq!(record.space_id, 100_042);
+
+    let mut second_command = command.clone();
+    second_command.space_id = 100_043;
+    let second = store
+        .create_space_atomic_with_quota(&second_command, 2)
+        .await
+        .expect("second space must be admitted");
+    assert!(matches!(
+        second,
+        sdkwork_memory_spi::MemorySpaceQuotaAdmission::Admitted(_)
+    ));
+
+    // The quota counts active user-owned spaces for the same owner: a third
+    // space must be rejected by the quota, not by a lock or invariant failure.
+    let mut third_command = command.clone();
+    third_command.space_id = 100_044;
+    let third = store
+        .create_space_atomic_with_quota(&third_command, 2)
+        .await
+        .expect("quota evaluation must not error");
+    assert!(matches!(
+        third,
+        sdkwork_memory_spi::MemorySpaceQuotaAdmission::QuotaExceeded { .. }
+    ));
+}

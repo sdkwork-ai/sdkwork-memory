@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS ai_learning_job (
   tenant_id INTEGER NOT NULL,
   space_id INTEGER REFERENCES ai_space(id),
   job_type TEXT NOT NULL,
-  state TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('queued','running','succeeded','failed','dead')),
   priority INTEGER NOT NULL DEFAULT 0,
   idempotency_key TEXT,
   input_json TEXT,

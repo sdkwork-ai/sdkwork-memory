@@ -106,7 +106,15 @@ async fn main() {
 /// row carries a database lease (`lease_owner` / `lease_token`), so the next
 /// replica re-claims it once the lease expires. That is why a bounded wait is
 /// safe here and an unbounded one is not necessary.
-const DEFAULT_BACKGROUND_DRAIN_SECONDS: u64 = 25;
+// The drain budget must cover a typical in-flight worker batch (learning
+// extraction calls external LLM providers; outbox delivery has its own
+// timeout). 25 s aborted nearly every batch mid-flight on rollout, leaving
+// rows running until lease expiry (15 minutes) — a per-deployment processing
+// hole on every restart. 4 minutes covers the documented provider timeouts;
+// SIGTERM handlers still get the k8s grace period (60 s default) plus this
+// budget only if the deployment raises terminationGracePeriodSeconds to match
+// (see deployments/kubernetes/deployment.yaml).
+const DEFAULT_BACKGROUND_DRAIN_SECONDS: u64 = 240;
 
 /// Resolves the shutdown drain budget from
 /// `SDKWORK_MEMORY_SHUTDOWN_DRAIN_SECS`, falling back to
