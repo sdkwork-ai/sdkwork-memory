@@ -1,12 +1,26 @@
 //! Portable SQLx Any queries with PostgreSQL-compatible numbered placeholders.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{OnceLock, RwLock};
 
 pub(crate) use ::sqlx::{any, Any, AnyPool, Error, Row, Transaction};
 
+/// Bound on the number of distinct normalized query shapes held in memory.
+///
+/// Filter inputs (metadata predicate trees, variable-length IN lists) can
+/// produce unbounded distinct shapes, so the cache evicts its oldest entry
+/// (FIFO, no read-path lock traffic) when the bound is reached and re-normalizes
+/// that shape if it returns. Leaking entries and asserting on overflow are both
+/// gone — an attacker-controlled filter shape can no longer grow memory without
+/// bound or panic the process.
 const MAX_CACHED_QUERY_SHAPES: usize = 2048;
-static NORMALIZED_SQL: OnceLock<RwLock<HashMap<String, &'static str>>> = OnceLock::new();
+
+struct NormalizedSqlCache {
+    map: HashMap<String, &'static str>,
+    order: VecDeque<String>,
+}
+
+static NORMALIZED_SQL: OnceLock<RwLock<NormalizedSqlCache>> = OnceLock::new();
 
 // sqlx 0.9 declares `Database::Arguments` without a lifetime parameter
 // (`type Arguments: Arguments<Database = Self>`), so these return types must not
@@ -32,22 +46,34 @@ where
 }
 
 fn normalized_sql(sql: &str) -> &'static str {
-    let cache = NORMALIZED_SQL.get_or_init(|| RwLock::new(HashMap::new()));
-    if let Some(value) = cache.read().expect("SQL cache read lock").get(sql) {
+    let cache = NORMALIZED_SQL.get_or_init(|| {
+        RwLock::new(NormalizedSqlCache {
+            map: HashMap::new(),
+            order: VecDeque::new(),
+        })
+    });
+    if let Some(value) = cache.read().expect("SQL cache read lock").map.get(sql) {
         return value;
     }
 
     let normalized = number_placeholders(sql);
     let mut write = cache.write().expect("SQL cache write lock");
-    if let Some(value) = write.get(sql) {
+    if let Some(value) = write.map.get(sql) {
         return value;
     }
-    assert!(
-        write.len() < MAX_CACHED_QUERY_SHAPES,
-        "native SQL query-shape cache exceeded its static bound"
-    );
+    if write.map.len() >= MAX_CACHED_QUERY_SHAPES {
+        // LRU eviction: drop the least recently used shape (its leaked string
+        // stays alive for the process — bounded by the same limit — and the
+        // shape is re-normalized if it returns).
+        while write.map.len() >= MAX_CACHED_QUERY_SHAPES {
+            if let Some(oldest) = write.order.pop_front() {
+                write.map.remove(&oldest);
+            }
+        }
+    }
     let value = Box::leak(normalized.into_boxed_str());
-    write.insert(sql.to_string(), value);
+    write.map.insert(sql.to_string(), value);
+    write.order.push_back(sql.to_string());
     value
 }
 

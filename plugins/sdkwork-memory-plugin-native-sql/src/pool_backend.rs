@@ -30,10 +30,14 @@ pub fn normalize_memory_database_url(url: &str) -> String {
 pub fn normalize_memory_database_config(mut config: DatabaseConfig) -> DatabaseConfig {
     config.url = normalize_memory_database_url(&config.url);
     if matches!(config.engine, DatabaseEngine::Sqlite) {
-        // sqlx AnyPool cannot carry SQLite's connection-level FK pragma through
-        // its URL parser. Native SQL enables it immediately after pool creation,
-        // so one connection keeps that invariant for every operation.
+        // sqlx AnyPool cannot carry SQLite's connection-level PRAGMAs through
+        // its URL parser or a connect hook, so the store enables them once on
+        // the pool's single connection after creation. Pool recycling would
+        // silently drop those PRAGMAs (foreign key enforcement included), so
+        // the connection is pinned for the process lifetime instead.
         config.max_connections = 1;
+        config.idle_timeout_secs = u64::MAX;
+        config.max_lifetime_secs = u64::MAX;
     }
     config
 }
@@ -46,9 +50,12 @@ pub async fn connect_any_pool(
     let dialect = MemorySqlDialect::from_config(&config);
     let pool = create_any_pool(&config).await?;
     if matches!(dialect, MemorySqlDialect::Sqlite) {
-        sqlx::query("PRAGMA foreign_keys = ON")
-            .execute(&pool)
-            .await?;
+        // Applied once to the single pinned connection (see
+        // `normalize_memory_database_config`): foreign key enforcement plus a
+        // busy timeout so cross-process lock contention degrades into a wait
+        // instead of an immediate SQLITE_BUSY error.
+        sqlx::query("PRAGMA foreign_keys = ON").execute(&pool).await?;
+        sqlx::query("PRAGMA busy_timeout = 5000").execute(&pool).await?;
     }
     Ok((pool, dialect))
 }
