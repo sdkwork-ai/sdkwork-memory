@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const openApiPrefix = "/mem/v3/api";
-const openApiSchemaUrl = "/mem/v3/openapi.json";
 const legacyOpenApiPrefix = "/memory/v3/api";
 const legacyOpenApiSchemaUrl = "/memory/v3/openapi.json";
 
@@ -42,15 +41,12 @@ assert.equal(
   openApiPrefix,
   "Memory open SDK manifest must use the /mem/v3/api public prefix",
 );
+// schemaUrl was removed pre-launch: no /mem/v3/openapi.json discovery endpoint
+// is implemented, and the manifest must not promise one.
 assert.equal(
   sdkManifest.discoverySurface.schemaUrl,
-  openApiSchemaUrl,
-  "Memory open SDK manifest must expose the /mem/v3/openapi.json schema URL",
-);
-assert.notEqual(
-  sdkManifest.discoverySurface.schemaUrl,
-  legacyOpenApiSchemaUrl,
-  "Memory open SDK manifest must not keep the legacy /memory/v3/openapi.json schema URL",
+  undefined,
+  "Memory open SDK manifest must not declare an unimplemented schema URL",
 );
 assert.equal(
   sdkManifest.apiPrefix,

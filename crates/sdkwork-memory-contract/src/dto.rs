@@ -306,8 +306,6 @@ pub struct ListMemoriesQuery {
     pub page_size: Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub space_id: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub memory_type: Option<String>,
     /// When true, records whose `expiresAt` has passed stay visible in the
     /// listing. Defaults to false, mirroring mem0's `show_expired` semantics.
     #[serde(default, skip_serializing_if = "Option::is_none")]

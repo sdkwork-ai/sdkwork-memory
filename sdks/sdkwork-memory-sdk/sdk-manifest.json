@@ -36,7 +36,6 @@
   "discoverySurface": {
     "sdkTarget": "open-api",
     "apiPrefix": "/mem/v3/api",
-    "schemaUrl": "/mem/v3/openapi.json",
     "generatedProtocols": [
       "http-openapi"
     ],

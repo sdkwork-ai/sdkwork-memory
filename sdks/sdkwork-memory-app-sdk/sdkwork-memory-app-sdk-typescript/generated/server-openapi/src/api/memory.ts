@@ -5,9 +5,11 @@ import type { DeleteAllMemoriesRequest, MemoryCandidate, MemoryContextPack, Memo
 
 
 export interface MemoryPolicyAssignmentsListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
+  targetType?: string;
+  targetId?: string;
+  policyId?: string;
 }
 
 export interface MemoryPolicyAssignmentsCreateParams {
@@ -24,9 +26,11 @@ export class MemoryPolicyAssignmentsApi {
 
 async list(params?: MemoryPolicyAssignmentsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryPolicyAssignment[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'target_type', value: params?.targetType, style: 'form', explode: true, allowReserved: false },
+      { name: 'target_id', value: params?.targetId, style: 'form', explode: true, allowReserved: false },
+      { name: 'policy_id', value: params?.policyId, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryPolicyAssignment[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/memory/policy_assignments`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
@@ -47,11 +51,11 @@ async update(policyAssignmentId: string, body: MemoryPolicyAssignmentPatch, requ
 }
 
 export interface MemoryEntitiesListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
   spaceId?: string;
   entityType?: string;
+  status?: string;
 }
 
 export interface MemoryEntitiesCreateParams {
@@ -68,11 +72,11 @@ export class MemoryEntitiesApi {
 
 async list(params?: MemoryEntitiesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryEntity[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
       { name: 'space_id', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
       { name: 'entity_type', value: params?.entityType, style: 'form', explode: true, allowReserved: false },
+      { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryEntity[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/memory/entities`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
@@ -235,6 +239,7 @@ export interface MemoryHabitsListParams {
   cursor?: string;
   pageSize?: number;
   stage?: string;
+  spaceId?: string;
 }
 
 export interface MemoryHabitsConfirmParams {
@@ -259,6 +264,7 @@ async list(params?: MemoryHabitsListParams, requestOptions?: ApiRequestOptions):
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
       { name: 'stage', value: params?.stage, style: 'form', explode: true, allowReserved: false },
+      { name: 'space_id', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryHabit[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/memory/habits`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
@@ -293,10 +299,9 @@ async reject(habitId: string, body: MemoryReviewRequest, params: MemoryHabitsRej
 }
 
 export interface MemoryCandidatesListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
-  decisionState?: string;
+  spaceId?: string;
 }
 
 export interface MemoryCandidatesApproveParams {
@@ -317,10 +322,9 @@ export class MemoryCandidatesApi {
 
 async list(params?: MemoryCandidatesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryCandidate[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
-      { name: 'decision_state', value: params?.decisionState, style: 'form', explode: true, allowReserved: false },
+      { name: 'space_id', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryCandidate[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/memory/candidates`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
@@ -472,7 +476,6 @@ async retrieve(eventId: string, params: MemoryEventsRetrieveParams, requestOptio
 }
 
 export interface MemorySpacesListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
 }
@@ -491,7 +494,6 @@ export class MemorySpacesApi {
 
 async list(params?: MemorySpacesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemorySpace[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
     ]);
@@ -522,7 +524,6 @@ export interface MemoryListParams {
   cursor?: string;
   pageSize?: number;
   spaceId: string;
-  memoryType?: string;
   showExpired?: boolean;
 }
 
@@ -588,7 +589,6 @@ async list(params: MemoryListParams, requestOptions?: ApiRequestOptions): Promis
       { name: 'cursor', value: params.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params.pageSize, style: 'form', explode: true, allowReserved: false },
       { name: 'space_id', value: params.spaceId, style: 'form', explode: true, allowReserved: false },
-      { name: 'memory_type', value: params.memoryType, style: 'form', explode: true, allowReserved: false },
       { name: 'show_expired', value: params.showExpired, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryRecord[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/memory/memories`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });

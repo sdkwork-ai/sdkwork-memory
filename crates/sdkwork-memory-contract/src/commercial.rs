@@ -647,8 +647,6 @@ pub struct ListEdgesQuery {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relation_type: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cursor: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub page_size: Option<i32>,

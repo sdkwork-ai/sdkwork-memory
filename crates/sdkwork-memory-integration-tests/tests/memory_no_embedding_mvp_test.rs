@@ -348,8 +348,6 @@ async fn retrieval_and_listing_hide_expired_records_unless_show_expired() {
 
                 space_id: Some(2),
 
-                memory_type: None,
-
                 show_expired: None,
             },
         )
@@ -375,8 +373,6 @@ async fn retrieval_and_listing_hide_expired_records_unless_show_expired() {
                 page_size: None,
 
                 space_id: Some(2),
-
-                memory_type: None,
 
                 show_expired: Some(true),
             },

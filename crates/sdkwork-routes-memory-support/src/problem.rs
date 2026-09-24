@@ -129,7 +129,9 @@ impl IntoResponse for MemoryApiProblem {
                     .as_ref()
                     .map(|value| resolve_problem_trace_id(value.request_id.as_str(), None))
             })
-            .unwrap_or_else(|| "unknown".to_owned());
+            // Contract: `traceId` is always a server-generated UUID v4 string
+            // (see the OpenAPI ProblemDetail schema); never a placeholder.
+            .unwrap_or_else(sdkwork_utils_rust::id::uuid);
         let result_code = self.error.result_code();
         let mut problem =
             SdkWorkProblemDetail::platform(result_code, self.error.detail, trace_id.clone());

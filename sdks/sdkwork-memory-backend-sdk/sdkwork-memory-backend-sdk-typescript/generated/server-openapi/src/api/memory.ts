@@ -32,9 +32,11 @@ async rebuild(body: MemoryCommercialReadinessRequest, params: MemoryCommercialRe
 }
 
 export interface MemoryPolicyAssignmentsListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
+  targetType?: string;
+  targetId?: string;
+  policyId?: string;
 }
 
 export interface MemoryPolicyAssignmentsCreateParams {
@@ -51,9 +53,11 @@ export class MemoryPolicyAssignmentsApi {
 
 async list(params?: MemoryPolicyAssignmentsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryPolicyAssignment[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'target_type', value: params?.targetType, style: 'form', explode: true, allowReserved: false },
+      { name: 'target_id', value: params?.targetId, style: 'form', explode: true, allowReserved: false },
+      { name: 'policy_id', value: params?.policyId, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryPolicyAssignment[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/policy_assignments`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
@@ -82,7 +86,6 @@ async delete(policyAssignmentId: string, requestOptions?: ApiRequestOptions): Pr
 }
 
 export interface MemoryPoliciesListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
   policyType?: string;
@@ -103,7 +106,6 @@ export class MemoryPoliciesApi {
 
 async list(params?: MemoryPoliciesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryPolicy[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
       { name: 'policy_type', value: params?.policyType, style: 'form', explode: true, allowReserved: false },
@@ -136,7 +138,6 @@ async delete(policyId: string, requestOptions?: ApiRequestOptions): Promise<void
 }
 
 export interface MemoryEdgesListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
   spaceId?: string;
@@ -158,7 +159,6 @@ export class MemoryEdgesApi {
 
 async list(params?: MemoryEdgesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryEdge[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
       { name: 'space_id', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
@@ -192,7 +192,6 @@ async delete(edgeId: string, requestOptions?: ApiRequestOptions): Promise<void> 
 }
 
 export interface MemoryEntitiesListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
   spaceId?: string;
@@ -214,7 +213,6 @@ export class MemoryEntitiesApi {
 
 async list(params?: MemoryEntitiesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryEntity[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
       { name: 'space_id', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
@@ -267,9 +265,12 @@ async resolve(body: MemoryResolveCapabilitiesRequest, params: MemoryCapabilities
 }
 
 export interface MemoryCapabilityBindingsListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
+  capabilityCode?: string;
+  targetType?: string;
+  targetId?: string;
+  status?: string;
 }
 
 export interface MemoryCapabilityBindingsCreateParams {
@@ -286,9 +287,12 @@ export class MemoryCapabilityBindingsApi {
 
 async list(params?: MemoryCapabilityBindingsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryCapabilityBinding[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'capability_code', value: params?.capabilityCode, style: 'form', explode: true, allowReserved: false },
+      { name: 'target_type', value: params?.targetType, style: 'form', explode: true, allowReserved: false },
+      { name: 'target_id', value: params?.targetId, style: 'form', explode: true, allowReserved: false },
+      { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryCapabilityBinding[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/capability_bindings`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
@@ -313,9 +317,13 @@ async delete(capabilityBindingId: string, requestOptions?: ApiRequestOptions): P
 }
 
 export interface MemoryBindingsListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
+  sourceSubjectId?: string;
+  targetSubjectId?: string;
+  targetSpaceId?: string;
+  bindingKind?: string;
+  status?: string;
 }
 
 export interface MemoryBindingsCreateParams {
@@ -332,9 +340,13 @@ export class MemoryBindingsApi {
 
 async list(params?: MemoryBindingsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryBinding[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'source_subject_id', value: params?.sourceSubjectId, style: 'form', explode: true, allowReserved: false },
+      { name: 'target_subject_id', value: params?.targetSubjectId, style: 'form', explode: true, allowReserved: false },
+      { name: 'target_space_id', value: params?.targetSpaceId, style: 'form', explode: true, allowReserved: false },
+      { name: 'binding_kind', value: params?.bindingKind, style: 'form', explode: true, allowReserved: false },
+      { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryBinding[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/bindings`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
@@ -359,7 +371,6 @@ async delete(bindingId: string, requestOptions?: ApiRequestOptions): Promise<voi
 }
 
 export interface MemorySubjectsListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
   subjectType?: string;
@@ -380,7 +391,6 @@ export class MemorySubjectsApi {
 
 async list(params?: MemorySubjectsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemorySubject[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
       { name: 'subject_type', value: params?.subjectType, style: 'form', explode: true, allowReserved: false },
@@ -493,9 +503,9 @@ async retrieve(retentionJobId: string, requestOptions?: ApiRequestOptions): Prom
 }
 
 export interface MemoryAuditLogsListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
+  action?: string;
 }
 
 export class MemoryAuditLogsApi {
@@ -508,18 +518,18 @@ export class MemoryAuditLogsApi {
 
 async list(params?: MemoryAuditLogsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryAuditLog[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'action', value: params?.action, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryAuditLog[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/audit_logs`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 }
 
 export interface MemoryRetrievalTracesListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
+  spaceId?: string;
 }
 
 export class MemoryRetrievalTracesApi {
@@ -532,9 +542,9 @@ export class MemoryRetrievalTracesApi {
 
 async list(params?: MemoryRetrievalTracesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryRetrievalTrace[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'space_id', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryRetrievalTrace[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/retrieval_traces`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
@@ -545,7 +555,6 @@ async retrieve(traceId: string, requestOptions?: ApiRequestOptions): Promise<Mem
 }
 
 export interface MemoryEvalRunsListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
 }
@@ -564,7 +573,6 @@ export class MemoryEvalRunsApi {
 
 async list(params?: MemoryEvalRunsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryEvalRun[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
     ]);
@@ -600,7 +608,6 @@ async retrieve(requestOptions?: ApiRequestOptions): Promise<MemoryProviderHealth
 }
 
 export interface MemoryProviderBindingsListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
 }
@@ -619,7 +626,6 @@ export class MemoryProviderBindingsApi {
 
 async list(params?: MemoryProviderBindingsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryProviderBinding[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
     ]);
@@ -642,7 +648,6 @@ async update(providerBindingId: string, body: MemoryProviderBindingRequest, requ
 }
 
 export interface MemoryImplementationProfilesListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
 }
@@ -661,7 +666,6 @@ export class MemoryImplementationProfilesApi {
 
 async list(params?: MemoryImplementationProfilesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryImplementationProfile[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
     ]);
@@ -688,9 +692,9 @@ async update(implementationProfileId: string, body: MemoryImplementationProfileR
 }
 
 export interface MemoryRetrievalProfilesListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
+  spaceId?: string;
 }
 
 export interface MemoryRetrievalProfilesCreateParams {
@@ -707,9 +711,9 @@ export class MemoryRetrievalProfilesApi {
 
 async list(params?: MemoryRetrievalProfilesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryRetrievalProfile[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'space_id', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryRetrievalProfile[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/retrieval_profiles`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
@@ -734,9 +738,9 @@ async update(profileId: string, body: MemoryRetrievalProfileRequest, requestOpti
 }
 
 export interface MemoryIndexesListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
+  spaceId?: string;
 }
 
 export interface MemoryIndexesCreateParams {
@@ -757,9 +761,9 @@ export class MemoryIndexesApi {
 
 async list(params?: MemoryIndexesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryIndex[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'space_id', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryIndex[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/indexes`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
@@ -876,9 +880,9 @@ async retrieve(jobId: string, requestOptions?: ApiRequestOptions): Promise<Memor
 }
 
 export interface MemoryCandidatesListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
+  spaceId?: string;
 }
 
 export interface MemoryCandidatesApproveParams {
@@ -899,9 +903,9 @@ export class MemoryCandidatesApi {
 
 async list(params?: MemoryCandidatesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryCandidate[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'space_id', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryCandidate[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/candidates`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
@@ -928,9 +932,9 @@ async reject(candidateId: string, body: MemoryReviewRequest, params: MemoryCandi
 }
 
 export interface MemoryEventsListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
+  spaceId?: string;
 }
 
 export interface MemoryEventsRetrieveParams {
@@ -947,9 +951,9 @@ export class MemoryEventsApi {
 
 async list(params?: MemoryEventsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemoryEvent[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'space_id', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryEvent[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/events`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
@@ -963,7 +967,6 @@ async retrieve(eventId: string, params: MemoryEventsRetrieveParams, requestOptio
 }
 
 export interface MemorySpacesListParams {
-  q?: string;
   cursor?: string;
   pageSize?: number;
 }
@@ -978,7 +981,6 @@ export class MemorySpacesApi {
 
 async list(params?: MemorySpacesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: MemorySpace[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
     ]);
@@ -998,6 +1000,8 @@ export interface MemoryListParams {
   q?: string;
   cursor?: string;
   pageSize?: number;
+  spaceId?: string;
+  showExpired?: boolean;
 }
 
 export interface MemoryRetrieveParams {
@@ -1073,6 +1077,8 @@ async list(params?: MemoryListParams, requestOptions?: ApiRequestOptions): Promi
       { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'space_id', value: params?.spaceId, style: 'form', explode: true, allowReserved: false },
+      { name: 'show_expired', value: params?.showExpired, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: MemoryRecord[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/memory/memories`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }

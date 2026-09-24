@@ -85,7 +85,6 @@
   "discoverySurface": {
     "sdkTarget": "app",
     "apiPrefix": "/app/v3/api",
-    "schemaUrl": "/app/v3/openapi.json",
     "generatedProtocols": [
       "http-openapi"
     ],

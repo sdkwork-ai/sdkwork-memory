@@ -20,7 +20,6 @@ const families = [
     input: "openapi/memory-open-api.openapi.json",
     packageName: "@sdkwork/memory-sdk",
     apiPrefix: "/mem/v3/api",
-    schemaUrl: "/mem/v3/openapi.json",
     clientName: "SdkworkMemoryOpenClient",
     forbiddenPathPrefixes: ["/app/v3/api/", "/backend/v3/api/"],
   },
@@ -31,7 +30,6 @@ const families = [
     input: "openapi/memory-app-api.openapi.json",
     packageName: "@sdkwork/memory-app-sdk",
     apiPrefix: "/app/v3/api",
-    schemaUrl: "/app/v3/openapi.json",
     clientName: "SdkworkMemoryAppClient",
     forbiddenPathPrefixes: ["/backend/v3/api/", "/mem/v3/api/"],
   },
@@ -42,7 +40,6 @@ const families = [
     input: "openapi/memory-backend-api.openapi.json",
     packageName: "@sdkwork/memory-backend-sdk",
     apiPrefix: "/backend/v3/api",
-    schemaUrl: "/backend/v3/openapi.json",
     clientName: "SdkworkMemoryBackendClient",
     forbiddenPathPrefixes: ["/app/v3/api/", "/mem/v3/api/"],
   },
@@ -85,7 +82,6 @@ for (const family of families) {
   if (
     manifest.apiPrefix !== family.apiPrefix
     || manifest.discoverySurface?.apiPrefix !== family.apiPrefix
-    || manifest.discoverySurface?.schemaUrl !== family.schemaUrl
   ) {
     failures.push(`${family.root} discovery surface mismatch`);
   }
