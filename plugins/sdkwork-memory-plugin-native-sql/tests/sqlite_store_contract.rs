@@ -5616,3 +5616,52 @@ async fn sqlite_forget_all_records_in_space_purges_soft_deleted_records_and_even
         assert_eq!(count, 0, "{table} must not survive the space forget");
     }
 }
+
+#[tokio::test]
+async fn sqlite_record_update_preserves_object_text_and_refreshes_fts() {
+    let store = new_contract_store().await;
+    let scope = MemoryScopeContext::for_test(1, 1);
+
+    store
+        .create_record_open_api(
+            &scope,
+            "update-preserve-object",
+            "user",
+            "semantic",
+            Some("preference"),
+            None,
+            "original object payload",
+            "The canonical statement",
+            "internal",
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+    let updated = store
+        .update_record_open_api(
+            &scope,
+            "update-preserve-object",
+            Some("Rewritten canonical statement"),
+            Some("topic"),
+        )
+        .await
+        .unwrap()
+        .expect("updated record must exist");
+    assert_eq!(updated.canonical_text, "Rewritten canonical statement");
+    assert_eq!(updated.object_text, "original object payload");
+    assert_eq!(updated.subject.as_deref(), Some("topic"));
+
+    // The full-text mirror must reflect the rewritten canonical text while
+    // keeping the untouched object text.
+    let fts_row: (String, String) = sqlx::query_as(
+        "SELECT canonical_text, object_text FROM ai_record_fts WHERE memory_uuid = ?",
+    )
+    .bind("update-preserve-object")
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(fts_row.0, "Rewritten canonical statement");
+    assert_eq!(fts_row.1, "original object payload");
+}

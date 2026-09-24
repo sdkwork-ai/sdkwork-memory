@@ -10,6 +10,8 @@ use crate::pool_backend::MemorySqlDialect;
 use crate::store::{
     record_detail_from_row, NativeSqlMemoryRecordDetail, NativeSqlMemoryStore, NativeSqlStoreError,
 };
+use ::sqlx::any::AnyRow;
+use sqlx::Row;
 
 pub(crate) fn is_recoverable_fulltext_error(error: &NativeSqlStoreError) -> bool {
     let NativeSqlStoreError::Database(sqlx::Error::Database(database_error)) = error else {
@@ -70,18 +72,58 @@ impl NativeSqlMemoryStore {
         subject: Option<&str>,
         predicate: Option<&str>,
     ) -> Result<(), NativeSqlStoreError> {
-        if !matches!(self.dialect(), MemorySqlDialect::Sqlite) {
+        let mut connection = self.pool().acquire().await?;
+        Self::sync_record_fts_entry_on_tx(
+            &mut *connection,
+            self.dialect(),
+            scope,
+            memory_uuid,
+            canonical_text,
+            object_text,
+            subject,
+            predicate,
+        )
+        .await
+    }
+
+    /// Runs the synchronous lookup and mutation inside a single connection so a
+    /// record write and its full-text index update commit or roll back together.
+    pub(crate) async fn sync_record_fts_entry_on_tx(
+        executor: &mut ::sqlx::AnyConnection,
+        dialect: MemorySqlDialect,
+        scope: &MemoryScopeContext,
+        memory_uuid: &str,
+        canonical_text: &str,
+        object_text: &str,
+        subject: Option<&str>,
+        predicate: Option<&str>,
+    ) -> Result<(), NativeSqlStoreError> {
+        if !matches!(dialect, MemorySqlDialect::Sqlite) {
             return Ok(());
         }
-        let row_id = self
-            .lookup_record_row_id(scope, memory_uuid)
-            .await?
+        let row: Option<AnyRow> = sqlx::query(
+            r#"
+            SELECT id
+            FROM ai_record
+            WHERE tenant_id = ?
+              AND space_id = ?
+              AND uuid = ?
+              AND status <> 'deleted'
+            "#,
+        )
+        .bind(scope.tenant_id)
+        .bind(scope.space_id)
+        .bind(memory_uuid)
+        .fetch_optional(&mut *executor)
+        .await?;
+        let row_id = row
+            .map(|row| row.get::<i64, _>("id"))
             .ok_or_else(|| NativeSqlStoreError::InvariantViolation {
                 message: format!("fts sync memory {memory_uuid} not found"),
             })?;
         sqlx::query("DELETE FROM ai_record_fts WHERE rowid = ?")
             .bind(row_id)
-            .execute(self.pool())
+            .execute(&mut *executor)
             .await?;
         sqlx::query(
             r#"
@@ -99,7 +141,7 @@ impl NativeSqlMemoryStore {
         .bind(object_text)
         .bind(subject.unwrap_or(""))
         .bind(predicate.unwrap_or(""))
-        .execute(self.pool())
+        .execute(&mut *executor)
         .await?;
         Ok(())
     }

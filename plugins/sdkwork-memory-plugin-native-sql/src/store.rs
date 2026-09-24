@@ -115,6 +115,90 @@ pub struct TenantRetrievalTraceLookup {
     pub created_at: String,
 }
 
+/// Insert the canonical record row and its full-text index entry on one
+/// transaction/connection. Callers that already hold a transaction (supersede)
+/// reuse this so the pair can never commit partially.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn create_record_open_api_on_tx(
+    executor: &mut ::sqlx::AnyConnection,
+    dialect: MemorySqlDialect,
+    scope: &MemoryScopeContext,
+    row_id: i64,
+    memory_id: &str,
+    scope_label: &str,
+    memory_type: &str,
+    subject: Option<&str>,
+    predicate: Option<&str>,
+    object_text: &str,
+    canonical_text: &str,
+    sensitivity_level: &str,
+    expires_at: Option<&str>,
+    metadata_json: Option<&str>,
+) -> Result<(), NativeSqlStoreError> {
+    sqlx::query(
+        r#"
+        INSERT INTO ai_record (
+          id,
+          uuid,
+          tenant_id,
+          space_id,
+          user_id,
+          scope,
+          memory_type,
+          subject,
+          predicate,
+          object_text,
+          canonical_text,
+          confidence,
+          evidence_count,
+          contradiction_count,
+          importance_score,
+          recency_score,
+          status,
+          sensitivity_level,
+          expires_at,
+          metadata_json,
+          created_at,
+          updated_at,
+          version
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1.0, 1, 0, 0.5, 0.5, 'active', ?, ?, ?, ?, ?, 1)
+        "#,
+    )
+    .bind(row_id)
+    .bind(memory_id)
+    .bind(scope.tenant_id)
+    .bind(scope.space_id)
+    .bind(scope.user_id)
+    .bind(scope_label)
+    .bind(memory_type)
+    .bind(subject)
+    .bind(predicate.unwrap_or("is"))
+    .bind(object_text)
+    .bind(canonical_text)
+    .bind(sensitivity_level)
+    .bind(expires_at)
+    .bind(metadata_json)
+    .bind(now_text())
+    .bind(now_text())
+    .execute(&mut *executor)
+    .await?;
+
+    NativeSqlMemoryStore::sync_record_fts_entry_on_tx(
+        executor,
+        dialect,
+        scope,
+        memory_id,
+        canonical_text,
+        object_text,
+        subject,
+        predicate,
+    )
+    .await?;
+
+    Ok(())
+}
+
 impl NativeSqlMemoryStore {
     pub async fn connect(config: &DatabaseConfig) -> Result<Self, NativeSqlStoreError> {
         Self::open_pool(config, true).await
@@ -512,65 +596,25 @@ impl NativeSqlMemoryStore {
         metadata_json: Option<&str>,
     ) -> Result<(), NativeSqlStoreError> {
         self.ensure_space(scope).await?;
-        sqlx::query(
-            r#"
-            INSERT INTO ai_record (
-              id,
-              uuid,
-              tenant_id,
-              space_id,
-              user_id,
-              scope,
-              memory_type,
-              subject,
-              predicate,
-              object_text,
-              canonical_text,
-              confidence,
-              evidence_count,
-              contradiction_count,
-              importance_score,
-              recency_score,
-              status,
-              sensitivity_level,
-              expires_at,
-              metadata_json,
-              created_at,
-              updated_at,
-              version
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1.0, 1, 0, 0.5, 0.5, 'active', ?, ?, ?, ?, ?, 1)
-            "#,
-        )
-        .bind(self.next_row_id()?)
-        .bind(memory_id)
-        .bind(scope.tenant_id)
-        .bind(scope.space_id)
-        .bind(scope.user_id)
-        .bind(scope_label)
-        .bind(memory_type)
-        .bind(subject)
-        .bind(predicate.unwrap_or("is"))
-        .bind(object_text)
-        .bind(canonical_text)
-        .bind(sensitivity_level)
-        .bind(expires_at)
-        .bind(metadata_json)
-        .bind(now_text())
-        .bind(now_text())
-        .execute(&self.pool)
-        .await?;
-
-        self.sync_record_fts_entry(
+        let mut tx = self.begin_tx().await?;
+        create_record_open_api_on_tx(
+            &mut *tx,
+            self.dialect(),
             scope,
+            self.next_row_id()?,
             memory_id,
-            canonical_text,
-            object_text,
+            scope_label,
+            memory_type,
             subject,
             predicate,
+            object_text,
+            canonical_text,
+            sensitivity_level,
+            expires_at,
+            metadata_json,
         )
         .await?;
-
+        tx.commit().await.map_err(NativeSqlStoreError::from)?;
         Ok(())
     }
 
@@ -591,15 +635,34 @@ impl NativeSqlMemoryStore {
         metadata_json: Option<&str>,
     ) -> Result<(), NativeSqlStoreError> {
         self.ensure_space(scope).await?;
-        let old_row_id = self
-            .lookup_record_row_id(scope, old_memory_uuid)
-            .await?
+
+        // The replacement record, its full-text index entry, and both link
+        // updates must commit atomically: a partial supersede would leave the
+        // old record live while the replacement already exists (or vice versa).
+        let mut tx = self.begin_tx().await?;
+        let old_row: Option<AnyRow> = sqlx::query(
+            r#"
+            SELECT id
+            FROM ai_record
+            WHERE tenant_id = ? AND space_id = ? AND uuid = ?
+            "#,
+        )
+        .bind(scope.tenant_id)
+        .bind(scope.space_id)
+        .bind(old_memory_uuid)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let old_row_id = old_row
+            .map(|row| row.get::<i64, _>("id"))
             .ok_or_else(|| NativeSqlStoreError::InvariantViolation {
                 message: format!("supersede source memory {old_memory_uuid} not found"),
             })?;
 
-        self.create_record_open_api(
+        create_record_open_api_on_tx(
+            &mut *tx,
+            self.dialect(),
             scope,
+            self.next_row_id()?,
             new_memory_uuid,
             scope_label,
             memory_type,
@@ -613,9 +676,20 @@ impl NativeSqlMemoryStore {
         )
         .await?;
 
-        let new_row_id = self
-            .lookup_record_row_id(scope, new_memory_uuid)
-            .await?
+        let new_row: Option<AnyRow> = sqlx::query(
+            r#"
+            SELECT id
+            FROM ai_record
+            WHERE tenant_id = ? AND space_id = ? AND uuid = ?
+            "#,
+        )
+        .bind(scope.tenant_id)
+        .bind(scope.space_id)
+        .bind(new_memory_uuid)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let new_row_id = new_row
+            .map(|row| row.get::<i64, _>("id"))
             .ok_or_else(|| NativeSqlStoreError::InvariantViolation {
                 message: format!(
                     "supersede target memory {new_memory_uuid} not found after create"
@@ -638,7 +712,7 @@ impl NativeSqlMemoryStore {
         .bind(scope.tenant_id)
         .bind(scope.space_id)
         .bind(old_memory_uuid)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
 
         sqlx::query(
@@ -655,9 +729,10 @@ impl NativeSqlMemoryStore {
         .bind(scope.tenant_id)
         .bind(scope.space_id)
         .bind(new_memory_uuid)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
 
+        tx.commit().await.map_err(NativeSqlStoreError::from)?;
         Ok(())
     }
 
@@ -899,6 +974,10 @@ impl NativeSqlMemoryStore {
         let canonical_text = canonical_text.unwrap_or(&existing.canonical_text);
         let subject = subject.or(existing.subject.as_deref());
 
+        // The update API only rewrites canonical text and subject; object_text
+        // is preserved verbatim and the full-text entry is refreshed inside the
+        // same transaction so the index can never diverge from the row.
+        let mut tx = self.begin_tx().await?;
         sqlx::query(
             r#"
             UPDATE ai_record
@@ -914,29 +993,29 @@ impl NativeSqlMemoryStore {
             "#,
         )
         .bind(canonical_text)
-        .bind(canonical_text)
+        .bind(&existing.object_text)
         .bind(subject)
         .bind(now_text())
         .bind(scope.tenant_id)
         .bind(scope.space_id)
         .bind(memory_id)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
 
-        let updated = self.retrieve_record_detail(scope, memory_id).await?;
-        if let Some(ref detail) = updated {
-            self.sync_record_fts_entry(
-                scope,
-                memory_id,
-                &detail.canonical_text,
-                &detail.object_text,
-                detail.subject.as_deref(),
-                detail.predicate.as_deref(),
-            )
-            .await?;
-        }
+        Self::sync_record_fts_entry_on_tx(
+            &mut *tx,
+            self.dialect(),
+            scope,
+            memory_id,
+            canonical_text,
+            &existing.object_text,
+            subject,
+            existing.predicate.as_deref(),
+        )
+        .await?;
+        tx.commit().await.map_err(NativeSqlStoreError::from)?;
 
-        Ok(updated)
+        self.retrieve_record_detail(scope, memory_id).await
     }
 
     pub async fn search_record_details_keyword(
