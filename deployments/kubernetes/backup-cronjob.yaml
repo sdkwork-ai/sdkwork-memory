@@ -1,0 +1,136 @@
+# Daily logical backup of the unified workspace PostgreSQL database.
+#
+# Design notes:
+# - Same secret reference pattern as migration-job.yaml: SDKWORK_DATABASE_URL
+#   from Secret sdkwork-memory-database, key database-url. pg_dump consumes the
+#   URL directly (libpq connection string), so no credentials are duplicated.
+# - Dumps are plain-format SQL piped through gzip (restore with kubectl exec
+#   psql, see docs/runbooks/backup-restore.md section 4).
+# - Retention: 7 newest dumps kept on the PVC; older ones are deleted in-script
+#   after a successful dump only, so a failed run never shrinks the backlog.
+# - The postgres:16-alpine entrypoint execs the custom command verbatim (no
+#   initdb) because the command is not `postgres`.
+# - Apply the PVC once; the CronJob mounts it ReadWriteOnce. concurrencyPolicy
+#   Forbid prevents overlapping dumps racing on the same volume.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sdkwork-memory-backups
+  labels:
+    app.kubernetes.io/name: sdkwork-memory
+    app.kubernetes.io/component: database-backup
+    app.kubernetes.io/part-of: sdkwork-memory
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # 7 daily dumps of the workspace database plus headroom; raise before the
+      # dump size approaches ~1/3 of this so one retention window always fits.
+      storage: 10Gi
+  # storageClassName: <your-storage-class>  # uncomment/set per cluster
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: sdkwork-memory-db-backup
+  labels:
+    app.kubernetes.io/name: sdkwork-memory
+    app.kubernetes.io/component: database-backup
+    app.kubernetes.io/part-of: sdkwork-memory
+spec:
+  # Daily at 02:17 UTC (off the hour to avoid shared backup-window contention).
+  schedule: "17 2 * * *"
+  timeZone: UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sdkwork-memory
+        app.kubernetes.io/component: database-backup
+    spec:
+      backoffLimit: 2
+      # Keep failed pods around long enough for `kubectl logs` triage.
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: sdkwork-memory
+            app.kubernetes.io/component: database-backup
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: pg-dump
+              # Pin by digest in production: replace <image-digest> with the
+              # actual sha256 of the postgres:16-alpine image you vetted.
+              image: postgres:16-alpine@sha256:<image-digest>
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "-eu", "-c"]
+              args:
+                - |
+                  KEEP=7
+                  STAMP="$(date -u +%Y%m%d-%H%M%S)"
+                  TARGET="/backups/sdkwork-memory-${STAMP}.sql.gz"
+                  pg_dump \
+                    --no-owner \
+                    --no-privileges \
+                    --file=- \
+                    "$SDKWORK_DATABASE_URL" \
+                    | gzip -9 > "$TARGET"
+                  # Fail the Job (and keep the old rotation intact) if the dump
+                  # is empty or the gzip stream is truncated.
+                  test -s "$TARGET"
+                  gzip -t "$TARGET"
+                  echo "wrote $TARGET ($(du -h "$TARGET" | cut -f1))"
+                  # Rotate: keep the KEEP newest dumps, delete the rest. The
+                  # glob deliberately skips any non-matching files.
+                  ls -1t /backups/sdkwork-memory-*.sql.gz 2>/dev/null \
+                    | tail -n +"$((KEEP + 1))" \
+                    | while IFS= read -r old; do rm -f -- "$old"; done
+                  ls -1t /backups/sdkwork-memory-*.sql.gz 2>/dev/null | wc -l
+              env:
+                # Same unified workspace database identity as the gateway and
+                # the migration Job (DATABASE_SPEC_PROCESS_SHARED_POOL §6).
+                - name: SDKWORK_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: sdkwork-memory-database
+                      key: database-url
+                - name: PGCONNECT_TIMEOUT
+                  value: "10"
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+                - name: tmp
+                  mountPath: /tmp
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: "1"
+                  memory: 512Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                # `postgres` uid in the postgres:16-alpine image; the PVC is
+                # group-writable via the pod fsGroup below.
+                runAsUser: 70
+                runAsGroup: 70
+                capabilities:
+                  drop:
+                    - ALL
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: sdkwork-memory-backups
+            - name: tmp
+              emptyDir: {}
+          securityContext:
+            # Makes the PVC mount group-writable for runAsUser 70.
+            fsGroup: 10001

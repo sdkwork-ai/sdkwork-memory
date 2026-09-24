@@ -3127,10 +3127,12 @@ function writeOpenApi() {
     operationId: "memories.list",
     permission: "memory.open.records.read",
     auditEvent: "memory.open.record.list",
+    // Contract parity (tests/contracts/openapi_query_param_parity_test.mjs):
+    // only filters the ListMemoriesQuery DTO + service actually forward to the
+    // store are declared. external_subject_ref and memory_type had no
+    // service/store implementation and were removed pre-launch.
     queryParams: listParams([
       { name: "space_id", in: "query", required: true, schema: idSchema },
-      { name: "memory_type", in: "query", schema: { type: "string" } },
-      { name: "external_subject_ref", in: "query", schema: { type: "string" } },
       { name: "show_expired", in: "query", schema: { type: "boolean" } }
     ]),
     responseSchema: "MemoryRecordList"
@@ -3256,7 +3258,11 @@ function writeOpenApi() {
     operationId: "candidates.list",
     permission: "memory.open.candidates.read",
     auditEvent: "memory.open.candidate.list",
-    queryParams: listParams([{ name: "decision_state", in: "query", schema: { type: "string" } }]),
+    // q/decision_state were never implemented by the candidate store query;
+    // space_id is required by the service (access::require_list_space_id).
+    queryParams: cursorListParams([
+      { name: "space_id", in: "query", required: true, schema: idSchema }
+    ]),
     responseSchema: "MemoryCandidateList"
   }));
   addPath(paths, `${P}/candidates/{candidateId}`, "get", openOperation({

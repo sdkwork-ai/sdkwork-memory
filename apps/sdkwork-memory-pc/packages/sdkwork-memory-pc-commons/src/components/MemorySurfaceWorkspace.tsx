@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from "react-router-dom";
 
 import type { MemoryPcModuleDefinition, MemoryPcSurface, MemoryResourceRegistry } from "../types.ts";
+import { MemoryErrorBoundary } from "./MemoryErrorBoundary.tsx";
 import { MemoryModulePage } from "./MemoryModulePage.tsx";
 import { MemoryPermissionState } from "./MemoryPermissionState.tsx";
 import { MemorySurfaceShell } from "./MemorySurfaceShell.tsx";
@@ -28,7 +29,15 @@ export function MemorySurfaceWorkspace(props: MemorySurfaceWorkspaceProps) {
   const allowed = hasPermissionHint(props.permissionScope, module.permission);
   return (
     <MemorySurfaceShell activeRoute={module.route} modules={props.modules} onSignOut={props.onSignOut} surface={props.surface} userLabel={props.userLabel}>
-      {allowed ? <MemoryModulePage module={module} registry={props.registry} /> : <MemoryPermissionState titleKey={module.titleKey} />}
+      {allowed ? (
+        // Keyed by route so navigating between modules remounts the boundary and a
+        // recovered module never inherits a failed boundary's error state.
+        <MemoryErrorBoundary key={module.route}>
+          <MemoryModulePage module={module} registry={props.registry} />
+        </MemoryErrorBoundary>
+      ) : (
+        <MemoryPermissionState titleKey={module.titleKey} />
+      )}
     </MemorySurfaceShell>
   );
 }

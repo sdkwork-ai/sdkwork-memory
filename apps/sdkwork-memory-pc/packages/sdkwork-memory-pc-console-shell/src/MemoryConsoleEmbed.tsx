@@ -2,6 +2,7 @@ import "@sdkwork/memory-pc-commons/styles.css";
 
 import {
   MemoryConsoleScope,
+  MemoryErrorBoundary,
   MemoryI18nProvider,
   MemoryModulePage,
   MemoryPermissionState,
@@ -155,7 +156,11 @@ function MemoryConsoleEmbedBody({
         </nav>
       ) : null}
       {allowed ? (
-        <MemoryModulePage key={activeModule.id} module={activeModule} registry={registry} />
+        // Keyed by module so switching modules remounts the boundary; a recovered
+        // module never inherits a failed boundary's error state.
+        <MemoryErrorBoundary key={activeModule.id}>
+          <MemoryModulePage module={activeModule} registry={registry} />
+        </MemoryErrorBoundary>
       ) : (
         <MemoryPermissionState titleKey={activeModule.titleKey} />
       )}

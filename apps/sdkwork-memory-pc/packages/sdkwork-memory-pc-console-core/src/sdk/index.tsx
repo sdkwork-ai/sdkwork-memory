@@ -1,4 +1,4 @@
-import { normalizeMemoryItem, normalizeMemoryPage, normalizeMemoryRecord, type MemoryListQuery, type MemoryResourceAction, type MemoryResourceActionContext, type MemoryResourceDataSource, type MemoryResourceFilterDefinition, type MemoryResourceRegistry } from "@sdkwork/memory-pc-commons";
+import { normalizeMemoryItem, normalizeMemoryPage, normalizeMemoryRecord, type MemoryListQuery, type MemoryPcResourceKey, type MemoryResourceAction, type MemoryResourceActionContext, type MemoryResourceDataSource, type MemoryResourceFilterDefinition, type MemoryResourceRegistry } from "@sdkwork/memory-pc-commons";
 import type { SdkworkAppClient } from "@sdkwork/memory-app-sdk";
 import { createContext, useContext, type ReactNode } from "react";
 
@@ -28,23 +28,24 @@ export function createMemoryConsoleResourceRegistry(client: MemoryConsoleSdkClie
     return { idempotencyKey };
   };
   return {
-    spaces: withActions(listSource((query) => client.memory.spaces.list(toListParams(query)), {
-      detail: async (item) => normalizeMemoryRecord(await client.memory.spaces.retrieve(itemId(item, "spaceId", "id"))),
+    spaces: withActions(listSource((query, signal) => client.memory.spaces.list(toListParams(query), { signal }), {
+      detail: async (item, _query, signal) => normalizeMemoryRecord(await client.memory.spaces.retrieve(itemId(item, "spaceId", "id"), { signal })),
     }), [
       action("create", "Create space", { ownerSubjectType: "user", ownerSubjectId: "", spaceType: "personal", displayName: "" }, (context) => client.memory.spaces.create(context.body as unknown as Parameters<typeof client.memory.spaces.create>[0], idempotency(context)), { idempotent: true }),
       action("update", "Update space", { ownerSubjectType: "user", ownerSubjectId: "", spaceType: "personal", displayName: "", lifecycleStatus: "active", version: "" }, (context) => client.memory.spaces.update(selectedId(context, "spaceId"), context.body as unknown as Parameters<typeof client.memory.spaces.update>[1]), { selection: true }),
     ]),
-    memories: withActions(listSource((query) => client.memory.list({ ...toListParams(query), spaceId: requireSpaceId(query) }), {
+    memories: withActions(listSource((query, signal) => client.memory.list({ ...toListParams(query), spaceId: requireSpaceId(query) }, { signal }), {
       // Memory type is the console's primary narrowing axis: spaces hold mixed
       // working/semantic/procedural records and reviewers triage by kind.
       filters: [{ param: "memoryType", labelKey: "memory.filters.memoryType", options: ["working", "session", "semantic", "episodic", "procedural", "habit", "relationship", "domain_knowledge"] }],
-      detail: async (item, query) => {
+      spaceOptionsSource: "spaces",
+      detail: async (item, query, signal) => {
         const memoryId = itemId(item, "memoryId", "id");
-        const record = normalizeMemoryRecord(await client.memory.retrieve(memoryId, { spaceId: itemSpaceId(item, query) }));
+        const record = normalizeMemoryRecord(await client.memory.retrieve(memoryId, { spaceId: itemSpaceId(item, query) }, { signal }));
         // Provenance is what separates a traceable memory from an opaque one, so the
         // detail record carries its sources. A sources failure is reported on the
         // record instead of being swallowed or hiding the record itself.
-        return { ...record, ...await readMemorySources(client, memoryId) };
+        return { ...record, ...await readMemorySources(client, memoryId, signal) };
       },
     }), [
       action("create", "Create memory", { spaceId: "", scope: "user", memoryType: "semantic", canonicalText: "", sensitivityLevel: "internal" }, (context) => client.memory.create(context.body as unknown as Parameters<typeof client.memory.create>[0], idempotency(context)), { idempotent: true }),
@@ -54,22 +55,22 @@ export function createMemoryConsoleResourceRegistry(client: MemoryConsoleSdkClie
     events: actionSource([
       action("create", "Ingest event", { spaceId: "", userId: "", actorType: "user", eventType: "message", payload: {}, sensitivityLevel: "internal" }, (context) => client.memory.events.create(context.body as unknown as Parameters<typeof client.memory.events.create>[0], idempotency(context)), { idempotent: true }),
     ]),
-    candidates: withActions(listSource((query) => client.memory.candidates.list(toListParams(query)), {
-      detail: async (item) => normalizeMemoryRecord(await client.memory.candidates.retrieve(itemId(item, "candidateId", "id"))),
+    candidates: withActions(listSource((query, signal) => client.memory.candidates.list(toListParams(query), { signal }), {
+      detail: async (item, _query, signal) => normalizeMemoryRecord(await client.memory.candidates.retrieve(itemId(item, "candidateId", "id"), { signal })),
       filters: [{ param: "decisionState", labelKey: "memory.filters.decisionState", options: ["pending", "auto_approved", "approved", "rejected", "expired", "superseded"] }],
     }), [
       action("approve", "Approve candidate", { reason: "" }, (context) => client.memory.candidates.approve(selectedId(context, "candidateId"), context.body as unknown as Parameters<typeof client.memory.candidates.approve>[1], idempotency(context)), { idempotent: true, selection: true }),
       action("reject", "Reject candidate", { reason: "" }, (context) => client.memory.candidates.reject(selectedId(context, "candidateId"), context.body as unknown as Parameters<typeof client.memory.candidates.reject>[1], idempotency(context)), { dangerous: true, idempotent: true, reason: true, selection: true }),
     ]),
-    habits: withActions(listSource((query) => client.memory.habits.list(toListParams(query)), {
-      detail: async (item) => normalizeMemoryRecord(await client.memory.habits.retrieve(itemId(item, "habitId", "id"))),
+    habits: withActions(listSource((query, signal) => client.memory.habits.list(toListParams(query), { signal }), {
+      detail: async (item, _query, signal) => normalizeMemoryRecord(await client.memory.habits.retrieve(itemId(item, "habitId", "id"), { signal })),
       filters: [{ param: "stage", labelKey: "memory.filters.stage", options: ["observing", "emerging", "confirmed", "decaying", "inactive", "rejected"] }],
     }), [
       action("update", "Update habit", { description: "", confidence: 0.5, version: "" }, (context) => client.memory.habits.update(selectedId(context, "habitId"), context.body as unknown as Parameters<typeof client.memory.habits.update>[1]), { selection: true }),
       action("confirm", "Confirm habit", { reason: "" }, (context) => client.memory.habits.confirm(selectedId(context, "habitId"), context.body as unknown as Parameters<typeof client.memory.habits.confirm>[1], idempotency(context)), { idempotent: true, selection: true }),
       action("reject", "Reject habit", { reason: "" }, (context) => client.memory.habits.reject(selectedId(context, "habitId"), context.body as unknown as Parameters<typeof client.memory.habits.reject>[1], idempotency(context)), { dangerous: true, idempotent: true, reason: true, selection: true }),
     ]),
-    learningSettings: withActions(itemSource(() => client.memory.learningSettings.retrieve()), [
+    learningSettings: withActions(itemSource((signal) => client.memory.learningSettings.retrieve({ signal })), [
       action("update", "Update settings", { autoExtractEnabled: true, autoApproveThreshold: 0.9, habitLearningEnabled: true }, (context) => client.memory.learningSettings.update(context.body as unknown as Parameters<typeof client.memory.learningSettings.update>[0])),
     ]),
     retrievals: actionSource([
@@ -81,25 +82,26 @@ export function createMemoryConsoleResourceRegistry(client: MemoryConsoleSdkClie
     feedback: actionSource([
       action("create", "Submit feedback", { targetType: "retrieval", targetId: "", feedbackType: "relevance", score: 1, comment: "" }, (context) => client.memory.feedback.create(context.body as unknown as Parameters<typeof client.memory.feedback.create>[0], idempotency(context)), { idempotent: true }),
     ]),
-    entities: withActions(listSource((query) => client.memory.entities.list({ ...toListParams(query), spaceId: query.spaceId }), {
-      detail: async (item) => normalizeMemoryRecord(await client.memory.entities.retrieve(itemId(item, "entityId", "id"))),
+    entities: withActions(listSource((query, signal) => client.memory.entities.list({ ...toListParams(query), spaceId: query.spaceId }, { signal }), {
+      detail: async (item, _query, signal) => normalizeMemoryRecord(await client.memory.entities.retrieve(itemId(item, "entityId", "id"), { signal })),
       // Entity types are tenant-defined, so this stays a free-text filter.
       filters: [{ param: "entityType", labelKey: "memory.filters.entityType" }],
+      spaceOptionsSource: "spaces",
     }), [
       action("create", "Create entity", { spaceId: "", entityType: "person", canonicalName: "", sensitivityLevel: "internal" }, (context) => client.memory.entities.create(context.body as unknown as Parameters<typeof client.memory.entities.create>[0], idempotency(context)), { idempotent: true }),
       action("update", "Update entity", { canonicalName: "", status: "active" }, (context) => client.memory.entities.update(selectedId(context, "entityId"), context.body as unknown as Parameters<typeof client.memory.entities.update>[1]), { selection: true }),
     ]),
-    policyAssignments: withActions(listSource((query) => client.memory.policyAssignments.list(toListParams(query))), [
+    policyAssignments: withActions(listSource((query, signal) => client.memory.policyAssignments.list(toListParams(query), { signal })), [
       action("create", "Assign policy", { policyId: "", targetType: "space", targetId: "", priority: 0, inheritanceMode: "inherit" }, (context) => client.memory.policyAssignments.create(context.body as unknown as Parameters<typeof client.memory.policyAssignments.create>[0], idempotency(context)), { idempotent: true }),
       action("update", "Update assignment", { priority: 0, inheritanceMode: "inherit", status: "active" }, (context) => client.memory.policyAssignments.update(selectedId(context, "policyAssignmentId"), context.body as unknown as Parameters<typeof client.memory.policyAssignments.update>[1]), { selection: true }),
     ]),
-    forgetRequests: withActions(listSource((query) => client.memory.forgetRequests.list(toJobListParams(query)), {
-      detail: async (item) => normalizeMemoryRecord(await client.memory.forgetRequests.retrieve(itemId(item, "forgetRequestId", "forgetJobId", "id"))),
+    forgetRequests: withActions(listSource((query, signal) => client.memory.forgetRequests.list(toJobListParams(query), { signal }), {
+      detail: async (item, _query, signal) => normalizeMemoryRecord(await client.memory.forgetRequests.retrieve(itemId(item, "forgetRequestId", "forgetJobId", "id"), { signal })),
     }), [
       action("create", "Create forget request", { scope: "memory", memoryIds: [], reason: "" }, (context) => client.memory.forgetRequests.create(context.body as unknown as Parameters<typeof client.memory.forgetRequests.create>[0], idempotency(context)), { dangerous: true, idempotent: true, reason: true }),
     ]),
-    exportJobs: withActions(listSource((query) => client.memory.exportJobs.list(toJobListParams(query)), {
-      detail: async (item) => normalizeMemoryRecord(await client.memory.exportJobs.retrieve(itemId(item, "exportJobId", "jobId", "id"))),
+    exportJobs: withActions(listSource((query, signal) => client.memory.exportJobs.list(toJobListParams(query), { signal }), {
+      detail: async (item, _query, signal) => normalizeMemoryRecord(await client.memory.exportJobs.retrieve(itemId(item, "exportJobId", "jobId", "id"), { signal })),
     }), [
       action("create", "Create export", { spaceIds: [], format: "json", includeEvents: true }, (context) => client.memory.exportJobs.create(context.body as unknown as Parameters<typeof client.memory.exportJobs.create>[0], idempotency(context)), { idempotent: true }),
     ]),
@@ -137,19 +139,21 @@ type DetailLoader = NonNullable<MemoryResourceDataSource["loadDetail"]>;
 interface ListSourceOptions {
   detail?: DetailLoader;
   filters?: readonly MemoryResourceFilterDefinition[];
+  spaceOptionsSource?: MemoryPcResourceKey;
 }
 
-function listSource(load: (query: MemoryListQuery) => Promise<unknown>, options: ListSourceOptions = {}): MemoryResourceDataSource {
+function listSource(load: (query: MemoryListQuery, signal?: AbortSignal) => Promise<unknown>, options: ListSourceOptions = {}): MemoryResourceDataSource {
   return {
     kind: "list",
     ...(options.detail ? { loadDetail: options.detail } : {}),
     ...(options.filters ? { filters: options.filters } : {}),
-    async load(query) { return normalizeMemoryPage(await load(query)); },
+    ...(options.spaceOptionsSource ? { spaceOptionsSource: options.spaceOptionsSource } : {}),
+    async load(query, signal) { return normalizeMemoryPage(await load(query, signal)); },
   };
 }
 
-function itemSource(load: () => Promise<unknown>): MemoryResourceDataSource {
-  return { kind: "retrieve", async load() { return normalizeMemoryItem(await load()); } };
+function itemSource(load: (signal?: AbortSignal) => Promise<unknown>): MemoryResourceDataSource {
+  return { kind: "retrieve", async load(_query, signal) { return normalizeMemoryItem(await load(signal)); } };
 }
 
 /**
@@ -191,9 +195,10 @@ function itemSpaceId(item: Record<string, unknown>, query: MemoryListQuery): str
 async function readMemorySources(
   client: MemoryConsoleSdkClient,
   memoryId: string,
+  signal?: AbortSignal,
 ): Promise<{ sources: readonly unknown[] } | { sourcesUnavailable: string }> {
   try {
-    const page = await client.memory.sources.list(memoryId, { pageSize: 20 });
+    const page = await client.memory.sources.list(memoryId, { pageSize: 20 }, { signal });
     return { sources: page.items };
   } catch (reason) {
     return { sourcesUnavailable: reason instanceof Error ? reason.message : String(reason) };

@@ -1,11 +1,11 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { MemoryErrorBoundary } from "@sdkwork/memory-pc-commons";
 
 import { App } from "./App.tsx";
 import { bootstrapMemoryPcRuntime } from "./bootstrap/runtime.ts";
 import "./index.css";
 import "@sdkwork/memory-pc-commons/styles.css";
-import { MemoryErrorBoundary } from "@sdkwork/memory-pc-commons";
 
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Application root element is missing");

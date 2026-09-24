@@ -139,6 +139,16 @@ spec:
               value: "4194304"
             - name: SDKWORK_MEMORY_DRIVE_EXPORT_MAX_BYTES
               value: "67108864"
+            # OTLP/HTTP span export. The release image is built with the `otel`
+            # feature; the runtime enables OTLP export ONLY when this variable
+            # is set to a non-blank value (crates/.../src/observability.rs —
+            # there is no separate tracing-enabled switch). The value below is
+            # a placeholder: point it at your cluster's actual collector
+            # service. The exporter uses the OTLP/HTTP transport
+            # (with_http), so port 4318 — NOT the gRPC port 4317. Keep the
+            # egress rule for port 4318 in networkpolicy.yaml in sync.
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector.observability:4318
             # Background-plane drain budget. Shutdown is ordered HTTP-first:
             # `axum::serve(..).await` returns after in-flight requests finish,
             # then the runtime drains workers within this budget. Keep the sum of

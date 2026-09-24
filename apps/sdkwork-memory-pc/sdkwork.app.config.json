@@ -35,13 +35,18 @@
       "memory.candidates.read",
       "memory.habits.read",
       "memory.retrievals.write",
+      "memory.app.entities.read",
+      "memory.app.policies.write",
       "memory.backend.spaces.read",
       "memory.backend.records.read",
       "memory.backend.candidates.read",
       "memory.backend.indexes.read",
       "memory.backend.providerBindings.read",
       "memory.backend.evalRuns.read",
-      "memory.backend.auditLogs.read"
+      "memory.backend.auditLogs.read",
+      "memory.backend.commercialReadiness.read",
+      "memory.backend.entities.read",
+      "memory.backend.subjects.read"
     ]
   },
   "runtime": {

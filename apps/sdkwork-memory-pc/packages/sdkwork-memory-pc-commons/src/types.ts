@@ -96,6 +96,15 @@ export interface MemoryResourceFilterDefinition {
   options?: readonly string[];
 }
 
+/**
+ * A selectable space option the page derives from the registry's own spaces data
+ * source, so operators pick a scope instead of typing an opaque id.
+ */
+export interface MemorySpaceOption {
+  displayName: string;
+  spaceId: string;
+}
+
 export interface MemoryResourceDataSource {
   actions?: readonly MemoryResourceAction[];
   /**
@@ -109,6 +118,14 @@ export interface MemoryResourceDataSource {
   filters?: readonly MemoryResourceFilterDefinition[];
   kind: "list" | "retrieve";
   load(query: MemoryListQuery, signal?: AbortSignal): Promise<MemoryPageResult>;
+  /**
+   * Registry resource key that enumerates selectable spaces for this resource.
+   *
+   * Declaring it (for example `spaceOptionsSource: "spaces"` on a space-scoped
+   * collection) lets the page render a space dropdown fed by that data source and
+   * fall back to the manual space id input when the options are unavailable.
+   */
+  spaceOptionsSource?: MemoryPcResourceKey;
 }
 
 export interface MemoryResourceActionContext {

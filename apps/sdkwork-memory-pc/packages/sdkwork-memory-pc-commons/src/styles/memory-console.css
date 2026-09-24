@@ -228,3 +228,14 @@
 .dark .sdkwork-memory-console .confirm-control { color: #f0a49c; }
 .dark .sdkwork-memory-console .command-error { color: #f0837a; }
 .dark .sdkwork-memory-console .permission-state { color: #8d968f; }
+
+.sdkwork-memory-console .memory-error-boundary { display: grid; min-height: 320px; place-content: center; justify-items: center; gap: 12px; color: var(--memory-danger); text-align: center; }
+.sdkwork-memory-console .memory-error-boundary h1 { margin: 0; color: var(--memory-ink); font-size: 18px; }
+.sdkwork-memory-console .memory-error-boundary p { max-width: 520px; margin: 0; padding: 0 20px; color: var(--memory-muted); font-size: 12px; line-height: 1.6; }
+.sdkwork-memory-console .memory-error-retry { height: 32px; padding: 0 16px; border: 1px solid var(--memory-line); border-radius: 6px; color: var(--memory-ink); background: transparent; cursor: pointer; font-size: 12px; }
+.sdkwork-memory-console .memory-error-retry:hover { border-color: var(--memory-accent); color: var(--memory-accent); }
+.dark .sdkwork-memory-console .memory-error-boundary { color: #f0837a; }
+.dark .sdkwork-memory-console .memory-error-boundary h1 { color: #e8edef; }
+.dark .sdkwork-memory-console .memory-error-boundary p { color: #8d968f; }
+.dark .sdkwork-memory-console .memory-error-retry { border-color: #3f4a45; color: #cbd4cf; }
+.dark .sdkwork-memory-console .memory-error-retry:hover { border-color: #70d0ae; color: #a8e6d1; }

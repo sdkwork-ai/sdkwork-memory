@@ -418,7 +418,7 @@ impl NativeSqlMemoryStore {
             Some(user_id) => ("user", Some(user_id.to_string())),
             None => ("system", None),
         };
-        sqlx::query(
+        let insert_result = sqlx::query(
             r#"
             INSERT INTO ai_event (
               id,
@@ -450,12 +450,35 @@ impl NativeSqlMemoryStore {
         .bind(event_type)
         .bind(source_type)
         .bind(event_time)
-        .bind(payload_json)
-        .bind(payload_hash)
+        .bind(payload_json.as_str())
+        .bind(payload_hash.as_str())
         .bind(sensitivity_level)
         .bind(now_text())
         .execute(&self.pool)
-        .await?;
+        .await;
+        // A concurrent replica can win the insert between the pre-check and
+        // this statement. Re-derive the idempotent verdict from the stored row
+        // instead of surfacing a raw constraint error.
+        if let Err(error) = insert_result {
+            if !is_unique_violation(&error) {
+                return Err(error.into());
+            }
+            match self.retrieve_event_idempotency_state(scope, event_id).await? {
+                Some(existing)
+                    if existing.space_id == scope.space_id
+                        && existing.payload_json == payload_json
+                        && existing.payload_hash == payload_hash =>
+                {
+                    return Ok(());
+                }
+                _ => {
+                    return Err(NativeSqlStoreError::EventConflict {
+                        tenant_id: scope.tenant_id,
+                        event_id: event_id.to_string(),
+                    });
+                }
+            }
+        }
 
         Ok(())
     }
@@ -2141,7 +2164,7 @@ impl NativeSqlMemoryStore {
         scope: &MemoryScopeContext,
         journal: &MemoryMutationJournal,
     ) -> Result<(), NativeSqlStoreError> {
-        sqlx::query(
+        let insert_result = sqlx::query(
             r#"
             INSERT INTO ai_outbox_event (
               id, uuid, tenant_id, aggregate_type, aggregate_id,
@@ -2871,7 +2894,7 @@ impl NativeSqlMemoryStore {
             });
         }
 
-        sqlx::query(
+        let insert_result = sqlx::query(
             r#"
             INSERT INTO ai_outbox_event (
               id,
@@ -2900,7 +2923,35 @@ impl NativeSqlMemoryStore {
         .bind(now_text())
         .bind(now_text())
         .execute(&self.pool)
-        .await?;
+        .await;
+        // Same concurrent-insert closure as the event append: a uniqueness
+        // violation re-checks the stored row and resolves to the idempotent
+        // success or the typed conflict, never a raw database error.
+        if let Err(error) = insert_result {
+            if !is_unique_violation(&error) {
+                return Err(error.into());
+            }
+            match self
+                .retrieve_outbox_idempotency_state(command.scope, command.outbox_id)
+                .await?
+            {
+                Some(existing)
+                    if existing.aggregate_type == command.aggregate_type
+                        && existing.aggregate_id == command.aggregate_id
+                        && existing.event_type == command.event_type
+                        && existing.event_version == command.event_version
+                        && existing.payload_json == command.payload_json =>
+                {
+                    return Ok(existing.into_outbox_event(command.outbox_id));
+                }
+                _ => {
+                    return Err(NativeSqlStoreError::OutboxConflict {
+                        tenant_id: command.scope.tenant_id,
+                        outbox_id: command.outbox_id.to_string(),
+                    });
+                }
+            }
+        }
 
         Ok(NativeSqlMemoryOutboxEvent {
             outbox_id: command.outbox_id.to_string(),
@@ -6284,6 +6335,22 @@ pub struct NativeSqlAppendOutboxEventCommand<'a> {
     pub event_type: &'a str,
     pub event_version: &'a str,
     pub payload_json: &'a str,
+}
+
+/// True when the database rejected the statement because a uniqueness
+/// constraint fired. Covers both dialects: PostgreSQL SQLSTATE 23505 and the
+/// SQLite extended codes/messages for UNIQUE/PK constraint violations. With
+/// sqlx::Any the portable signal is the raw code plus message text, because
+/// `AnyDatabaseError` does not reliably map `ErrorKind` across engines.
+pub(crate) fn is_unique_violation(error: &sqlx::Error) -> bool {
+    let sqlx::Error::Database(db) = error else {
+        return false;
+    };
+    let code = db.code().map(|code| code.to_string()).unwrap_or_default();
+    let message = db.message().to_ascii_lowercase();
+    matches!(code.as_str(), "23505" | "2067" | "1555")
+        || message.contains("unique constraint")
+        || message.contains("duplicate key")
 }
 
 #[derive(Debug, Error)]

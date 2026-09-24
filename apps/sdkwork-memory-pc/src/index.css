@@ -49,6 +49,22 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   font-size: 14px;
 }
 .fatal-state { color: var(--danger); }
+/* Top-level error boundary fallback (renders outside the console presentation scope). */
+.memory-error-boundary {
+  display: grid;
+  min-height: 100vh;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 24px;
+  color: var(--danger);
+  background: var(--canvas);
+  text-align: center;
+}
+.memory-error-boundary h1 { margin: 0; color: var(--ink); font-size: 20px; }
+.memory-error-boundary p { max-width: 520px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.memory-error-boundary .memory-error-retry { height: 32px; padding: 0 16px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--panel); cursor: pointer; font-size: 12px; }
+.memory-error-boundary .memory-error-retry:hover { border-color: var(--console); color: var(--console); }
 .memory-auth-header { margin-bottom: 24px; }
 .memory-auth-brand { display: flex; align-items: center; gap: 9px; margin-bottom: 22px; color: #116f59; }
 .memory-auth-brand span { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid #b8d9cd; border-radius: 7px; background: #e8f4ef; }
