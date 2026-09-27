@@ -6,7 +6,7 @@ use sdkwork_memory_contract::{
     MemoryMigrationJobRequest, MemoryOpenApi, MemoryProviderBinding, MemoryProviderBindingList,
     MemoryProviderBindingRequest, MemoryRecordRequest, MemoryRetentionJobRequest,
     MemoryRetrievalProfile, MemoryRetrievalProfileList, MemoryRetrievalProfileRequest,
-    MemoryServiceError, MemoryServiceResult, PageInfo,
+    MemoryReviewRequest, MemoryServiceError, MemoryServiceResult, PageInfo,
 };
 use sdkwork_memory_plugin_native_sql::{
     ConsolidateDuplicateRecordsCommand, InsertMemoryEvalRunCommand, NativeSqlEvalRunRow,
@@ -562,6 +562,7 @@ impl OpenMemoryService {
         &self,
         context: MemoryBackendRequestContext,
         index_id: u64,
+        request: MemoryReviewRequest,
     ) -> MemoryServiceResult<MemoryLearningJob> {
         let tenant_id = platform::tenant_id_i64(context.tenant_id)?;
         let rebuilt_at = platform::current_timestamp();
@@ -599,12 +600,22 @@ impl OpenMemoryService {
         let finished_at = platform::current_timestamp();
         let mut job =
             Self::new_learning_job(job_id, "index_rebuild", "succeeded", index.space_id, &index)?;
-        job.result = Some(serde_json::json!({
+        let mut result = serde_json::json!({
             "indexId": index_id,
             "lastRebuiltAt": row.last_rebuilt_at,
             "status": row.status,
             "rebuiltRecords": rebuilt_records,
-        }));
+        });
+        // The typed review reason is destructive-operation evidence: it belongs
+        // in the persisted governance audit record, echoed in the job result
+        // only when the operator supplied one.
+        if request.reason.is_some() || request.reviewer_note.is_some() {
+            result["review"] = serde_json::json!({
+                "reason": request.reason,
+                "reviewerNote": request.reviewer_note,
+            });
+        }
+        job.result = Some(result);
         job.finished_at = Some(finished_at.clone());
         job.updated_at = finished_at;
         self.persist_governance_job(

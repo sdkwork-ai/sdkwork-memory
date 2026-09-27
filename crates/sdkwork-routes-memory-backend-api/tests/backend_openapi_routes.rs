@@ -229,6 +229,7 @@ impl MemoryBackendApi for StubBackendApi {
         &self,
         _c: MemoryBackendRequestContext,
         _id: u64,
+        _request: MemoryReviewRequest,
     ) -> MemoryServiceResult<MemoryLearningJob> {
         unimplemented!("stub -- not called in route-mount test")
     }

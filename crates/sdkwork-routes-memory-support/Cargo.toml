@@ -11,6 +11,7 @@ workspace = true
 [dependencies]
 async-trait.workspace = true
 axum.workspace = true
+futures = "0.3"
 sdkwork-iam-web-adapter.workspace = true
 sdkwork-database-sqlx.workspace = true
 sdkwork-memory-contract.workspace = true
@@ -20,6 +21,7 @@ sdkwork-web-axum.workspace = true
 sdkwork-web-bootstrap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tower.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
 tracing.workspace = true

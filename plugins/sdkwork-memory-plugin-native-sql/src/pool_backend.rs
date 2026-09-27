@@ -34,10 +34,12 @@ pub fn normalize_memory_database_config(mut config: DatabaseConfig) -> DatabaseC
         // its URL parser or a connect hook, so the store enables them once on
         // the pool's single connection after creation. Pool recycling would
         // silently drop those PRAGMAs (foreign key enforcement included), so
-        // the connection is pinned for the process lifetime instead.
+        // the connection is pinned for the process lifetime instead. The
+        // timeout is a finite ten years — `u64::MAX` overflows sqlx's
+        // `Instant + duration` reaper arithmetic and panics the pool task.
         config.max_connections = 1;
-        config.idle_timeout_secs = u64::MAX;
-        config.max_lifetime_secs = u64::MAX;
+        config.idle_timeout_secs = 315_360_000;
+        config.max_lifetime_secs = 315_360_000;
     }
     config
 }

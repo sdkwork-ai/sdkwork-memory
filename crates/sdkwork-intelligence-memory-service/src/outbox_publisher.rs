@@ -51,11 +51,27 @@ pub fn spawn_outbox_publisher(
                     }
                 }
                 _ = tokio::time::sleep(Duration::from_secs(poll_interval)) => {
-                    if let Err(error) = store
-                        .requeue_stale_processing_outbox_events(lease_duration_seconds)
+                    match store
+                        .requeue_stale_processing_outbox_events(config.max_retries)
                         .await
                     {
-                        tracing::warn!(error = %error, "memory outbox expired lease requeue failed");
+                        Ok(counts) => {
+                            if counts.dead > 0 {
+                                // A crash loop (worker killed mid-delivery on
+                                // every attempt) dead-letters here; make it
+                                // visible instead of silently exhausting.
+                                crate::domain_metrics::memory_domain_metrics()
+                                    .record_outbox_dead_letter();
+                                tracing::error!(
+                                    dead = counts.dead,
+                                    max_retries = config.max_retries,
+                                    "memory outbox events dead-lettered after exhausted crash retries"
+                                );
+                            }
+                        }
+                        Err(error) => {
+                            tracing::warn!(error = %error, "memory outbox expired lease requeue failed");
+                        }
                     }
 
                     let lease_token = match platform::next_numeric_id() {

@@ -71,7 +71,7 @@ export function createMemoryConsoleResourceRegistry(client: MemoryConsoleSdkClie
       action("reject", "Reject habit", { reason: "" }, (context) => client.memory.habits.reject(selectedId(context, "habitId"), context.body as unknown as Parameters<typeof client.memory.habits.reject>[1], idempotency(context)), { dangerous: true, idempotent: true, reason: true, selection: true }),
     ]),
     learningSettings: withActions(itemSource((signal) => client.memory.learningSettings.retrieve({ signal })), [
-      action("update", "Update settings", { autoExtractEnabled: true, autoApproveThreshold: 0.9, habitLearningEnabled: true }, (context) => client.memory.learningSettings.update(context.body as unknown as Parameters<typeof client.memory.learningSettings.update>[0])),
+      action("update", "Update settings", { autoPromoteCandidates: false, habitLearningEnabled: true }, (context) => client.memory.learningSettings.update(context.body as unknown as Parameters<typeof client.memory.learningSettings.update>[0])),
     ]),
     retrievals: actionSource([
       action("create", "Run retrieval", { query: "", spaceIds: [], topK: 10, contextBudgetTokens: 2048, includeTrace: true }, (context) => client.memory.retrievals.create(context.body as unknown as Parameters<typeof client.memory.retrievals.create>[0], idempotency(context)), { idempotent: true }),

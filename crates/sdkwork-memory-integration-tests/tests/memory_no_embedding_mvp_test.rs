@@ -501,7 +501,15 @@ async fn delete_all_memories_sweeps_active_records_and_reports_the_ids() {
 
     assert_eq!(result.deleted_count, 2);
 
-    assert_eq!(result.deleted_memory_ids.len(), 2);
+    // The receipt is count-only by contract: no id list is returned.
+
+    let response_json =
+        serde_json::to_value(&result).expect("bulk deletion receipt must serialize");
+    assert_eq!(
+        response_json,
+        serde_json::json!({ "deletedCount": "2" }),
+        "delete_all must not echo deleted ids"
+    );
 
     // The sweep is idempotent: a repeat deletes nothing and still succeeds.
 
@@ -771,7 +779,6 @@ async fn entity_provenance_boost_surfaces_graph_linked_memories() {
         edge.source_memory_id.as_deref(),
         Some(memory.memory_id.to_string())
             .as_deref()
-            .map(|s| s as &str)
             .or(edge.source_memory_id.as_deref())
     );
 
@@ -945,12 +952,6 @@ async fn vector_signal_promotes_the_semantically_near_memory_when_bound() {
         explain: None,
         include_trace: None,
     };
-
-    let rank_of =
-        |hits: &[sdkwork_memory_contract::MemoryRetrievalHit], target: u64| -> Option<usize> {
-            hits.iter()
-                .position(|hit| hit.memory.as_ref().is_some_and(|m| m.memory_id == target))
-        };
 
     let with_vector = service
         .create_retrieval(context.clone(), request(Some(5002)))

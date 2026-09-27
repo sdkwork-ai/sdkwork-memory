@@ -5,8 +5,43 @@ use crate::store::{now_text, NativeSqlMemoryStore, NativeSqlStoreError};
 
 const PROVIDER_HEALTH_ADVISORY_LOCK_ID: i64 = 0x4D45_4D48_5052_4F42;
 
+/// Session-scoped provider health probe lock.
+///
+/// The probe pass walks every tenant/binding page with real HTTP probes, so
+/// holding it open inside a SQL transaction pinned a pooled connection in
+/// 'idle in transaction' for minutes. The lease instead takes a
+/// session-level advisory lock on a dedicated connection: no transaction is
+/// open, and release (or, as a safety net, Drop) closes the connection,
+/// which releases session locks by definition.
 pub struct NativeSqlProviderHealthLease<'a> {
-    _transaction: Option<sqlx::Transaction<'a, sqlx::Any>>,
+    connection: Option<::sqlx::pool::PoolConnection<::sqlx::Any>>,
+    _lifetime: std::marker::PhantomData<&'a ()>,
+}
+
+impl NativeSqlProviderHealthLease<'_> {
+    /// Releases the advisory lock and returns the connection to the pool.
+    pub async fn release(mut self) -> Result<(), NativeSqlStoreError> {
+        if let Some(connection) = self.connection.as_mut() {
+            sqlx::query("SELECT pg_advisory_unlock(?)")
+                .bind(PROVIDER_HEALTH_ADVISORY_LOCK_ID)
+                .execute(&mut **connection)
+                .await?;
+        }
+        self.connection = None;
+        Ok(())
+    }
+}
+
+impl Drop for NativeSqlProviderHealthLease<'_> {
+    fn drop(&mut self) {
+        if let Some(connection) = self.connection.take() {
+            // Session advisory locks survive a connection returning to the
+            // pool, so a lease dropped without release must NOT go back:
+            // detaching closes the connection, which releases the lock.
+            let _detached = connection.detach();
+            tracing::warn!("provider health lease dropped without explicit release");
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -121,18 +156,29 @@ impl NativeSqlMemoryStore {
             .fetch_one(self.pool())
             .await?;
         if count == 0 {
-            self.insert_mem_index(
-                tenant_id,
-                "1",
-                None,
-                "keyword",
-                "2026-06-10",
-                "active",
-                None,
-                None,
-                None,
-            )
-            .await?;
+            // Same idempotent-seeding race treatment as the implementation
+            // profile above: a concurrent seeder's unique violation is fine.
+            if let Err(error) = self
+                .insert_mem_index(
+                    tenant_id,
+                    "1",
+                    None,
+                    "keyword",
+                    "2026-06-10",
+                    "active",
+                    None,
+                    None,
+                    None,
+                )
+                .await
+            {
+                if error
+                    .inner_sqlx_error()
+                    .is_none_or(crate::store::is_unique_violation)
+                {
+                    return Err(error);
+                }
+            }
         }
         Ok(())
     }
@@ -524,18 +570,30 @@ impl NativeSqlMemoryStore {
                     r#"{"keyword":true,"embedding":false,"productionQualified":true}"#,
                 ),
             };
-            self.insert_mem_implementation_profile(
-                tenant_id,
-                "1",
-                name,
-                implementation_kind,
-                "primary",
-                "active",
-                capability_json,
-                None,
-                None,
-            )
-            .await?;
+            // Two concurrent first requests can both pass the count check;
+            // the tenant-unique uuid turns the loser into a unique violation,
+            // which for a default-seeding idempotent insert IS success.
+            if let Err(error) = self
+                .insert_mem_implementation_profile(
+                    tenant_id,
+                    "1",
+                    name,
+                    implementation_kind,
+                    "primary",
+                    "active",
+                    capability_json,
+                    None,
+                    None,
+                )
+                .await
+            {
+                if error
+                    .inner_sqlx_error()
+                    .is_none_or(crate::store::is_unique_violation)
+                {
+                    return Err(error);
+                }
+            }
         }
         Ok(())
     }
@@ -845,16 +903,23 @@ impl NativeSqlMemoryStore {
         &self,
     ) -> Result<Option<NativeSqlProviderHealthLease<'_>>, NativeSqlStoreError> {
         if self.dialect() == crate::MemorySqlDialect::Sqlite {
-            return Ok(Some(NativeSqlProviderHealthLease { _transaction: None }));
+            return Ok(Some(NativeSqlProviderHealthLease {
+            connection: None,
+            _lifetime: std::marker::PhantomData,
+        }));
         }
 
-        let mut transaction = self.begin_tx().await?;
-        let acquired: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(?)")
+        let mut connection = self.pool().acquire().await?;
+        let acquired: bool = sqlx::query_scalar("SELECT pg_try_advisory_lock(?)")
             .bind(PROVIDER_HEALTH_ADVISORY_LOCK_ID)
-            .fetch_one(&mut *transaction)
+            .fetch_one(&mut *connection)
             .await?;
-        Ok(acquired.then_some(NativeSqlProviderHealthLease {
-            _transaction: Some(transaction),
+        if !acquired {
+            return Ok(None);
+        }
+        Ok(Some(NativeSqlProviderHealthLease {
+            connection: Some(connection),
+            _lifetime: std::marker::PhantomData,
         }))
     }
 

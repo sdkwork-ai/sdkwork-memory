@@ -75,7 +75,9 @@ fn context_pack_suppresses_duplicate_memories() {
     ];
     let (pack, _tokens, truncated) = build_context_pack_from_hits(&hits, 100);
 
-    assert!(truncated);
+    // Deduplication is not truncation: the pack reports it through
+    // `deduplicatedCount`, leaving `truncated` to mean budget pressure only.
+    assert!(!truncated);
     assert_eq!(pack["fragments"].as_array().unwrap().len(), 1);
     assert_eq!(pack["selection"]["deduplicatedCount"], 1);
 }

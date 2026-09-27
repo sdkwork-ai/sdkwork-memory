@@ -1,7 +1,7 @@
 import { backendApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { MemoryAuditLog, MemoryBinding, MemoryBindingRequest, MemoryCandidate, MemoryCapabilityBinding, MemoryCapabilityBindingRequest, MemoryCommercialReadiness, MemoryCommercialReadinessRequest, MemoryEdge, MemoryEdgePatch, MemoryEdgeRequest, MemoryEntity, MemoryEntityPatch, MemoryEntityRequest, MemoryEvalRun, MemoryEvalRunRequest, MemoryEvent, MemoryExtractionRequest, MemoryImplementationProfile, MemoryImplementationProfileRequest, MemoryIndex, MemoryIndexRequest, MemoryLearningJob, MemoryMigrationJobRequest, MemoryPolicy, MemoryPolicyAssignment, MemoryPolicyAssignmentPatch, MemoryPolicyAssignmentRequest, MemoryPolicyPatch, MemoryPolicyRequest, MemoryProviderBinding, MemoryProviderBindingRequest, MemoryProviderHealth, MemoryRecord, MemoryRecordRequest, MemoryResolveCapabilitiesRequest, MemoryResolvedCapabilityList, MemoryRetentionJobRequest, MemoryRetrievalProfile, MemoryRetrievalProfileRequest, MemoryRetrievalTrace, MemoryReviewRequest, MemorySpace, MemorySpaceRequest, MemorySubject, MemorySubjectPatch, MemorySubjectRequest, PageInfo } from '../types';
+import type { MemoryAuditLog, MemoryBinding, MemoryBindingRequest, MemoryCandidate, MemoryCapabilityBinding, MemoryCapabilityBindingRequest, MemoryCommercialReadiness, MemoryCommercialReadinessRequest, MemoryEdge, MemoryEdgePatch, MemoryEdgeRequest, MemoryEntity, MemoryEntityPatch, MemoryEntityRequest, MemoryEvalRun, MemoryEvalRunRequest, MemoryEvent, MemoryExtractionRequest, MemoryImplementationProfile, MemoryImplementationProfileRequest, MemoryIndex, MemoryIndexRequest, MemoryLearningJob, MemoryMigrationJobRequest, MemoryPolicy, MemoryPolicyAssignment, MemoryPolicyAssignmentPatch, MemoryPolicyAssignmentRequest, MemoryPolicyPatch, MemoryPolicyRequest, MemoryProviderBinding, MemoryProviderBindingRequest, MemoryProviderHealth, MemoryRecord, MemoryRecordPatch, MemoryRecordRequest, MemoryResolveCapabilitiesRequest, MemoryResolvedCapabilityList, MemoryRetentionJobRequest, MemoryRetrievalProfile, MemoryRetrievalProfileRequest, MemoryRetrievalTrace, MemoryReviewRequest, MemorySpace, MemorySpaceRequest, MemorySubject, MemorySubjectPatch, MemorySubjectRequest, PageInfo } from '../types';
 
 
 export interface MemoryCommercialReadinessRebuildParams {
@@ -1090,7 +1090,7 @@ async retrieve(memoryId: string, params: MemoryRetrieveParams, requestOptions?: 
     return this.client.request<MemoryRecord>(appendQueryString(backendApiPath(`/memory/memories/${serializePathParameter(memoryId, { name: 'memoryId', style: 'simple', explode: false })}`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 
-async update(memoryId: string, body: MemoryRecordRequest, params: MemoryUpdateParams, requestOptions?: ApiRequestOptions): Promise<MemoryRecord> {
+async update(memoryId: string, body: MemoryRecordPatch, params: MemoryUpdateParams, requestOptions?: ApiRequestOptions): Promise<MemoryRecord> {
     const query = buildQueryString([
       { name: 'space_id', value: params.spaceId, style: 'form', explode: true, allowReserved: false },
     ]);

@@ -2,13 +2,14 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use sdkwork_intelligence_memory_service::OpenMemoryService;
 use sdkwork_memory_test_support::web_auth::{
-    memory_access_token, memory_auth_token_bearer, memory_dev_api_key,
+    lock_integration_test_env, memory_access_token, memory_auth_token_bearer, memory_dev_api_key,
 };
 use sdkwork_routes_memory_open_api::{build_router_with_open_api, wrap_router_with_web_framework};
 use sdkwork_web_core::DefaultWebRequestContextResolver;
 use tower::util::ServiceExt;
 
 async fn wrapped_open_api_router() -> axum::Router {
+    let _env = lock_integration_test_env().await;
     let store = sdkwork_memory_test_support::space_fixtures::new_seeded_in_memory_store().await;
     let business = build_router_with_open_api(OpenMemoryService::new(store));
     wrap_router_with_web_framework(DefaultWebRequestContextResolver::default(), business)

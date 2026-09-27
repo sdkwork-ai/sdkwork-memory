@@ -15,11 +15,13 @@ pub mod pool_backend;
 mod feedback;
 pub mod privacy;
 pub mod readiness_store;
+pub mod retention;
 pub mod search_index;
 mod space_data;
 mod sqlx_compat;
 pub mod store;
 
+pub use learning_jobs::StaleRequeueCounts;
 pub use admin_tables::*;
 pub use commercial_store::*;
 pub use consolidation::*;

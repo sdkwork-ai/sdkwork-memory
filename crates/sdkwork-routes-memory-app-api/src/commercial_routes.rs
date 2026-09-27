@@ -1,11 +1,11 @@
 //! Commercial entity and policy assignment routes for the App API.
 
 use axum::{
-    extract::Path,
     response::Response,
     routing::{get, patch},
-    Extension, Json, Router,
+    Extension, Router,
 };
+use sdkwork_routes_memory_support::{MemoryJson, MemoryPath};
 use sdkwork_intelligence_memory_service::OpenMemoryService;
 use sdkwork_memory_contract::{
     CreateEntityCommand, CreatePolicyAssignmentCommand, ListEntitiesQuery,
@@ -32,7 +32,7 @@ pub fn commercial_routes() -> Router {
 async fn create_entity(
     Extension(state): Extension<AppState>,
     context: Option<Extension<MemoryAppRequestContext>>,
-    Json(mut cmd): Json<CreateEntityCommand>,
+    MemoryJson(mut cmd): MemoryJson<CreateEntityCommand>,
 ) -> Result<Response, ApiProblem> {
     let product = state.require_product()?;
     let context = require_app_context(context)?;
@@ -47,7 +47,7 @@ async fn create_entity(
 async fn retrieve_entity(
     Extension(state): Extension<AppState>,
     context: Option<Extension<MemoryAppRequestContext>>,
-    Path(entity_id): Path<String>,
+    MemoryPath(entity_id): MemoryPath<String>,
 ) -> Result<Response, ApiProblem> {
     let product = state.require_product()?;
     let context = require_app_context(context)?;
@@ -80,8 +80,8 @@ async fn list_entities(
 async fn update_entity(
     Extension(state): Extension<AppState>,
     context: Option<Extension<MemoryAppRequestContext>>,
-    Path(entity_id): Path<String>,
-    Json(cmd): Json<UpdateEntityCommand>,
+    MemoryPath(entity_id): MemoryPath<String>,
+    MemoryJson(cmd): MemoryJson<UpdateEntityCommand>,
 ) -> Result<Response, ApiProblem> {
     let product = state.require_product()?;
     let context = require_app_context(context)?;
@@ -100,7 +100,7 @@ async fn update_entity(
 async fn create_policy_assignment(
     Extension(state): Extension<AppState>,
     context: Option<Extension<MemoryAppRequestContext>>,
-    Json(mut cmd): Json<CreatePolicyAssignmentCommand>,
+    MemoryJson(mut cmd): MemoryJson<CreatePolicyAssignmentCommand>,
 ) -> Result<Response, ApiProblem> {
     let product = state.require_product()?;
     let context = require_app_context(context)?;
@@ -122,8 +122,8 @@ async fn list_policy_assignments(
 async fn update_policy_assignment(
     Extension(state): Extension<AppState>,
     context: Option<Extension<MemoryAppRequestContext>>,
-    Path(assignment_id): Path<String>,
-    Json(cmd): Json<UpdatePolicyAssignmentCommand>,
+    MemoryPath(assignment_id): MemoryPath<String>,
+    MemoryJson(cmd): MemoryJson<UpdatePolicyAssignmentCommand>,
 ) -> Result<Response, ApiProblem> {
     let product = state.require_product()?;
     let context = require_app_context(context)?;

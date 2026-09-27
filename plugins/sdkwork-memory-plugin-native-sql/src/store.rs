@@ -3391,47 +3391,67 @@ impl NativeSqlMemoryStore {
         Ok(u32::try_from(result.rows_affected()).unwrap_or(0))
     }
 
+    /// Marks a delivered event published. The lease triple is compared in the
+    /// WHERE clause (cluster takeover fencing): a worker whose lease expired
+    /// and was taken over cannot acknowledge an event it no longer owns.
     pub async fn mark_outbox_published(
         &self,
         scope: &MemoryScopeContext,
         outbox_id: &str,
+        lease_owner: &str,
+        lease_token: &str,
     ) -> Result<Option<NativeSqlMemoryOutboxEvent>, NativeSqlStoreError> {
+        let timestamp = now_text();
         sqlx::query(
             r#"
             UPDATE ai_outbox_event
             SET publish_state = 'published',
                 published_at = ?,
                 updated_at = ?
-            WHERE tenant_id = ? AND uuid = ? AND publish_state IN ('pending','processing')
+            WHERE tenant_id = ? AND uuid = ?
+              AND publish_state IN ('pending','processing')
+              AND lease_owner = ? AND lease_token = ? AND lease_expires_at > ?
             "#,
         )
-        .bind(now_text())
-        .bind(now_text())
+        .bind(&timestamp)
+        .bind(&timestamp)
         .bind(scope.tenant_id)
         .bind(outbox_id)
+        .bind(lease_owner)
+        .bind(lease_token)
+        .bind(&timestamp)
         .execute(&self.pool)
         .await?;
 
         self.retrieve_outbox_event(scope, outbox_id).await
     }
 
+    /// Marks an event failed under the caller's live lease (see the fencing
+    /// note on [`Self::mark_outbox_published`]).
     pub async fn mark_outbox_failed(
         &self,
         scope: &MemoryScopeContext,
         outbox_id: &str,
+        lease_owner: &str,
+        lease_token: &str,
     ) -> Result<Option<NativeSqlMemoryOutboxEvent>, NativeSqlStoreError> {
+        let timestamp = now_text();
         sqlx::query(
             r#"
             UPDATE ai_outbox_event
             SET publish_state = 'failed',
                 retry_count = retry_count + 1,
                 updated_at = ?
-            WHERE tenant_id = ? AND uuid = ? AND publish_state = 'pending'
+            WHERE tenant_id = ? AND uuid = ? AND publish_state = 'processing'
+              AND lease_owner = ? AND lease_token = ? AND lease_expires_at > ?
             "#,
         )
-        .bind(now_text())
+        .bind(&timestamp)
         .bind(scope.tenant_id)
         .bind(outbox_id)
+        .bind(lease_owner)
+        .bind(lease_token)
+        .bind(&timestamp)
         .execute(&self.pool)
         .await?;
 
@@ -3568,28 +3588,59 @@ impl NativeSqlMemoryStore {
         .await
     }
 
+    /// Requeues stale `'processing'` outbox events whose lease expired. The
+    /// crash counts against the same retry budget as delivery failures: each
+    /// sweep charges `retry_count`, and events past `max_retries` land
+    /// terminally `'failed'` instead of being redelivered forever. Returns
+    /// how many events were requeued and how many were dead-lettered.
     pub async fn requeue_stale_processing_outbox_events(
         &self,
-        _stale_after_seconds: u64,
-    ) -> Result<u64, NativeSqlStoreError> {
+        max_retries: u32,
+    ) -> Result<crate::learning_jobs::StaleRequeueCounts, NativeSqlStoreError> {
         let timestamp = now_text();
-        let result = sqlx::query(
+        let max_retries = i64::from(max_retries);
+        let dead = sqlx::query(
             r#"
             UPDATE ai_outbox_event
-            SET publish_state = 'pending',
+            SET publish_state = 'failed',
+                retry_count = retry_count + 1,
                 lease_owner = NULL,
                 lease_token = NULL,
                 lease_expires_at = NULL,
                 updated_at = ?
             WHERE publish_state = 'processing'
               AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
+              AND retry_count + 1 >= ?
             "#,
         )
         .bind(&timestamp)
         .bind(&timestamp)
+        .bind(max_retries)
         .execute(&self.pool)
         .await?;
-        Ok(result.rows_affected())
+        let requeued = sqlx::query(
+            r#"
+            UPDATE ai_outbox_event
+            SET publish_state = 'pending',
+                retry_count = retry_count + 1,
+                lease_owner = NULL,
+                lease_token = NULL,
+                lease_expires_at = NULL,
+                updated_at = ?
+            WHERE publish_state = 'processing'
+              AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
+              AND retry_count + 1 < ?
+            "#,
+        )
+        .bind(&timestamp)
+        .bind(&timestamp)
+        .bind(max_retries)
+        .execute(&self.pool)
+        .await?;
+        Ok(crate::learning_jobs::StaleRequeueCounts {
+            requeued: requeued.rows_affected(),
+            dead: dead.rows_affected(),
+        })
     }
 
     pub async fn renew_outbox_delivery_lease(
@@ -3933,25 +3984,48 @@ impl NativeSqlMemoryStore {
             message: "retrieval trace append did not return a stored row".to_string(),
         })?;
 
+        // Resolve every referenced memory row id in one query instead of one
+        // point query per hit: uuid is tenant-unique
+        // (uk_ai_record_uuid), so tenant + status + uuid IN (...) resolves
+        // exactly the rows the per-hit point queries did.
+        let mut memory_id_lookup: std::collections::HashMap<String, i64> =
+            std::collections::HashMap::new();
+        let mut distinct_memory_ids: Vec<&str> = Vec::new();
+        let mut seen_memory_ids: std::collections::HashSet<&str> =
+            std::collections::HashSet::new();
+        for hit in &command.hits {
+            if let Some(memory_id) = hit.memory_id.as_deref() {
+                if seen_memory_ids.insert(memory_id) {
+                    distinct_memory_ids.push(memory_id);
+                }
+            }
+        }
+        if !distinct_memory_ids.is_empty() {
+            let placeholders = vec!["?"; distinct_memory_ids.len()].join(", ");
+            let lookup_sql = format!(
+                r#"
+                SELECT uuid, id
+                FROM ai_record
+                WHERE tenant_id = ?
+                  AND status <> 'deleted'
+                  AND uuid IN ({placeholders})
+                "#
+            );
+            let mut lookup = sqlx::query(&lookup_sql).bind(command.scope.tenant_id);
+            for memory_id in &distinct_memory_ids {
+                lookup = lookup.bind(memory_id);
+            }
+            let rows = lookup.fetch_all(&mut *transaction).await?;
+            for row in rows {
+                let uuid: String = row.get("uuid");
+                let id: i64 = row.get("id");
+                memory_id_lookup.insert(uuid, id);
+            }
+        }
+
         for hit in &command.hits {
             let memory_row_id = match hit.memory_id.as_deref() {
-                Some(memory_id) => {
-                    sqlx::query_scalar::<_, i64>(
-                        r#"
-                        SELECT id
-                        FROM ai_record
-                        WHERE tenant_id = ?
-                          AND space_id = ?
-                          AND uuid = ?
-                          AND status <> 'deleted'
-                        "#,
-                    )
-                    .bind(command.scope.tenant_id)
-                    .bind(hit.space_id.unwrap_or(command.scope.space_id))
-                    .bind(memory_id)
-                    .fetch_optional(&mut *transaction)
-                    .await?
-                }
+                Some(memory_id) => memory_id_lookup.get(memory_id).copied(),
                 None => None,
             };
             sqlx::query(
@@ -4217,6 +4291,18 @@ impl NativeSqlMemoryStore {
                 "0013",
                 include_str!(
                     "../../../tests/fixtures/database/sqlite/migrations/0013_memory_feedback.up.sql"
+                ),
+            ),
+            (
+                "0014",
+                include_str!(
+                    "../../../tests/fixtures/database/sqlite/migrations/0014_claim_order_and_keyset_indexes.up.sql"
+                ),
+            ),
+            (
+                "0015",
+                include_str!(
+                    "../../../tests/fixtures/database/sqlite/migrations/0015_job_retry_backoff.up.sql"
                 ),
             ),
         ];
@@ -5736,7 +5822,12 @@ impl MemoryOutboxStorePort for NativeSqlMemoryStore {
         command: MarkMemoryOutboxPublishedCommand,
     ) -> MemorySpiResult<Option<MemoryOutboxEvent>> {
         let outbox = self
-            .mark_outbox_published(&command.scope, &command.outbox_id)
+            .mark_outbox_published(
+                &command.scope,
+                &command.outbox_id,
+                &command.lease_owner,
+                &command.lease_token,
+            )
             .await
             .map_err(|err| port_error("MemoryOutboxStorePort", err))?;
 
@@ -5748,7 +5839,12 @@ impl MemoryOutboxStorePort for NativeSqlMemoryStore {
         command: MarkMemoryOutboxFailedCommand,
     ) -> MemorySpiResult<Option<MemoryOutboxEvent>> {
         let outbox = self
-            .mark_outbox_failed(&command.scope, &command.outbox_id)
+            .mark_outbox_failed(
+                &command.scope,
+                &command.outbox_id,
+                &command.lease_owner,
+                &command.lease_token,
+            )
             .await
             .map_err(|err| port_error("MemoryOutboxStorePort", err))?;
 
@@ -6365,6 +6461,18 @@ pub(crate) fn is_unique_violation(error: &sqlx::Error) -> bool {
         || message.contains("duplicate key")
 }
 
+impl NativeSqlStoreError {
+    /// The wrapped driver error, when this error originated from one: lets
+    /// callers run driver-level classification (unique-violation recovery)
+    /// over typed store errors.
+    pub fn inner_sqlx_error(&self) -> Option<&sqlx::Error> {
+        match self {
+            NativeSqlStoreError::Database(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum NativeSqlStoreError {
     #[error("native SQL store database error: {0}")]
@@ -6545,7 +6653,18 @@ impl NativeSqlMemoryStore {
             MemorySqlDialect::Postgres => row
                 .try_get::<bool, _>(column)
                 .or_else(|_| row.try_get::<i64, _>(column).map(sqlite_int_to_bool))
-                .unwrap_or(false),
+                .unwrap_or_else(|error| {
+                    // A decode failure here means schema/type drift (e.g. the
+                    // column is read back as TEXT). Defaulting to `false`
+                    // would silently flip degraded/truncated flags; surface
+                    // the drift loudly instead.
+                    tracing::error!(
+                        column = %column,
+                        decode_error = %error,
+                        "boolean column failed to decode on PostgreSQL; defaulting to false — schema drift suspected"
+                    );
+                    false
+                }),
         }
     }
 }

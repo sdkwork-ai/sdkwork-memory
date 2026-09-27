@@ -22,6 +22,13 @@ pub fn harden_memory_web_framework_layer<R>(
 where
     R: WebRequestContextResolver + Clone,
 {
+    // Fail closed when the environment was never declared: an embedding host
+    // that forgets `SDKWORK_MEMORY_ENVIRONMENT` would otherwise receive this
+    // unhardened layer silently. An explicit `development` value stays legal
+    // for local runs and keeps the loud log below.
+    if let Err(error) = sdkwork_memory_contract::require_explicit_memory_environment() {
+        panic!("{error}");
+    }
     if !memory_is_production_like_environment() {
         // Loud, never silent: an operator running with an unintended dev
         // environment must see why authorization hardening, Redis-backed rate

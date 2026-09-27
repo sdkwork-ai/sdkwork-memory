@@ -87,9 +87,66 @@ function alignProblemDetailWithImplementation(document) {
   }
 }
 
+// The shared legacy-envelope migration rewrites the success payload of any
+// operation whose declared schema name contains "delete"/"command" to
+// `SdkWorkCommandResponse`. This authority declares a canonical typed payload
+// per operation, so those declarations are captured before the migration and
+// restored afterwards as a resource envelope over the declared payload — the
+// migration keeps every other responsibility (shared envelope components,
+// ProblemDetail, list shapes) untouched.
+function captureCommandHeuristicSuccessPayloads(document) {
+  const declared = new Map();
+  for (const [routePath, pathItem] of Object.entries(document.paths ?? {})) {
+    if (!pathItem || typeof pathItem !== "object") continue;
+    for (const [method, operation] of Object.entries(pathItem)) {
+      if (!operation || typeof operation !== "object") continue;
+      for (const [status, response] of Object.entries(operation.responses ?? {})) {
+        if (!/^2\d\d$/.test(status)) continue;
+        const schemaRef = response?.content?.["application/json"]?.schema?.$ref;
+        if (typeof schemaRef !== "string") continue;
+        const schemaName = schemaRef.split("/").pop() ?? "";
+        const normalized = schemaName.toLowerCase();
+        if (!normalized.includes("delete") && !normalized.includes("command")) continue;
+        declared.set(`${method}|${routePath}|${status}`, schemaName);
+      }
+    }
+  }
+  return declared;
+}
+
+function reassertDeclaredSuccessPayloads(document, declared) {
+  if (declared.size === 0) return;
+  for (const [routePath, pathItem] of Object.entries(document.paths ?? {})) {
+    if (!pathItem || typeof pathItem !== "object") continue;
+    for (const [method, operation] of Object.entries(pathItem)) {
+      if (!operation || typeof operation !== "object") continue;
+      for (const [status, response] of Object.entries(operation.responses ?? {})) {
+        const schemaName = declared.get(`${method}|${routePath}|${status}`);
+        if (!schemaName) continue;
+        const mediaType = response?.content?.["application/json"];
+        if (!mediaType) continue;
+        mediaType.schema = {
+          allOf: [
+            { $ref: "#/components/schemas/SdkWorkApiResponse" },
+            {
+              type: "object",
+              required: ["data"],
+              properties: {
+                data: { $ref: `#/components/schemas/${schemaName}` },
+              },
+            },
+          ],
+        };
+      }
+    }
+  }
+}
+
 function writeAlignedOpenApi(relativePath, document) {
+  const declared = captureCommandHeuristicSuccessPayloads(document);
   const aligned = migrateOpenApiDocument(document);
   alignProblemDetailWithImplementation(aligned);
+  reassertDeclaredSuccessPayloads(aligned, declared);
   writeJson(relativePath, aligned);
 }
 
@@ -1816,7 +1873,15 @@ function errorResponses() {
     "403": problem,
     "404": problem,
     "409": problem,
-    "429": problem
+    "429": problem,
+    // The service genuinely returns these on the wire: storage failures (500),
+    // mounted-but-unimplemented commercial operations (501), and degraded
+    // dependencies (503). Omitting them made the contract lie about the
+    // operation's failure surface.
+    "500": problem,
+    "501": problem,
+    "503": problem,
+    default: problem
   };
 }
 
@@ -2003,7 +2068,6 @@ function baseSchemas() {
         defaultScope: { type: "string" },
         lifecycleStatus: { type: "string" },
         metadata: nullableJsonObject,
-        policy: nullableJsonObject,
         createdAt: instant,
         updatedAt: instant,
         version: idSchema
@@ -2019,9 +2083,7 @@ function baseSchemas() {
         spaceType: { type: "string" },
         displayName: { type: "string" },
         defaultScope: { type: "string" },
-        metadata: nullableJsonObject,
-        policy: nullableJsonObject,
-        version: nullableIdSchema
+        metadata: nullableJsonObject
       }
     },
     MemorySpaceList: pageSchema("MemorySpace"),
@@ -2035,11 +2097,8 @@ function baseSchemas() {
         userId: nullableIdSchema,
         actorType: { type: "string" },
         actorId: nullableString,
-        sessionId: nullableString,
-        traceId: nullableString,
         eventType: { type: "string" },
         sourceType: { type: "string" },
-        sourceRef: nullableString,
         eventTime: instant,
         payload: jsonObject,
         payloadHash: { type: "string" },
@@ -2082,20 +2141,13 @@ function baseSchemas() {
         objectText: { type: "string" },
         canonicalText: { type: "string" },
         summaryText: nullableString,
-        language: nullableString,
         confidence: { type: "number", format: "double" },
         evidenceCount: { type: "integer", format: "int32" },
         contradictionCount: { type: "integer", format: "int32" },
-        importanceScore: { type: "number", format: "double" },
-        recencyScore: { type: "number", format: "double" },
-        habitStrength: { anyOf: [{ type: "number", format: "double" }, { type: "null" }] },
-        validFrom: nullableInstant,
-        validTo: nullableInstant,
         expiresAt: nullableInstant,
         status: memoryStatus,
         sensitivityLevel: { type: "string" },
         metadata: nullableJsonObject,
-        tags: { anyOf: [{ type: "array", items: { type: "string" } }, { type: "null" }] },
         supersedesMemoryId: nullableIdSchema,
         supersededByMemoryId: nullableIdSchema,
         createdAt: instant,
@@ -2116,14 +2168,20 @@ function baseSchemas() {
         objectText: nullableString,
         canonicalText: { type: "string" },
         summaryText: nullableString,
-        confidence: { anyOf: [{ type: "number", format: "double" }, { type: "null" }] },
-        validFrom: nullableInstant,
-        validTo: nullableInstant,
+        language: nullableString,
         expiresAt: nullableInstant,
         sensitivityLevel: { type: "string" },
         metadata: nullableJsonObject,
-        tags: { anyOf: [{ type: "array", items: { type: "string" } }, { type: "null" }] },
-        version: nullableIdSchema
+        tags: { anyOf: [{ type: "array", items: { type: "string" } }, { type: "null" }] }
+      }
+    },
+    MemoryRecordPatch: {
+      type: "object",
+      properties: {
+        canonicalText: nullableString,
+        subject: nullableString,
+        summaryText: nullableString,
+        metadata: nullableJsonObject
       }
     },
     MemoryRecordList: pageSchema("MemoryRecord"),
@@ -2146,21 +2204,13 @@ function baseSchemas() {
       properties: {
         candidateId: idSchema,
         spaceId: idSchema,
-        userId: nullableIdSchema,
         candidateType: { type: "string" },
         memoryType,
         proposedText: { type: "string" },
-        proposedPayload: nullableJsonObject,
-        targetMemoryId: nullableIdSchema,
-        evidence: nullableJsonObject,
         confidence: { type: "number", format: "double" },
-        noveltyScore: { anyOf: [{ type: "number", format: "double" }, { type: "null" }] },
-        riskScore: { anyOf: [{ type: "number", format: "double" }, { type: "null" }] },
         decisionState: candidateState,
-        decisionReason: nullableString,
         createdAt: instant,
-        updatedAt: instant,
-        version: idSchema
+        updatedAt: instant
       }
     },
     MemoryCandidateList: pageSchema("MemoryCandidate"),
@@ -2213,9 +2263,7 @@ function baseSchemas() {
         inputEvents: { type: "array", items: idSchema },
         extractionMode: { type: "string", enum: ["deterministic", "llm_assisted", "hybrid"] },
         customInstructions: nullableString,
-        observationDate: nullableString,
-        reviewRequired: { type: "boolean" },
-        metadata: nullableJsonObject
+        observationDate: nullableString
       }
     },
     MemoryLearningJob: {
@@ -2275,11 +2323,8 @@ function baseSchemas() {
         actorId: nullableString,
         queryText: nullableString,
         queryHash: { type: "string" },
-        retrievers: nullableJsonObject,
-        latencyMs: { anyOf: [{ type: "integer", format: "int32" }, { type: "null" }] },
         resultCount: { type: "integer", format: "int32" },
         degraded: { type: "boolean" },
-        metadata: nullableJsonObject,
         createdAt: instant
       }
     },
@@ -2294,14 +2339,13 @@ function baseSchemas() {
     },
     DeleteAllMemoriesResult: {
       type: "object",
-      required: ["deletedCount", "deletedMemoryIds"],
+      required: ["deletedCount"],
       properties: {
         deletedCount: {
           type: "string",
           format: "int64",
           "x-sdkwork-int64-string": true
-        },
-        deletedMemoryIds: { type: "array", items: { type: "string" } }
+        }
       }
     },
     MemoryRetrievalHit: {
@@ -2365,8 +2409,6 @@ function baseSchemas() {
         targetType: { type: "string" },
         targetId: idSchema,
         feedbackType: { type: "string" },
-        rating: { anyOf: [{ type: "integer", format: "int32" }, { type: "null" }] },
-        comment: nullableString,
         createdAt: instant
       }
     },
@@ -2437,26 +2479,18 @@ function baseSchemas() {
     MemoryExportJobList: pageSchema("MemoryExportJob"),
     MemoryLearningSettings: {
       type: "object",
-      required: ["autoExtractEnabled", "autoApproveThreshold", "reviewRequiredBelowThreshold", "habitPromotionThreshold", "updatedAt", "version"],
+      required: ["autoPromoteCandidates", "habitLearningEnabled", "updatedAt"],
       properties: {
-        autoExtractEnabled: { type: "boolean" },
-        autoApproveThreshold: { type: "number", format: "double" },
-        reviewRequiredBelowThreshold: { type: "boolean" },
-        habitPromotionThreshold: { type: "number", format: "double" },
-        retentionPolicyRef: nullableString,
-        updatedAt: instant,
-        version: idSchema
+        autoPromoteCandidates: { type: "boolean" },
+        habitLearningEnabled: { type: "boolean" },
+        updatedAt: instant
       }
     },
     MemoryLearningSettingsRequest: {
       type: "object",
       properties: {
-        autoExtractEnabled: { type: "boolean" },
-        autoApproveThreshold: { type: "number", format: "double" },
-        reviewRequiredBelowThreshold: { type: "boolean" },
-        habitPromotionThreshold: { type: "number", format: "double" },
-        retentionPolicyRef: nullableString,
-        version: nullableIdSchema
+        autoPromoteCandidates: { type: "boolean" },
+        habitLearningEnabled: { type: "boolean" }
       }
     },
     MemoryIndex: {
@@ -3193,7 +3227,7 @@ function writeOpenApi() {
     auditEvent: "memory.open.record.updated",
     pathParams: [pathParam("memoryId")],
     queryParams: [requiredSpaceIdQueryParam()],
-    requestSchema: "MemoryRecordRequest",
+    requestSchema: "MemoryRecordPatch",
     responseSchema: "MemoryRecord"
   }));
   addPath(paths, `${P}/memories/{memoryId}`, "delete", openOperation({
@@ -3349,7 +3383,7 @@ function writeAppOpenApi() {
   addPath(paths, `${P}/memories`, "get", operation({ method: "get", authority, operationId: "memories.list", permission: "memory.records.read", auditEvent: "memory.record.list", queryParams: listParams([{ name: "space_id", in: "query", required: true, schema: idSchema }, { name: "show_expired", in: "query", schema: { type: "boolean" } }]), responseSchema: "MemoryRecordList" }));
   addPath(paths, `${P}/memories`, "post", operation({ method: "post", authority, operationId: "memories.create", permission: "memory.records.write", auditEvent: "memory.record.created", requestSchema: "MemoryRecordRequest", responseSchema: "MemoryRecord", idempotent: true }));
   addPath(paths, `${P}/memories/{memoryId}`, "get", operation({ method: "get", authority, operationId: "memories.retrieve", permission: "memory.records.read", auditEvent: "memory.record.read", pathParams: [pathParam("memoryId")], queryParams: [requiredSpaceIdQueryParam()], responseSchema: "MemoryRecord" }));
-  addPath(paths, `${P}/memories/{memoryId}`, "patch", operation({ method: "patch", authority, operationId: "memories.update", permission: "memory.records.write", auditEvent: "memory.record.updated", pathParams: [pathParam("memoryId")], queryParams: [requiredSpaceIdQueryParam()], requestSchema: "MemoryRecordRequest", responseSchema: "MemoryRecord" }));
+  addPath(paths, `${P}/memories/{memoryId}`, "patch", operation({ method: "patch", authority, operationId: "memories.update", permission: "memory.records.write", auditEvent: "memory.record.updated", pathParams: [pathParam("memoryId")], queryParams: [requiredSpaceIdQueryParam()], requestSchema: "MemoryRecordPatch", responseSchema: "MemoryRecord" }));
   addPath(paths, `${P}/memories/{memoryId}`, "delete", operation({ method: "delete", authority, operationId: "memories.delete", permission: "memory.records.write", auditEvent: "memory.record.deleted", pathParams: [pathParam("memoryId")], queryParams: [requiredSpaceIdQueryParam()], responseSchema: "MemoryRecord", status: "204" }));
 addPath(paths, `${P}/memories/delete_all`, "post", operation({ method: "post", authority, operationId: "memories.deleteAll", permission: "memory.records.write", auditEvent: "memory.record.deleted", requestSchema: "DeleteAllMemoriesRequest", responseSchema: "DeleteAllMemoriesResult", status: "200", idempotent: true }));
   addPath(paths, `${P}/memories/{memoryId}/sources`, "get", operation({ method: "get", authority, operationId: "memories.sources.list", permission: "memory.records.read", auditEvent: "memory.record.sources.list", pathParams: [pathParam("memoryId")], queryParams: listParams(), responseSchema: "MemoryRecordSourceList" }));
@@ -3409,7 +3443,7 @@ function writeBackendOpenApi() {
   addPath(paths, `${P}/spaces/{spaceId}`, "patch", operation({ method: "patch", authority, operationId: "spaces.update", permission: "memory.backend.spaces.write", auditEvent: "memory.backend.space.updated", pathParams: [pathParam("spaceId")], requestSchema: "MemorySpaceRequest", responseSchema: "MemorySpace" }));
   addPath(paths, `${P}/memories`, "get", operation({ method: "get", authority, operationId: "memories.list", permission: "memory.backend.records.read", auditEvent: "memory.backend.record.list", queryParams: listParams([{ name: "space_id", in: "query", required: false, schema: idSchema }, { name: "show_expired", in: "query", schema: { type: "boolean" } }]), responseSchema: "MemoryRecordList" }));
   addPath(paths, `${P}/memories/{memoryId}`, "get", operation({ method: "get", authority, operationId: "memories.retrieve", permission: "memory.backend.records.read", auditEvent: "memory.backend.record.read", pathParams: [pathParam("memoryId")], queryParams: [requiredSpaceIdQueryParam()], responseSchema: "MemoryRecord" }));
-  addPath(paths, `${P}/memories/{memoryId}`, "patch", operation({ method: "patch", authority, operationId: "memories.update", permission: "memory.backend.records.write", auditEvent: "memory.backend.record.updated", pathParams: [pathParam("memoryId")], queryParams: [requiredSpaceIdQueryParam()], requestSchema: "MemoryRecordRequest", responseSchema: "MemoryRecord" }));
+  addPath(paths, `${P}/memories/{memoryId}`, "patch", operation({ method: "patch", authority, operationId: "memories.update", permission: "memory.backend.records.write", auditEvent: "memory.backend.record.updated", pathParams: [pathParam("memoryId")], queryParams: [requiredSpaceIdQueryParam()], requestSchema: "MemoryRecordPatch", responseSchema: "MemoryRecord" }));
   addPath(paths, `${P}/memories/{memoryId}/supersede`, "post", operation({ method: "post", authority, operationId: "memories.supersede", permission: "memory.backend.records.write", auditEvent: "memory.backend.record.superseded", pathParams: [pathParam("memoryId")], requestSchema: "MemoryRecordRequest", responseSchema: "MemoryRecord", status: "200", idempotent: true }));
   addPath(paths, `${P}/events`, "get", operation({ method: "get", authority, operationId: "events.list", permission: "memory.backend.events.read", auditEvent: "memory.backend.event.list", queryParams: cursorListParams([{ name: "space_id", in: "query", required: false, schema: idSchema }]), responseSchema: "MemoryEventList" }));
   addPath(paths, `${P}/events/{eventId}`, "get", operation({ method: "get", authority, operationId: "events.retrieve", permission: "memory.backend.events.read", auditEvent: "memory.backend.event.read", pathParams: [pathParam("eventId")], queryParams: [requiredSpaceIdQueryParam()], responseSchema: "MemoryEvent" }));

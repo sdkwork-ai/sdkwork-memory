@@ -408,18 +408,23 @@ fn tokenise_query(text: &str) -> Vec<String> {
     if text.chars().any(is_cjk) {
         let mut tokens = Vec::new();
         let mut word = String::new();
+        let mut cjk_run: Vec<char> = Vec::new();
         for character in text.chars() {
             if is_cjk(character) {
                 if !word.is_empty() {
                     tokens.push(std::mem::take(&mut word));
                 }
-                tokens.push(character.to_string());
-            } else if character.is_alphanumeric() {
-                word.push(character);
-            } else if !word.is_empty() {
-                tokens.push(std::mem::take(&mut word));
+                cjk_run.push(character);
+            } else {
+                flush_cjk_run(&mut cjk_run, &mut tokens);
+                if character.is_alphanumeric() {
+                    word.push(character);
+                } else if !word.is_empty() {
+                    tokens.push(std::mem::take(&mut word));
+                }
             }
         }
+        flush_cjk_run(&mut cjk_run, &mut tokens);
         if !word.is_empty() {
             tokens.push(word);
         }
@@ -432,6 +437,23 @@ fn tokenise_query(text: &str) -> Vec<String> {
         .filter(|token| !token.is_empty())
         .map(ToOwned::to_owned)
         .collect()
+}
+
+/// Emits a CJK run as adjacent character pairs (bigrams). Unigram scoring let
+/// any document sharing one common character earn a full token's worth of
+/// overlap, so short Chinese queries pulled in floods of near-zero-evidence
+/// matches; a bigram only matches where the two characters are adjacent,
+/// which is real lexical evidence. A lone CJK character has no pair and is
+/// emitted as itself so single-character queries still score.
+fn flush_cjk_run(run: &mut Vec<char>, tokens: &mut Vec<String>) {
+    if run.len() == 1 {
+        tokens.push(run.pop().expect("non-empty by the length check").to_string());
+        return;
+    }
+    for pair in run.windows(2) {
+        tokens.push(pair.iter().collect());
+    }
+    run.clear();
 }
 
 fn token_overlap_score(haystack: &str, tokens: &[String]) -> f64 {

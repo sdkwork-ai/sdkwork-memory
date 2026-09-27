@@ -35,7 +35,8 @@ pub fn spawn_background_workers(service: Arc<OpenMemoryService>) -> MemoryBackgr
         crate::outbox_publisher::spawn_outbox_publisher(service.store.clone(), shutdown_rx.clone()),
         spawn_learning_job_worker(service.clone(), shutdown_rx.clone()),
         spawn_eval_run_worker(service.clone(), shutdown_rx.clone()),
-        spawn_provider_health_probe(service, shutdown_rx),
+        spawn_provider_health_probe(service.clone(), shutdown_rx.clone()),
+        spawn_retention_worker(service, shutdown_rx),
     ];
     MemoryBackgroundWorkers {
         shutdown_tx,
@@ -175,6 +176,135 @@ fn spawn_eval_run_worker(
     })
 }
 
+fn spawn_retention_worker(
+    service: Arc<OpenMemoryService>,
+    mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let sweep_interval = Duration::from_secs(
+            platform::read_env_u64("SDKWORK_MEMORY_RETENTION_SWEEP_INTERVAL_SECS", 3600).max(60),
+        );
+        let config = RetentionConfig::from_env();
+        tracing::info!(
+            ?sweep_interval,
+            outbox_days = config.outbox_terminal_days,
+            jobs_days = config.jobs_terminal_days,
+            traces_days = config.traces_days,
+            audit_days = config.audit_days,
+            "memory retention worker started"
+        );
+        loop {
+            tokio::select! {
+                _ = shutdown_rx.changed() => {
+                    if *shutdown_rx.borrow() {
+                        tracing::info!("memory retention worker shutting down");
+                        break;
+                    }
+                }
+                _ = tokio::time::sleep(sweep_interval) => {
+                    run_retention_sweep(&service, &config).await;
+                }
+            }
+        }
+    })
+}
+
+/// Per-table retention windows in seconds; a zero window disables that sweep.
+#[derive(Debug, Clone, Copy)]
+struct RetentionConfig {
+    outbox_terminal_days: u64,
+    jobs_terminal_days: u64,
+    traces_days: u64,
+    audit_days: u64,
+}
+
+impl RetentionConfig {
+    fn from_env() -> Self {
+        Self {
+            outbox_terminal_days: read_retention_days("SDKWORK_MEMORY_RETENTION_OUTBOX_TERMINAL_DAYS", 7),
+            jobs_terminal_days: read_retention_days("SDKWORK_MEMORY_RETENTION_JOBS_TERMINAL_DAYS", 30),
+            traces_days: read_retention_days("SDKWORK_MEMORY_RETENTION_TRACES_DAYS", 30),
+            audit_days: read_retention_days("SDKWORK_MEMORY_RETENTION_AUDIT_DAYS", 90),
+        }
+    }
+
+    fn window_seconds(days: u64) -> u64 {
+        days.saturating_mul(24 * 60 * 60)
+    }
+}
+
+fn read_retention_days(variable: &str, default_days: u64) -> u64 {
+    platform::read_env_u64(variable, default_days)
+}
+
+async fn run_retention_sweep(service: &OpenMemoryService, config: &RetentionConfig) {
+    let metrics = crate::domain_metrics::memory_domain_metrics();
+    let store = service.store.as_ref();
+
+    macro_rules! sweep {
+        ($table:expr, $days:expr, $purge:expr) => {
+            if $days > 0 {
+                match $purge(RetentionConfig::window_seconds($days)).await {
+                    Ok(count) => {
+                        metrics.record_retention_purged($table, count);
+                        if count > 0 {
+                            tracing::debug!(table = ?$table, purged = count, "memory retention sweep removed rows");
+                        }
+                    }
+                    Err(error) => {
+                        tracing::warn!(table = ?$table, error = %error, "memory retention sweep failed");
+                    }
+                }
+            }
+        };
+    }
+
+    sweep!(
+        crate::domain_metrics::RetentionTable::OutboxEvents,
+        config.outbox_terminal_days,
+        |window| store.purge_terminal_outbox_events(window)
+    );
+    sweep!(
+        crate::domain_metrics::RetentionTable::LearningJobs,
+        config.jobs_terminal_days,
+        |window| store.purge_terminal_learning_jobs(window)
+    );
+    sweep!(
+        crate::domain_metrics::RetentionTable::EvalRuns,
+        config.jobs_terminal_days,
+        |window| store.purge_terminal_eval_runs(window)
+    );
+    if config.traces_days > 0 {
+        match store
+            .purge_retrieval_traces(RetentionConfig::window_seconds(config.traces_days))
+            .await
+        {
+            Ok(stats) => {
+                metrics.record_retention_purged(
+                    crate::domain_metrics::RetentionTable::RetrievalHits,
+                    stats.hits,
+                );
+                metrics.record_retention_purged(
+                    crate::domain_metrics::RetentionTable::ContextPacks,
+                    stats.context_packs,
+                );
+                metrics.record_retention_purged(
+                    crate::domain_metrics::RetentionTable::RetrievalTraces,
+                    stats.traces,
+                );
+            }
+            Err(error) => {
+                tracing::warn!(error = %error, "memory retention trace-family sweep failed");
+            }
+        }
+    }
+    sweep!(
+        crate::domain_metrics::RetentionTable::AuditLogs,
+        config.audit_days,
+        |window| store.purge_audit_logs(window)
+    );
+}
+
 fn spawn_provider_health_probe(
     service: Arc<OpenMemoryService>,
     mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
@@ -206,11 +336,21 @@ async fn process_learning_job_batch(
     lease_duration_seconds: u64,
 ) -> Result<(), String> {
     let max_attempts = platform::read_env_u64("SDKWORK_MEMORY_JOB_MAX_ATTEMPTS", 5).clamp(1, 20);
-    let _ = service
+    let stale = service
         .store
         .requeue_stale_running_learning_jobs(max_attempts)
         .await
         .map_err(|error| error.to_string())?;
+    if stale.dead > 0 {
+        // Crash-looping jobs converge here silently unless the sweep reports
+        // them; the metric backs the alert, the log carries the scope.
+        crate::domain_metrics::memory_domain_metrics().record_learning_jobs_dead(stale.dead);
+        tracing::error!(
+            dead = stale.dead,
+            max_attempts,
+            "memory learning jobs dead-lettered after exhausting the attempt ceiling"
+        );
+    }
     let lease_token = platform::next_numeric_id()
         .map_err(|error| error.detail)?
         .to_string();
@@ -297,13 +437,57 @@ async fn process_claimed_learning_job(
                 job_uuid = %job.job_uuid,
                 job_type = %job.job_type,
                 error = %error,
-                "memory learning job failed"
+                "memory learning job execution failed"
             );
-            (
-                "failed",
-                None,
-                Some(serde_json::json!({ "message": error }).to_string()),
-            )
+            // Transient execution errors must not be terminal: the job
+            // requeues with its attempt charged and a backoff window, and
+            // only converges to terminal `'failed'` once the attempt ceiling
+            // is exhausted (`requeue_failed_learning_job` decides in SQL).
+            // The stale-crash sweep remains the path for hard process death.
+            let error_json = serde_json::json!({ "message": error }).to_string();
+            let max_attempts = platform::read_env_u64("SDKWORK_MEMORY_JOB_MAX_ATTEMPTS", 5).clamp(1, 20);
+            let backoff_seconds =
+                platform::read_env_u64("SDKWORK_MEMORY_JOB_RETRY_BACKOFF_SECS", 30);
+            match service
+                .store
+                .requeue_failed_learning_job(
+                    job.tenant_id,
+                    &job.job_uuid,
+                    lease_owner,
+                    lease_token,
+                    i64::try_from(max_attempts).unwrap_or(i64::MAX),
+                    backoff_seconds,
+                    &error_json,
+                )
+                .await
+            {
+                Ok(Some(retry_state)) => {
+                    tracing::info!(
+                        tenant_id = job.tenant_id,
+                        job_uuid = %job.job_uuid,
+                        state = %retry_state,
+                        "memory learning job requeued after execution failure"
+                    );
+                    return;
+                }
+                Ok(None) => {
+                    tracing::warn!(
+                        tenant_id = job.tenant_id,
+                        job_uuid = %job.job_uuid,
+                        "memory learning job execution fenced after lease loss"
+                    );
+                    return;
+                }
+                Err(requeue_error) => {
+                    tracing::error!(
+                        tenant_id = job.tenant_id,
+                        job_uuid = %job.job_uuid,
+                        error = %requeue_error,
+                        "memory learning job failure requeue failed; falling back to terminal finish"
+                    );
+                    ("failed", None, Some(error_json))
+                }
+            }
         }
     };
     match service
@@ -526,11 +710,19 @@ async fn process_eval_run_batch(
     lease_duration_seconds: u64,
 ) -> Result<(), String> {
     let max_attempts = platform::read_env_u64("SDKWORK_MEMORY_EVAL_MAX_ATTEMPTS", 5).clamp(1, 20);
-    let _ = service
+    let stale = service
         .store
         .requeue_stale_running_eval_runs(max_attempts)
         .await
         .map_err(|error| error.to_string())?;
+    if stale.dead > 0 {
+        crate::domain_metrics::memory_domain_metrics().record_eval_runs_dead(stale.dead);
+        tracing::error!(
+            dead = stale.dead,
+            max_attempts,
+            "memory eval runs dead-lettered after exhausting the attempt ceiling"
+        );
+    }
     let lease_token = platform::next_numeric_id()
         .map_err(|error| error.detail)?
         .to_string();
@@ -602,6 +794,34 @@ async fn process_claimed_eval_run(
         Some(Ok(outcome)) => outcome,
         Some(Err(error)) => {
             tracing::error!(eval_run_uuid = %run.eval_run_uuid, error = %error, "eval run execution failed before completion");
+            // Record the terminal failure immediately: leaving the run in
+            // 'running' would pin the row for the whole lease before the
+            // stale sweep requeues it.
+            let failure_result = serde_json::json!({
+                "evalType": run.eval_type,
+                "status": "failed",
+                "reason": error,
+            })
+            .to_string();
+            if let Err(update_error) = service
+                .store
+                .update_eval_run_state(UpdateEvalRunStateCommand {
+                    tenant_id: run.tenant_id,
+                    eval_run_uuid: &run.eval_run_uuid,
+                    lease_owner: &run.lease_owner,
+                    lease_token: &run.lease_token,
+                    state: "failed",
+                    metrics_json: None,
+                    result_json: Some(&failure_result),
+                })
+                .await
+            {
+                tracing::error!(
+                    eval_run_uuid = %run.eval_run_uuid,
+                    error = %update_error,
+                    "failed to record the eval run terminal failure"
+                );
+            }
             return;
         }
         None => return,
@@ -1061,7 +1281,7 @@ fn percentile_95_nearest_rank(latencies_ms: &[u64]) -> u64 {
 }
 
 async fn probe_provider_bindings(service: &OpenMemoryService) -> Result<(), String> {
-    let Some(_lease) = service
+    let Some(lease) = service
         .store
         .try_acquire_provider_health_lease()
         .await
@@ -1070,6 +1290,14 @@ async fn probe_provider_bindings(service: &OpenMemoryService) -> Result<(), Stri
         tracing::debug!("provider health probe skipped because another replica holds the lease");
         return Ok(());
     };
+    // Explicit release unlocks the session advisory lock before the pooled
+    // connection is returned; Drop remains the abandonment safety net.
+    let probe_result = probe_provider_bindings_locked(service).await;
+    lease.release().await.map_err(|error| error.to_string())?;
+    probe_result
+}
+
+async fn probe_provider_bindings_locked(service: &OpenMemoryService) -> Result<(), String> {
 
     let page_size = sdkwork_utils_rust::MAX_LIST_PAGE_SIZE;
     let page_size_usize = usize::try_from(page_size).unwrap_or(200);

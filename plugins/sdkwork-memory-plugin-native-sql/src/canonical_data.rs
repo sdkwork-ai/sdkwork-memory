@@ -417,67 +417,94 @@ impl NativeSqlMemoryStore {
         })
     }
 
+    /// Bulk soft-delete every active canonical record in the scope with a
+    /// keyset batch sweep: each batch selects at most `MAX_LIST_PAGE_SIZE`
+    /// uuids past the cursor inside its own transaction and journals each
+    /// deletion there, so memory stays O(batch) and no transaction ever spans
+    /// the whole scope. Returns only the deleted count.
     pub async fn delete_all_canonical_memory_atomic(
         &self,
         command: &DeleteAllCanonicalMemoryCommand,
     ) -> Result<MemoryBulkDeletionReceipt, NativeSqlStoreError> {
-        let mut tx = self.begin_tx().await?;
-        self.lock_space_on_tx(&mut tx, &command.scope).await?;
-        let rows = if let Some(user_id) = command.user_id {
-            sqlx::query(
-                r#"
-                SELECT uuid FROM ai_record
-                WHERE tenant_id = ? AND space_id = ? AND user_id = ? AND status <> 'deleted'
-                "#,
-            )
-            .bind(command.scope.tenant_id)
-            .bind(command.scope.space_id)
-            .bind(user_id)
-            .fetch_all(&mut *tx)
-            .await?
-        } else {
-            sqlx::query(
-                r#"
-                SELECT uuid FROM ai_record
-                WHERE tenant_id = ? AND space_id = ? AND status <> 'deleted'
-                "#,
-            )
-            .bind(command.scope.tenant_id)
-            .bind(command.scope.space_id)
-            .fetch_all(&mut *tx)
-            .await?
-        };
-        let mut deleted_ids = Vec::with_capacity(rows.len());
-        for row in rows {
-            let memory_id: String = row.get("uuid");
-            let journal = MemoryMutationJournal {
-                outbox_id: format!("outbox-memory-record-deleted-all-{memory_id}"),
-                aggregate_type: "memory_record".to_string(),
-                aggregate_id: memory_id.clone(),
-                event_type: "memory.record.deleted".to_string(),
-                event_version: "1.0".to_string(),
-                payload_json: serde_json::json!({
-                    "memoryId": memory_id,
-                    "spaceId": command.scope.space_id,
-                })
-                .to_string(),
-                audit_id: format!("audit-memory-record-deleted-all-{memory_id}"),
-                audit_action: "memory.record.delete".to_string(),
-                audit_resource_type: "memory_record".to_string(),
-                audit_resource_id: memory_id.clone(),
-                audit_result: "accepted".to_string(),
+        let batch_size = i64::from(sdkwork_utils_rust::MAX_LIST_PAGE_SIZE);
+        let mut deleted_count: u64 = 0;
+        let mut cursor = String::new();
+        loop {
+            let mut tx = self.begin_tx().await?;
+            self.lock_space_on_tx(&mut tx, &command.scope).await?;
+            let rows = if let Some(user_id) = command.user_id {
+                sqlx::query(
+                    r#"
+                    SELECT uuid FROM ai_record
+                    WHERE tenant_id = ? AND space_id = ? AND user_id = ?
+                      AND status <> 'deleted' AND uuid > ?
+                    ORDER BY uuid ASC
+                    LIMIT ?
+                    "#,
+                )
+                .bind(command.scope.tenant_id)
+                .bind(command.scope.space_id)
+                .bind(user_id)
+                .bind(&cursor)
+                .bind(batch_size)
+                .fetch_all(&mut *tx)
+                .await?
+            } else {
+                sqlx::query(
+                    r#"
+                    SELECT uuid FROM ai_record
+                    WHERE tenant_id = ? AND space_id = ?
+                      AND status <> 'deleted' AND uuid > ?
+                    ORDER BY uuid ASC
+                    LIMIT ?
+                    "#,
+                )
+                .bind(command.scope.tenant_id)
+                .bind(command.scope.space_id)
+                .bind(&cursor)
+                .bind(batch_size)
+                .fetch_all(&mut *tx)
+                .await?
             };
-            let deleted =
-                Self::mark_record_deleted_on_tx(&mut tx, &command.scope, &memory_id).await?;
-            if deleted {
-                append_journal_on_tx(self, &mut tx, &command.scope, &journal).await?;
-                remove_record_fts_on_tx(self.dialect(), &mut tx, &command.scope, &memory_id)
-                    .await?;
-                deleted_ids.push(memory_id);
+            if rows.is_empty() {
+                tx.rollback().await.map_err(NativeSqlStoreError::from)?;
+                break;
             }
+            for row in rows {
+                let memory_id: String = row.get("uuid");
+                let journal = MemoryMutationJournal {
+                    outbox_id: format!("outbox-memory-record-deleted-all-{memory_id}"),
+                    aggregate_type: "memory_record".to_string(),
+                    aggregate_id: memory_id.clone(),
+                    event_type: "memory.record.deleted".to_string(),
+                    event_version: "1.0".to_string(),
+                    payload_json: serde_json::json!({
+                        "memoryId": memory_id,
+                        "spaceId": command.scope.space_id,
+                    })
+                    .to_string(),
+                    audit_id: format!("audit-memory-record-deleted-all-{memory_id}"),
+                    audit_action: "memory.record.delete".to_string(),
+                    audit_resource_type: "memory_record".to_string(),
+                    audit_resource_id: memory_id.clone(),
+                    audit_result: "accepted".to_string(),
+                };
+                let deleted =
+                    Self::mark_record_deleted_on_tx(&mut tx, &command.scope, &memory_id).await?;
+                if deleted {
+                    append_journal_on_tx(self, &mut tx, &command.scope, &journal).await?;
+                    remove_record_fts_on_tx(self.dialect(), &mut tx, &command.scope, &memory_id)
+                        .await?;
+                    deleted_count += 1;
+                }
+                // The cursor must advance past every selected uuid — including
+                // rows that were already soft-deleted between batches — or the
+                // sweep could loop forever on a stale window.
+                cursor = memory_id;
+            }
+            tx.commit().await.map_err(NativeSqlStoreError::from)?;
         }
-        tx.commit().await.map_err(NativeSqlStoreError::from)?;
-        Ok(MemoryBulkDeletionReceipt { deleted_ids })
+        Ok(MemoryBulkDeletionReceipt { deleted_count })
     }
 
     pub async fn retrieve_canonical_memory(

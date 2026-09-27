@@ -46,7 +46,7 @@ The public deployment axis contains only `standalone` and `cloud`. Development a
 | `sdkwork-memory-contract` | DTOs, App/Backend/Open service ports, typed errors, pagination data |
 | `sdkwork-intelligence-memory-service` | Authorization-aware use cases, learning/retrieval/governance orchestration |
 | `sdkwork-memory-spi` | Provider-neutral ports, plugin manifests, registry contracts |
-| `sdkwork-memory-plugin-native-sql` | PostgreSQL/SQLite persistence and store-level pagination |
+| `sdkwork-memory-plugin-native-sql` | PostgreSQL/SQLite persistence and store-level pagination; SQLite fixtures and the PostgreSQL baseline are cross-checked by the dialect parity gate |
 | `sdkwork-memory-retrieval` | Retrieval and context composition algorithms |
 | route crates | Thin axum adapters and SDKWork response mapping for each authority surface |
 | standalone gateway | SDKWork web bootstrap, context injection, route assembly, health and metrics |
@@ -66,14 +66,16 @@ Rules:
 - Request schemas do not expose client-writable `tenantId` for current-tenant operations.
 - Routes inject tenant and actor/operator identity from `Memory*RequestContext`.
 - Generated transport packages are private implementation details; composed SDK packages are the consumer boundary.
-- Lists return `data.items` and `data.pageInfo`. Cursors are opaque HMAC-protected tokens (`SDKWORK_MEMORY_CURSOR_SIGNING_KEY`); forged or stale tokens fail as invalid parameters. SQL-backed histories constrain tenant, scope/type, cursor, and `LIMIT` in the query, with matching composite indexes.
-- Success and error serialization is delegated to SDKWork web-framework response helpers.
+- Lists return `data.items` and `data.pageInfo`. Cursors are opaque HMAC-protected tokens (`SDKWORK_MEMORY_CURSOR_SIGNING_KEY`; production startup fails closed when it is unset); forged or stale tokens fail as invalid parameters. SQL-backed histories constrain tenant, scope/type, cursor, and `LIMIT` in the query, with matching composite indexes.
+- Success serialization is delegated to SDKWork web-framework response helpers; every failure path — including malformed JSON bodies, malformed path ids, handler panics, and 5xx — renders `application/problem+json` with a numeric `code` and `traceId`.
+- OpenAPI body schemas are machine-gated against the contract DTOs (`tests/contracts/openapi_body_schema_parity_test.mjs`), and the two engine DDLs are machine-gated for parity (`tools/check-database-dialect-parity.mjs`).
+- `POST /memories/delete_all` returns a count-only receipt; the deleted id list never travels back through the API.
 
 ## PC Package Architecture
 
 | Package family | Responsibility | Allowed HTTP SDK |
 | --- | --- | --- |
-| `memory-pc-core` | Host composition, runtime config, auth route registration | none directly |
+| `memory-pc-core` | Host composition, runtime config, auth route registration, console SDK client construction (the one composition-root `@sdkwork/memory-app-sdk` import) | App SDK only (composition root) |
 | `memory-pc-commons` | Shared page shell, pagination, typed action controls, safe error rendering, i18n | none |
 | `memory-pc-console-core` | Console App SDK provider and resource registry | App SDK only |
 | `memory-pc-console-*` | Customer/user modules and route metadata | App SDK through Console core |
@@ -88,7 +90,9 @@ Both surfaces reuse visual primitives but do not share SDK clients, session cont
 
 - Canonical evidence is stored in `ai_event`, `ai_record`, and `ai_record_source`.
 - Learning jobs use `ai_learning_job`; extraction history is keyset-paginated by tenant, type, optional space, and stable row id.
-- Outbox, learning, and evaluation workers use persisted owner/token/expiry leases. Heartbeats extend current leases, and stale completion is fenced at the SQL update. Stale requeues increment `attempt_count`; rows past the configured ceiling land in a terminal `dead` state instead of looping, and a panicking job isolates to its own task instead of aborting its batch.
+- Outbox, learning, and evaluation workers use persisted owner/token/expiry leases. Heartbeats extend current leases, and stale completion is fenced at the SQL update. Stale requeues increment `attempt_count`; rows past the configured ceiling land in a terminal `dead` state instead of looping, a panicking job isolates to its own task instead of aborting its batch, and dead transitions are logged and exported as `memory_*_dead_total` metrics. Learning execution errors requeue with attempt-aware backoff (`next_attempt_at`) instead of failing terminally; the outbox stale sweep charges the same retry budget as delivery failures and dead-letters past the ceiling.
+- A retention worker hard-deletes terminal and derived high-churn rows (terminal outbox events, terminal learning/eval jobs, retrieval traces with their hits and context packs, audit logs) in bounded keyset batches on per-table configurable windows (`SDKWORK_MEMORY_RETENTION_*`). Canonical records and events stay under product semantics (space retention jobs, forget), not mechanical cleanup.
+- Outbox acknowledge/fail port methods carry the lease triple and fence at the SQL UPDATE; the unfenced mutation surface was removed.
 - Forget, export, consolidation, retention, and migration jobs persist typed snapshots in `ai_audit_log`; App history also constrains the authenticated actor in SQL.
 - Entities, edges, policies, subjects, bindings, capability bindings, assignments, feedback signals (`ai_feedback`), and readiness snapshots use dedicated `ai_` tables with bounded-enum CHECK constraints on state columns.
 - Search indexes and provider projections are derived and rebuildable. Canonical relational data remains authoritative.
@@ -102,8 +106,12 @@ Both surfaces reuse visual primitives but do not share SDK clients, session cont
 - Restricted sensitivity access fails closed. Provider calls receive only the authorized projection.
 - Forget workflows physically remove targeted canonical and derived data according to scope and record an auditable result.
 - Export applies sensitivity filtering and uses the approved Drive uploader for Drive targets.
-- Export collection is keyset-paginated and byte-bounded. Inline export defaults to 4 MiB and Drive export to 64 MiB, with a 256 MiB absolute cap. The current Drive SPI is a bounded single-buffer upload, not streaming multipart.
-- Outbound provider and Outbox HTTP clients validate every resolved address, reject non-public or mixed DNS answers, pin validated addresses, and disable redirects.
+- Export collection is keyset-paginated and byte-bounded, and the payload serializes exactly once through a size-guarded writer that aborts at the cap. Inline export defaults to 4 MiB and Drive export to 64 MiB, with a 256 MiB absolute cap. The current Drive SPI is a bounded single-buffer upload, not streaming multipart.
+- Outbound provider and Outbox HTTP clients validate every resolved address — including IPv6 transition forms (NAT64, 6to4, Teredo) that embed an IPv4 endpoint — reject non-public or mixed DNS answers, pin validated addresses, disable redirects, and buffer at most 16 MiB of any response body.
+- Retrieval traces persist best-effort: a trace write failure never fails the retrieval that already produced results.
+- `threshold` gates the semantic score before fusion under the additive strategy, and the normalized fused score after fusion under RRF strategies; under the additive strategy an unavailable embedder degrades to pure lexical ranking instead of an empty result.
+- CJK keyword matching tokenizes runs into adjacent character pairs (bigrams), so shared single characters alone do not earn relevance.
+- Unknown retrieval profile ids fail as not-found instead of silently ranking with deployment defaults.
 - `ProblemDetail` exposes numeric code and server trace id; the PC never displays raw response bodies, tokens, or headers.
 - Production PC artifacts exclude source maps and repository-private runtime state.
 

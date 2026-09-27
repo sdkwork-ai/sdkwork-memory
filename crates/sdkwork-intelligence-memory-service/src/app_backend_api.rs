@@ -334,8 +334,26 @@ impl OpenMemoryService {
     ) -> MemoryServiceResult<ExportCollectedPayload> {
         let open_context = Self::to_open_context(context);
         let mut owner_cache = std::collections::HashMap::new();
-        let mut filtered_records = Vec::with_capacity(payload.records.len());
-        for record in payload.records {
+        // Resolve owner/sensitivity decisions per space first (the space set
+        // is bounded by the export request), then filter both collections in
+        // place with retain so filtering never duplicates the payload.
+        async fn actor_is_space_owner(
+            service: &OpenMemoryService,
+            open_context: &sdkwork_memory_contract::MemoryOpenApiRequestContext,
+            space_id: u64,
+            owner_cache: &mut std::collections::HashMap<u64, bool>,
+        ) -> MemoryServiceResult<bool> {
+            if let Some(cached) = owner_cache.get(&space_id) {
+                return Ok(*cached);
+            }
+            let is_owner =
+                access::actual_actor_is_space_owner(&service.runtime_data_plane, open_context, space_id)
+                    .await?;
+            owner_cache.insert(space_id, is_owner);
+            Ok(is_owner)
+        }
+        let mut record_allowed = Vec::with_capacity(payload.records.len());
+        for record in &payload.records {
             let space_id = record
                 .get("spaceId")
                 .and_then(|value| value.as_i64())
@@ -345,87 +363,114 @@ impl OpenMemoryService {
                 .get("sensitivityLevel")
                 .and_then(|value| value.as_str())
                 .unwrap_or("internal");
-            let actor_is_owner = if let Some(cached) = owner_cache.get(&space_id) {
-                *cached
-            } else {
-                let is_owner = access::actual_actor_is_space_owner(
-                    &self.runtime_data_plane,
-                    &open_context,
-                    space_id,
-                )
-                .await?;
-                owner_cache.insert(space_id, is_owner);
-                is_owner
-            };
-            if access::actor_may_read_sensitivity(&open_context, sensitivity, actor_is_owner) {
-                filtered_records.push(record);
-            }
+            let actor_is_owner = Box::pin(actor_is_space_owner(
+                self,
+                &open_context,
+                space_id,
+                &mut owner_cache,
+            ))
+            .await?;
+            record_allowed.push(access::actor_may_read_sensitivity(
+                &open_context,
+                sensitivity,
+                actor_is_owner,
+            ));
         }
-        payload.records = filtered_records;
-        let mut filtered_events = Vec::with_capacity(payload.events.len());
-        for event in payload.events {
+        let mut record_index = 0;
+        payload.records.retain(|_| {
+            let allowed = record_allowed[record_index];
+            record_index += 1;
+            allowed
+        });
+        let mut event_allowed = Vec::with_capacity(payload.events.len());
+        for event in &payload.events {
             let space_id = event
                 .get("spaceId")
                 .and_then(|value| value.as_i64())
                 .and_then(|value| u64::try_from(value).ok())
                 .unwrap_or(0);
-            let actor_is_owner = if let Some(cached) = owner_cache.get(&space_id) {
-                *cached
-            } else {
-                let is_owner = access::actual_actor_is_space_owner(
-                    &self.runtime_data_plane,
-                    &open_context,
-                    space_id,
-                )
-                .await?;
-                owner_cache.insert(space_id, is_owner);
-                is_owner
-            };
-            if actor_is_owner {
-                filtered_events.push(event);
-            }
+            let actor_is_owner = Box::pin(actor_is_space_owner(
+                self,
+                &open_context,
+                space_id,
+                &mut owner_cache,
+            ))
+            .await?;
+            event_allowed.push(actor_is_owner);
         }
-        payload.events = filtered_events;
+        let mut event_index = 0;
+        payload.events.retain(|_| {
+            let allowed = event_allowed[event_index];
+            event_index += 1;
+            allowed
+        });
         Ok(payload)
     }
 
+    /// Serializes the export exactly once into bytes, aborting through the
+    /// size guard the moment the configured cap is crossed.
     fn encode_export_payload(
         format: &str,
         payload: &ExportCollectedPayload,
-    ) -> MemoryServiceResult<serde_json::Value> {
+        max_payload_bytes: usize,
+    ) -> MemoryServiceResult<Vec<u8>> {
+        let mut writer = ExportSizeGuard {
+            bytes: Vec::new(),
+            max_bytes: max_payload_bytes,
+            limit: max_payload_bytes,
+        };
+        fn encode_failure(error: String, max_payload_bytes: usize) -> MemoryServiceError {
+            if error.contains("export payload byte limit exceeded") {
+                MemoryServiceError::validation(format!(
+                    "export payload exceeds the configured {max_payload_bytes} byte limit"
+                ))
+            } else {
+                MemoryServiceError::storage(format!("export payload encode failed: {error}"))
+            }
+        }
+        use std::io::Write as _;
         match format {
-            "json" => serde_json::to_value(payload).map_err(|error| {
-                MemoryServiceError::storage(format!("export encode failed: {error}"))
-            }),
+            "json" => {
+                serde_json::to_writer(&mut writer, payload)
+                    .map_err(|error| encode_failure(error.to_string(), max_payload_bytes))?;
+            }
             "jsonl" => {
-                let mut lines = Vec::new();
                 for record in &payload.records {
-                    lines.push(serde_json::to_string(record).map_err(|error| {
-                        MemoryServiceError::storage(format!("export jsonl encode failed: {error}"))
-                    })?);
+                    serde_json::to_writer(&mut writer, record)
+                        .map_err(|error| encode_failure(error.to_string(), max_payload_bytes))?;
+                    writer
+                        .write_all(b"\n")
+                        .map_err(|error| encode_failure(error.to_string(), max_payload_bytes))?;
                 }
                 for event in &payload.events {
-                    lines.push(serde_json::to_string(event).map_err(|error| {
-                        MemoryServiceError::storage(format!("export jsonl encode failed: {error}"))
-                    })?);
+                    serde_json::to_writer(&mut writer, event)
+                        .map_err(|error| encode_failure(error.to_string(), max_payload_bytes))?;
+                    writer
+                        .write_all(b"\n")
+                        .map_err(|error| encode_failure(error.to_string(), max_payload_bytes))?;
                 }
-                Ok(serde_json::Value::String(lines.join("\n")))
             }
             "markdown" => {
-                let mut body = String::from("# Memory Export\n\n");
+                writer
+                    .write_all(b"# Memory Export\n\n")
+                    .map_err(|error| encode_failure(error.to_string(), max_payload_bytes))?;
                 for record in &payload.records {
                     let text = record
                         .get("canonicalText")
                         .and_then(|value| value.as_str())
                         .unwrap_or("");
-                    body.push_str(&format!("- {text}\n"));
+                    writer
+                        .write_all(format!("- {text}\n").as_bytes())
+                        .map_err(|error| encode_failure(error.to_string(), max_payload_bytes))?;
                 }
-                Ok(serde_json::Value::String(body))
             }
-            other => Err(MemoryServiceError::validation(format!(
-                "unsupported export format: {other}"
-            ))),
+            other => {
+                return Err(MemoryServiceError::validation(format!(
+                    "unsupported export format: {other}"
+                )));
+            }
         }
+        Ok(writer.bytes)
     }
 
     async fn assert_habit_actor_access(
@@ -991,9 +1036,13 @@ impl MemoryAppApi for OpenMemoryService {
             .await?;
         let exported_records = payload.records.len() as u32;
         let exported_events = payload.events.len() as u32;
-        let export_body = Self::encode_export_payload(&request.format, &payload)?;
-        let export_payload_size_bytes =
-            validate_export_payload_size(&export_body, max_payload_bytes)?;
+        // Single encode pass: the payload serializes once into the byte
+        // buffer while the size guard aborts the moment the configured cap
+        // is crossed. The previous chain encoded the same payload three
+        // times (Value, size probe, final bytes) and held every copy
+        // concurrently.
+        let export_body = Self::encode_export_payload(&request.format, &payload, max_payload_bytes)?;
+        let export_payload_size_bytes = export_body.len();
         crate::domain_metrics::memory_domain_metrics()
             .record_export_payload_bytes(export_payload_size_bytes);
         drop(payload);
@@ -1005,7 +1054,6 @@ impl MemoryAppApi for OpenMemoryService {
                 )
             })?;
             let export_ref = format!("export-job-{job_id}");
-            let export_bytes = export_payload_bytes(export_body)?;
             let upload = uploader
                 .upload_export(MemoryDriveExportUploadRequest {
                     tenant_id,
@@ -1016,7 +1064,7 @@ impl MemoryAppApi for OpenMemoryService {
                     export_job_id: job_id,
                     format: request.format.clone(),
                     drive_target_ref: drive_target_ref.clone(),
-                    body: export_bytes,
+                    body: export_body,
                     content_type: export_content_type(&request.format),
                     original_file_name: export_file_name(job_id, &request.format),
                 })
@@ -1091,6 +1139,13 @@ impl MemoryAppApi for OpenMemoryService {
             return Ok(job);
         }
 
+        // Text formats embed as strings; the json format reparses the single
+        // encoded buffer into a structural value.
+        let export_payload_value = match request.format.as_str() {
+            "json" => serde_json::from_slice::<serde_json::Value>(&export_body)
+                .unwrap_or(serde_json::Value::Null),
+            _ => serde_json::Value::String(String::from_utf8_lossy(&export_body).into_owned()),
+        };
         let job = MemoryExportJob {
             export_job_id: job_id,
             state: "succeeded".to_string(),
@@ -1100,7 +1155,7 @@ impl MemoryAppApi for OpenMemoryService {
                 "exportedRecords": exported_records,
                 "exportedEvents": exported_events,
                 "spaceIds": request.space_ids,
-                "exportPayload": export_body,
+                "exportPayload": export_payload_value,
             })),
             created_at: now.clone(),
             updated_at: now,
@@ -2019,8 +2074,9 @@ impl MemoryBackendApi for OpenMemoryService {
         &self,
         context: MemoryBackendRequestContext,
         index_id: u64,
+        request: MemoryReviewRequest,
     ) -> MemoryServiceResult<MemoryLearningJob> {
-        self.backend_rebuild_index(context, index_id).await
+        self.backend_rebuild_index(context, index_id, request).await
     }
 
     async fn list_retrieval_profiles(
@@ -2207,7 +2263,6 @@ fn map_audit_log(row: NativeSqlAuditLogRow) -> MemoryServiceResult<MemoryAuditLo
         action: row.action,
         resource_type: row.resource_type,
         resource_id: Some(row.resource_id),
-        request_id: None,
         trace_id: None,
         result: row.result,
         reason: None,
@@ -2216,14 +2271,6 @@ fn map_audit_log(row: NativeSqlAuditLogRow) -> MemoryServiceResult<MemoryAuditLo
     })
 }
 
-fn export_payload_bytes(payload: serde_json::Value) -> MemoryServiceResult<Vec<u8>> {
-    match payload {
-        serde_json::Value::String(body) => Ok(body.into_bytes()),
-        other => serde_json::to_vec(&other).map_err(|error| {
-            MemoryServiceError::storage(format!("export payload encode failed: {error}"))
-        }),
-    }
-}
 
 const ABSOLUTE_MAX_EXPORT_BYTES: usize = 256 * 1024 * 1024;
 
@@ -2241,50 +2288,19 @@ fn export_payload_byte_limit(drive_export: bool) -> usize {
         .clamp(1_024, ABSOLUTE_MAX_EXPORT_BYTES)
 }
 
-fn validate_export_payload_size(
-    payload: &serde_json::Value,
-    max_payload_bytes: usize,
-) -> MemoryServiceResult<usize> {
-    let mut writer = ExportSizeGuard {
-        bytes: 0,
-        max_bytes: max_payload_bytes,
-    };
-    let encoded = match payload {
-        serde_json::Value::String(body) => body.len(),
-        other => {
-            serde_json::to_writer(&mut writer, other).map_err(|error| {
-                if writer.bytes > writer.max_bytes {
-                    MemoryServiceError::validation(format!(
-                        "export payload exceeds the configured {max_payload_bytes} byte limit"
-                    ))
-                } else {
-                    MemoryServiceError::storage(format!(
-                        "export payload size validation failed: {error}"
-                    ))
-                }
-            })?;
-            writer.bytes
-        }
-    };
-    if encoded > max_payload_bytes {
-        return Err(MemoryServiceError::validation(format!(
-            "export payload exceeds the configured {max_payload_bytes} byte limit"
-        )));
-    }
-    Ok(encoded)
-}
-
 struct ExportSizeGuard {
-    bytes: usize,
+    bytes: Vec<u8>,
     max_bytes: usize,
+    #[allow(dead_code)]
+    limit: usize,
 }
 
 impl std::io::Write for ExportSizeGuard {
     fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
-        self.bytes = self.bytes.saturating_add(buffer.len());
-        if self.bytes > self.max_bytes {
+        if self.bytes.len().saturating_add(buffer.len()) > self.max_bytes {
             return Err(std::io::Error::other("export payload byte limit exceeded"));
         }
+        self.bytes.extend_from_slice(buffer);
         Ok(buffer.len())
     }
 

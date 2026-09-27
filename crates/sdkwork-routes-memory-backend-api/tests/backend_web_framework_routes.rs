@@ -273,6 +273,7 @@ impl MemoryBackendApi for RecordingBackendApi {
         &self,
         _c: MemoryBackendRequestContext,
         _id: u64,
+        _request: MemoryReviewRequest,
     ) -> MemoryServiceResult<MemoryLearningJob> {
         unimplemented!("stub -- not called in web-framework test")
     }

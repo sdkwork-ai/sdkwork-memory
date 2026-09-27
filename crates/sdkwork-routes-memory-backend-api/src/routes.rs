@@ -1,10 +1,10 @@
 use axum::{
-    extract::Path,
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, patch, post},
-    Extension, Json, Router,
+    Extension, Router,
 };
+use sdkwork_routes_memory_support::{MemoryJson, MemoryPath};
 use sdkwork_intelligence_memory_service::OpenMemoryService;
 use sdkwork_memory_contract::{
     ListAdminResourcesQuery, ListAuditLogsQuery, ListCandidatesQuery, ListEventsQuery,
@@ -136,7 +136,7 @@ async fn list_spaces(
 async fn retrieve_space(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(space_id): Path<u64>,
+    MemoryPath(space_id): MemoryPath<u64>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(state.api.retrieve_space(context, space_id).await)
@@ -145,8 +145,8 @@ async fn retrieve_space(
 async fn update_space(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(space_id): Path<u64>,
-    Json(request): Json<MemorySpaceRequest>,
+    MemoryPath(space_id): MemoryPath<u64>,
+    MemoryJson(request): MemoryJson<MemorySpaceRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(state.api.update_space(context, space_id, request).await)
@@ -164,7 +164,7 @@ async fn list_memories(
 async fn retrieve_memory(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(memory_id): Path<u64>,
+    MemoryPath(memory_id): MemoryPath<u64>,
     Query(scope): Query<MemorySpaceScopeQuery>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
@@ -179,9 +179,9 @@ async fn retrieve_memory(
 async fn update_memory(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(memory_id): Path<u64>,
+    MemoryPath(memory_id): MemoryPath<u64>,
     Query(scope): Query<MemorySpaceScopeQuery>,
-    Json(patch): Json<MemoryRecordPatch>,
+    MemoryJson(patch): MemoryJson<MemoryRecordPatch>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(
@@ -195,8 +195,8 @@ async fn update_memory(
 async fn supersede_memory(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(memory_id): Path<u64>,
-    Json(request): Json<MemoryRecordRequest>,
+    MemoryPath(memory_id): MemoryPath<u64>,
+    MemoryJson(request): MemoryJson<MemoryRecordRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(
@@ -219,7 +219,7 @@ async fn list_events(
 async fn retrieve_event(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(event_id): Path<u64>,
+    MemoryPath(event_id): MemoryPath<u64>,
     Query(scope): Query<MemorySpaceScopeQuery>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
@@ -243,8 +243,8 @@ async fn list_candidates(
 async fn approve_candidate(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(candidate_id): Path<u64>,
-    Json(request): Json<MemoryReviewRequest>,
+    MemoryPath(candidate_id): MemoryPath<u64>,
+    MemoryJson(request): MemoryJson<MemoryReviewRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(
@@ -258,8 +258,8 @@ async fn approve_candidate(
 async fn reject_candidate(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(candidate_id): Path<u64>,
-    Json(request): Json<MemoryReviewRequest>,
+    MemoryPath(candidate_id): MemoryPath<u64>,
+    MemoryJson(request): MemoryJson<MemoryReviewRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(
@@ -273,7 +273,7 @@ async fn reject_candidate(
 async fn create_extraction_job(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(request): Json<MemoryExtractionRequest>,
+    MemoryJson(request): MemoryJson<MemoryExtractionRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     created_resource_json(state.api.create_extraction_job(context, request).await)
@@ -291,7 +291,7 @@ async fn list_extraction_jobs(
 async fn retrieve_extraction_job(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(job_id): Path<u64>,
+    MemoryPath(job_id): MemoryPath<u64>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(state.api.retrieve_extraction_job(context, job_id).await)
@@ -300,7 +300,7 @@ async fn retrieve_extraction_job(
 async fn create_consolidation_job(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(request): Json<MemoryExtractionRequest>,
+    MemoryJson(request): MemoryJson<MemoryExtractionRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     created_resource_json(state.api.create_consolidation_job(context, request).await)
@@ -318,7 +318,7 @@ async fn list_consolidation_jobs(
 async fn retrieve_consolidation_job(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(job_id): Path<u64>,
+    MemoryPath(job_id): MemoryPath<u64>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(state.api.retrieve_consolidation_job(context, job_id).await)
@@ -336,7 +336,7 @@ async fn list_indexes(
 async fn create_index(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(request): Json<MemoryIndexRequest>,
+    MemoryJson(request): MemoryJson<MemoryIndexRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     created_resource_json(state.api.create_index(context, request).await)
@@ -345,7 +345,7 @@ async fn create_index(
 async fn retrieve_index(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(index_id): Path<u64>,
+    MemoryPath(index_id): MemoryPath<u64>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(state.api.retrieve_index(context, index_id).await)
@@ -354,8 +354,8 @@ async fn retrieve_index(
 async fn update_index(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(index_id): Path<u64>,
-    Json(request): Json<MemoryIndexRequest>,
+    MemoryPath(index_id): MemoryPath<u64>,
+    MemoryJson(request): MemoryJson<MemoryIndexRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(state.api.update_index(context, index_id, request).await)
@@ -364,10 +364,16 @@ async fn update_index(
 async fn rebuild_index(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(index_id): Path<u64>,
+    MemoryPath(index_id): MemoryPath<u64>,
+    MemoryJson(request): MemoryJson<MemoryReviewRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
-    ok_resource_json(state.api.rebuild_index(context, index_id).await)
+    ok_resource_json(
+        state
+            .api
+            .rebuild_index(context, index_id, request)
+            .await,
+    )
 }
 
 async fn list_retrieval_profiles(
@@ -382,7 +388,7 @@ async fn list_retrieval_profiles(
 async fn create_retrieval_profile(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(request): Json<MemoryRetrievalProfileRequest>,
+    MemoryJson(request): MemoryJson<MemoryRetrievalProfileRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     created_resource_json(state.api.create_retrieval_profile(context, request).await)
@@ -391,7 +397,7 @@ async fn create_retrieval_profile(
 async fn retrieve_retrieval_profile(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(profile_id): Path<u64>,
+    MemoryPath(profile_id): MemoryPath<u64>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(
@@ -405,8 +411,8 @@ async fn retrieve_retrieval_profile(
 async fn update_retrieval_profile(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(profile_id): Path<u64>,
-    Json(request): Json<MemoryRetrievalProfileRequest>,
+    MemoryPath(profile_id): MemoryPath<u64>,
+    MemoryJson(request): MemoryJson<MemoryRetrievalProfileRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(
@@ -429,7 +435,7 @@ async fn list_implementation_profiles(
 async fn create_implementation_profile(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(request): Json<MemoryImplementationProfileRequest>,
+    MemoryJson(request): MemoryJson<MemoryImplementationProfileRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     created_resource_json(
@@ -443,7 +449,7 @@ async fn create_implementation_profile(
 async fn retrieve_implementation_profile(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(implementation_profile_id): Path<u64>,
+    MemoryPath(implementation_profile_id): MemoryPath<u64>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(
@@ -457,8 +463,8 @@ async fn retrieve_implementation_profile(
 async fn update_implementation_profile(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(implementation_profile_id): Path<u64>,
-    Json(request): Json<MemoryImplementationProfileRequest>,
+    MemoryPath(implementation_profile_id): MemoryPath<u64>,
+    MemoryJson(request): MemoryJson<MemoryImplementationProfileRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(
@@ -481,7 +487,7 @@ async fn list_provider_bindings(
 async fn create_provider_binding(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(request): Json<MemoryProviderBindingRequest>,
+    MemoryJson(request): MemoryJson<MemoryProviderBindingRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     created_resource_json(state.api.create_provider_binding(context, request).await)
@@ -490,8 +496,8 @@ async fn create_provider_binding(
 async fn update_provider_binding(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(provider_binding_id): Path<u64>,
-    Json(request): Json<MemoryProviderBindingRequest>,
+    MemoryPath(provider_binding_id): MemoryPath<u64>,
+    MemoryJson(request): MemoryJson<MemoryProviderBindingRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(
@@ -522,7 +528,7 @@ async fn list_eval_runs(
 async fn create_eval_run(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(request): Json<MemoryEvalRunRequest>,
+    MemoryJson(request): MemoryJson<MemoryEvalRunRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     created_resource_json(state.api.create_eval_run(context, request).await)
@@ -531,7 +537,7 @@ async fn create_eval_run(
 async fn retrieve_eval_run(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(eval_run_id): Path<u64>,
+    MemoryPath(eval_run_id): MemoryPath<u64>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(state.api.retrieve_eval_run(context, eval_run_id).await)
@@ -549,7 +555,7 @@ async fn list_retrieval_traces(
 async fn retrieve_retrieval_trace(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(trace_id): Path<u64>,
+    MemoryPath(trace_id): MemoryPath<u64>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(state.api.retrieve_retrieval_trace(context, trace_id).await)
@@ -567,7 +573,7 @@ async fn list_audit_logs(
 async fn create_retention_job(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(request): Json<MemoryRetentionJobRequest>,
+    MemoryJson(request): MemoryJson<MemoryRetentionJobRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     created_resource_json(state.api.create_retention_job(context, request).await)
@@ -585,7 +591,7 @@ async fn list_retention_jobs(
 async fn retrieve_retention_job(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(retention_job_id): Path<u64>,
+    MemoryPath(retention_job_id): MemoryPath<u64>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(
@@ -599,7 +605,7 @@ async fn retrieve_retention_job(
 async fn create_migration_job(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(request): Json<MemoryMigrationJobRequest>,
+    MemoryJson(request): MemoryJson<MemoryMigrationJobRequest>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     created_resource_json(state.api.create_migration_job(context, request).await)
@@ -617,7 +623,7 @@ async fn list_migration_jobs(
 async fn retrieve_migration_job(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(migration_job_id): Path<u64>,
+    MemoryPath(migration_job_id): MemoryPath<u64>,
 ) -> Result<Response, BackendApiProblem> {
     let context = require_backend_context(context)?;
     ok_resource_json(

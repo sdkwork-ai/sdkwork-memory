@@ -134,13 +134,12 @@ impl EmbeddingModelPort for OpenAiEmbeddings {
                 message: format!("embedding request failed: {error}"),
             })?;
         let status = response.status();
-        let body = response
-            .text()
-            .await
-            .map_err(|error| MemorySpiError::PortOperationFailed {
+        let body = crate::response::read_body_capped(response).await.map_err(
+            |error: MemorySpiError| MemorySpiError::PortOperationFailed {
                 port: "EmbeddingModelPort".to_string(),
-                message: format!("embedding response read failed: {error}"),
-            })?;
+                message: error.to_string(),
+            },
+        )?;
         if !status.is_success() {
             // Never echo the body verbatim: it can carry account metadata.
             return Err(MemorySpiError::PortOperationFailed {
@@ -188,13 +187,12 @@ impl EmbeddingModelPort for OpenAiEmbeddings {
                 message: format!("embedding request failed: {error}"),
             })?;
         let status = response.status();
-        let body = response
-            .text()
-            .await
-            .map_err(|error| MemorySpiError::PortOperationFailed {
+        let body = crate::response::read_body_capped(response).await.map_err(
+            |error: MemorySpiError| MemorySpiError::PortOperationFailed {
                 port: "EmbeddingModelPort".to_string(),
-                message: format!("embedding response read failed: {error}"),
-            })?;
+                message: error.to_string(),
+            },
+        )?;
         if !status.is_success() {
             return Err(MemorySpiError::PortOperationFailed {
                 port: "EmbeddingModelPort".to_string(),

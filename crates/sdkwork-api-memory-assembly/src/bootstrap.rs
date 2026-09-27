@@ -120,6 +120,7 @@ pub async fn assemble_api_router(
         .merge(open_router)
         .merge(app_router)
         .merge(backend_router)
+        .layer(sdkwork_routes_memory_support::MemoryPanicShieldLayer)
         .layer(Extension(product))
         .layer(ConcurrencyLimitLayer::new(max_concurrency));
 
@@ -234,6 +235,7 @@ async fn metrics(Extension(product): Extension<Arc<OpenMemoryService>>) -> impl 
 async fn assemble_contribution_with_product_from_env(
 ) -> Result<(ApiAssemblyContribution, Arc<OpenMemoryService>), String> {
     refresh_memory_http_metric_dimensions();
+    sdkwork_intelligence_memory_service::platform::validate_runtime_secrets_for_environment()?;
     validate_outbox_runtime_config().await?;
     let runtime = bootstrap_memory_runtime_from_env().await?;
     info!(

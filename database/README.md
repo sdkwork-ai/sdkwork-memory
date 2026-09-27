@@ -48,16 +48,30 @@ application-root directories:
   UTC format (`%Y-%m-%dT%H:%M:%S%.3fZ`); any writer that emits a different format
   breaks time comparisons silently.
 - Unique constraints that must tolerate `NULL` pairs use PostgreSQL 15+
-  `NULLS NOT DISTINCT`; the deployment minimum PostgreSQL version is 15. SQLite
+  `NULLS NOT DISTINCT`; the deployment minimum PostgreSQL version is 15, and the
+  data-plane bootstrap asserts `server_version_num >= 150000` at startup. SQLite
   mirrors the same uniqueness with a `-1` sentinel for "any user" preference rows
   (see `preference_scope_user_binding` in the native SQL store).
 - Continuous confidence, ranking, and weight values use PostgreSQL
   `DOUBLE PRECISION` and SQLite `REAL`. They are not monetary or exact-decimal
   values.
 - Outbox deliveries, learning jobs, and eval runs persist owner/token/expiry
-  leases with an `attempt_count` bound; completion and acknowledgement are fenced
-  by the current unexpired token, and stale rows past the attempt ceiling land in
-  a terminal `dead` state.
+  leases with an `attempt_count` bound; completion, acknowledgement, and failure
+  marking are all fenced by the current unexpired token, and stale rows past the
+  attempt ceiling land in a terminal `dead` state. Learning jobs carry
+  `next_attempt_at` for attempt-aware requeue backoff; eval runs mirror
+  `ai_learning_job.error_json` for dead-letter reasons.
+- A scheduled retention worker hard-deletes terminal and derived rows in
+  bounded batches: terminal outbox events, terminal learning/eval jobs,
+  retrieval traces with their hits and context packs, and audit logs — each on
+  its own configurable window (`SDKWORK_MEMORY_RETENTION_*`, 0 disables a
+  sweep). Canonical records and events are never touched by mechanical
+  retention; they follow the space retention job and forget workflows.
+- Cross-dialect schema parity (tables, columns, constraints, indexes) is
+  machine-checked by `tools/check-database-dialect-parity.mjs` with a declared
+  divergence allowlist, and the SQLite folded baseline under
+  `tests/fixtures/database/sqlite/ddl/baseline/` is regenerated from the
+  fixture migrations by `pnpm db:materialize:baseline` so it cannot go stale.
 - Runtime pods keep auto-migration disabled. Production applies the baseline
   through the release migration job before rolling out runtime Pods.
 

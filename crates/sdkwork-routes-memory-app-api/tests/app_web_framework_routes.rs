@@ -25,6 +25,7 @@ use tower::util::ServiceExt;
 
 #[tokio::test]
 async fn app_router_web_framework_rejects_unauthenticated_requests() {
+    let _env = lock_integration_test_env().await;
     let app = wrap_router_with_iam_database_web_framework(
         IamWebRequestContextResolver::new(None),
         build_router_with_shared_app_api(Arc::new(RecordingAppApi::default())),

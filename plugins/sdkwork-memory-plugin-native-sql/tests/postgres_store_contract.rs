@@ -2,6 +2,7 @@
 
 use sdkwork_database_config::{DatabaseConfig, DatabaseEngine};
 use sdkwork_memory_plugin_native_sql::{
+    StaleRequeueCounts,
     ConsolidateDuplicateRecordsCommand, InsertEntityCommand, NativeSqlAppendOutboxEventCommand,
     NativeSqlCreateSpaceCommand, NativeSqlMemoryStore, UpdateEvalRunStateCommand,
 };
@@ -269,7 +270,7 @@ async fn postgres_store_claims_eval_runs_atomically() {
             .requeue_stale_running_eval_runs(30)
             .await
             .expect("requeue expired eval lease"),
-        1
+        StaleRequeueCounts { requeued: 1, dead: 0 }
     );
     let replacement = store
         .claim_queued_eval_runs(4, "eval-worker-b", "eval-lease-b", 30)
@@ -433,10 +434,10 @@ async fn postgres_store_fences_expired_outbox_delivery_leases() {
     .expect("expire PostgreSQL outbox lease");
     assert_eq!(
         store
-            .requeue_stale_processing_outbox_events(30)
+            .requeue_stale_processing_outbox_events(5)
             .await
             .expect("requeue expired PostgreSQL outbox lease"),
-        1
+        StaleRequeueCounts { requeued: 1, dead: 0 }
     );
 
     let second = store

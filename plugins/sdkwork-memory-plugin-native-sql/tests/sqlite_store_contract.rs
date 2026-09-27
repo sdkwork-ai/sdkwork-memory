@@ -5,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use sdkwork_database_config::{DatabaseConfig, DatabaseEngine};
 use sdkwork_memory_plugin_native_sql::{
+    StaleRequeueCounts,
     build_native_sql_candidate_store, build_native_sql_habit_store,
     build_native_sql_retrieval_trace_store, ConsolidateDuplicateRecordsCommand,
     FinishLearningJobCommand, InsertEntityCommand, InsertLearningJobCommand,
@@ -408,7 +409,7 @@ async fn sqlite_learning_job_completion_is_fenced_by_execution_lease() {
     .unwrap();
     assert_eq!(
         store.requeue_stale_running_learning_jobs(30).await.unwrap(),
-        1
+        StaleRequeueCounts { requeued: 1, dead: 0 }
     );
     let replacement = store
         .claim_queued_learning_jobs(1, "job-worker-b", "job-lease-b", 30)
@@ -3546,8 +3547,14 @@ async fn sqlite_store_marks_outbox_published_and_excludes_it_from_pending() {
         .await
         .unwrap();
 
+    // Publishing is lease-fenced: claim first so this caller owns the event.
+    let claimed = store
+        .claim_global_pending_outbox_events(1, "publisher-a", "lease-a", 30)
+        .await
+        .unwrap();
+    assert_eq!(claimed.len(), 1);
     let published = store
-        .mark_outbox_published(&scope, "out-publish")
+        .mark_outbox_published(&scope, "out-publish", "publisher-a", "lease-a")
         .await
         .unwrap()
         .unwrap();
@@ -3715,8 +3722,14 @@ async fn sqlite_store_marks_outbox_failed_increments_retry_and_excludes_it_from_
         .await
         .unwrap();
 
+    // Failure marking is lease-fenced too: claim first.
+    let claimed_for_failure = store
+        .claim_global_pending_outbox_events(1, "publisher-a", "lease-a", 30)
+        .await
+        .unwrap();
+    assert_eq!(claimed_for_failure.len(), 1);
     let failed = store
-        .mark_outbox_failed(&scope, "out-fail")
+        .mark_outbox_failed(&scope, "out-fail", "publisher-a", "lease-a")
         .await
         .unwrap()
         .unwrap();
@@ -3754,12 +3767,20 @@ async fn sqlite_store_outbox_delivery_lifecycle_does_not_cross_tenant_scope() {
         .await
         .unwrap();
 
-    let missing = store
-        .mark_outbox_published(&missing_tenant, "out-scoped")
+    // Claim under tenant one, then prove the fence blocks both a wrong
+    // tenant scope and a wrong tenant's lease from publishing the event.
+    let claimed = store
+        .claim_global_pending_outbox_events(1, "publisher-a", "lease-a", 30)
         .await
         .unwrap();
+    assert_eq!(claimed.len(), 1);
+    let missing = store
+        .mark_outbox_published(&missing_tenant, "out-scoped", "publisher-a", "lease-a")
+        .await
+        .unwrap();
+    assert!(missing.is_none(), "wrong tenant must not publish");
     let tenant_one_published = store
-        .mark_outbox_published(&tenant_one, "out-scoped")
+        .mark_outbox_published(&tenant_one, "out-scoped", "publisher-a", "lease-a")
         .await
         .unwrap()
         .unwrap();
@@ -3768,7 +3789,6 @@ async fn sqlite_store_outbox_delivery_lifecycle_does_not_cross_tenant_scope() {
         .await
         .unwrap();
 
-    assert!(missing.is_none());
     assert_eq!(tenant_one_published.publish_state, "published");
     assert_eq!(tenant_two_pending.len(), 1);
     assert_eq!(tenant_two_pending[0].aggregate_id, "rec-2");
@@ -3803,11 +3823,19 @@ async fn sqlite_store_implements_outbox_delivery_lifecycle_spi_port() {
     )
     .await
     .unwrap();
+    // The mark is lease-fenced: claim first so this caller owns the event.
+    let claimed = store
+        .claim_global_pending_outbox_events(1, "spi-worker", "spi-lease-a", 30)
+        .await
+        .unwrap();
+    assert_eq!(claimed.len(), 1);
     let published = MemoryOutboxStorePort::mark_published(
         &store,
         MarkMemoryOutboxPublishedCommand {
             scope: scope.clone(),
             outbox_id: "out-spi-lifecycle".to_string(),
+            lease_owner: "spi-worker".to_string(),
+            lease_token: "spi-lease-a".to_string(),
         },
     )
     .await
@@ -3837,11 +3865,18 @@ async fn sqlite_store_implements_outbox_delivery_lifecycle_spi_port() {
     )
     .await
     .unwrap();
+    let claimed_for_failure = store
+        .claim_global_pending_outbox_events(1, "spi-worker", "spi-lease-b", 30)
+        .await
+        .unwrap();
+    assert_eq!(claimed_for_failure.len(), 1);
     let failed = MemoryOutboxStorePort::mark_failed(
         &store,
         MarkMemoryOutboxFailedCommand {
             scope,
             outbox_id: "out-spi-failed".to_string(),
+            lease_owner: "spi-worker".to_string(),
+            lease_token: "spi-lease-b".to_string(),
         },
     )
     .await
@@ -5375,17 +5410,10 @@ async fn sqlite_delete_all_sweeps_the_scope_with_journals_and_stays_idempotent()
     .await
     .unwrap();
 
-    let mut deleted = receipt.deleted_ids.clone();
-
-    deleted.sort();
+    let deleted = receipt.deleted_count;
 
     assert_eq!(
-        deleted,
-        vec![
-            "sweep-one".to_string(),
-            "sweep-three".to_string(),
-            "sweep-two".to_string()
-        ],
+        deleted, 3,
         "delete_all must sweep the active records of the scope"
     );
 
@@ -5417,7 +5445,7 @@ async fn sqlite_delete_all_sweeps_the_scope_with_journals_and_stays_idempotent()
     .await
     .unwrap();
 
-    assert!(second.deleted_ids.is_empty());
+    assert_eq!(second.deleted_count, 0);
 
     let outbox_after: i64 = sqlx::query_scalar(
 
@@ -5664,4 +5692,112 @@ async fn sqlite_record_update_preserves_object_text_and_refreshes_fts() {
     .unwrap();
     assert_eq!(fts_row.0, "Rewritten canonical statement");
     assert_eq!(fts_row.1, "original object payload");
+}
+
+#[tokio::test]
+async fn sqlite_store_retention_purges_terminal_and_derived_rows_only() {
+    let store = new_contract_store().await;
+    let now = crate_now_text();
+    let ancient = "2020-01-01T00:00:00.000Z";
+
+    // Two outbox events: one terminal and ancient (must purge), one pending
+    // and ancient (must survive — it is still awaiting delivery).
+    sqlx::query(
+        r#"
+        INSERT INTO ai_outbox_event
+            (id, uuid, tenant_id, aggregate_type, aggregate_id, event_type,
+             event_version, payload_json, publish_state, created_at, updated_at)
+        VALUES
+            (901, 'ret-out-1', 1, 'memory_record', 'rec-1', 'memory.record.deleted',
+             '1.0', '{}', 'published', ?, ?),
+            (902, 'ret-out-2', 1, 'memory_record', 'rec-2', 'memory.record.deleted',
+             '1.0', '{}', 'pending', ?, ?)
+        "#,
+    )
+    .bind(ancient)
+    .bind(ancient)
+    .bind(ancient)
+    .bind(&now)
+    .execute(store.pool())
+    .await
+    .unwrap();
+
+    let purged_outbox = store.purge_terminal_outbox_events(0).await.unwrap();
+    assert_eq!(purged_outbox, 1, "only the terminal ancient event is purged");
+    let remaining: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ai_outbox_event")
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    assert_eq!(remaining, 1, "the pending event must survive the sweep");
+
+    // A learning job still queued must survive; a dead one from 2020 purges.
+    sqlx::query(
+        r#"
+        INSERT INTO ai_learning_job
+            (id, uuid, tenant_id, space_id, job_type, state, priority, created_at, updated_at)
+        VALUES
+            (903, 'ret-job-1', 1, 1, 'extraction', 'dead', 0, ?, ?),
+            (904, 'ret-job-2', 1, 1, 'extraction', 'queued', 0, ?, ?)
+        "#,
+    )
+    .bind(ancient)
+    .bind(ancient)
+    .bind(&now)
+    .bind(&now)
+    .execute(store.pool())
+    .await
+    .unwrap();
+    let purged_jobs = store.purge_terminal_learning_jobs(0).await.unwrap();
+    assert_eq!(purged_jobs, 1);
+
+    // Trace family: hits and packs go before the trace row.
+    sqlx::query(
+        r#"
+        INSERT INTO ai_retrieval_trace
+            (id, uuid, tenant_id, space_id, query_hash, result_count, degraded, created_at)
+        VALUES (905, 'ret-trace-1', 1, 1, 'hash', 1, 0, ?)
+        "#,
+    )
+    .bind(ancient)
+    .execute(store.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"
+        INSERT INTO ai_retrieval_hit
+            (id, uuid, tenant_id, retrieval_trace_id, retriever_name, result_rank, status, created_at)
+        VALUES (906, 'ret-hit-1', 1, 905, 'sql', 1, 'included', ?)
+        "#,
+    )
+    .bind(ancient)
+    .execute(store.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"
+        INSERT INTO ai_context_pack
+            (id, uuid, tenant_id, retrieval_trace_id, pack_json, estimated_tokens, truncated, created_at)
+        VALUES (907, 'ret-pack-1', 1, 905, '{}', 1, 0, ?)
+        "#,
+    )
+    .bind(ancient)
+    .execute(store.pool())
+    .await
+    .unwrap();
+
+    let stats = store.purge_retrieval_traces(0).await.unwrap();
+    assert_eq!(
+        (stats.hits, stats.context_packs, stats.traces),
+        (1, 1, 1),
+        "the whole trace family must be removed child-first"
+    );
+    let traces_left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ai_retrieval_trace")
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    assert_eq!(traces_left, 0);
+}
+
+fn crate_now_text() -> String {
+    sdkwork_utils_rust::format_datetime(sdkwork_utils_rust::now(), None)
 }

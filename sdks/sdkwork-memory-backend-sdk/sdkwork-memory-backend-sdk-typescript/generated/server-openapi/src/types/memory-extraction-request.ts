@@ -4,6 +4,4 @@ export interface MemoryExtractionRequest {
   extractionMode?: 'deterministic' | 'llm_assisted' | 'hybrid';
   customInstructions?: string | null;
   observationDate?: string | null;
-  reviewRequired?: boolean;
-  metadata?: Record<string, unknown> | null;
 }

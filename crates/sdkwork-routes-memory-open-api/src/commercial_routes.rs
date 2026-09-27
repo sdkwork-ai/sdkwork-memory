@@ -1,6 +1,7 @@
 //! Commercial entity and edge routes for the Open API.
 
-use axum::{extract::Path, response::Response, routing::get, Extension, Json, Router};
+use sdkwork_routes_memory_support::{MemoryJson, MemoryPath};
+use axum::{response::Response, routing::get, Extension, Router};
 use sdkwork_memory_contract::{
     CreateEdgeCommand, CreateEntityCommand, ListEdgesQuery, ListEntitiesQuery,
     MemoryOpenApiRequestContext, UpdateEdgeCommand, UpdateEntityCommand,
@@ -25,7 +26,7 @@ pub fn commercial_routes() -> Router {
 async fn create_entity(
     Extension(state): Extension<OpenState>,
     context: Option<Extension<MemoryOpenApiRequestContext>>,
-    Json(mut cmd): Json<CreateEntityCommand>,
+    MemoryJson(mut cmd): MemoryJson<CreateEntityCommand>,
 ) -> Result<Response, ApiProblem> {
     let product = state.require_product()?;
     let context = require_context(context)?;
@@ -36,7 +37,7 @@ async fn create_entity(
 async fn retrieve_entity(
     Extension(state): Extension<OpenState>,
     context: Option<Extension<MemoryOpenApiRequestContext>>,
-    Path(entity_id): Path<String>,
+    MemoryPath(entity_id): MemoryPath<String>,
 ) -> Result<Response, ApiProblem> {
     let product = state.require_product()?;
     let context = require_context(context)?;
@@ -61,8 +62,8 @@ async fn list_entities(
 async fn update_entity(
     Extension(state): Extension<OpenState>,
     context: Option<Extension<MemoryOpenApiRequestContext>>,
-    Path(entity_id): Path<String>,
-    Json(cmd): Json<UpdateEntityCommand>,
+    MemoryPath(entity_id): MemoryPath<String>,
+    MemoryJson(cmd): MemoryJson<UpdateEntityCommand>,
 ) -> Result<Response, ApiProblem> {
     let product = state.require_product()?;
     let context = require_context(context)?;
@@ -76,7 +77,7 @@ async fn update_entity(
 async fn create_edge(
     Extension(state): Extension<OpenState>,
     context: Option<Extension<MemoryOpenApiRequestContext>>,
-    Json(mut cmd): Json<CreateEdgeCommand>,
+    MemoryJson(mut cmd): MemoryJson<CreateEdgeCommand>,
 ) -> Result<Response, ApiProblem> {
     let product = state.require_product()?;
     let context = require_context(context)?;
@@ -87,7 +88,7 @@ async fn create_edge(
 async fn retrieve_edge(
     Extension(state): Extension<OpenState>,
     context: Option<Extension<MemoryOpenApiRequestContext>>,
-    Path(edge_id): Path<String>,
+    MemoryPath(edge_id): MemoryPath<String>,
 ) -> Result<Response, ApiProblem> {
     let product = state.require_product()?;
     let context = require_context(context)?;
@@ -112,8 +113,8 @@ async fn list_edges(
 async fn update_edge(
     Extension(state): Extension<OpenState>,
     context: Option<Extension<MemoryOpenApiRequestContext>>,
-    Path(edge_id): Path<String>,
-    Json(cmd): Json<UpdateEdgeCommand>,
+    MemoryPath(edge_id): MemoryPath<String>,
+    MemoryJson(cmd): MemoryJson<UpdateEdgeCommand>,
 ) -> Result<Response, ApiProblem> {
     let product = state.require_product()?;
     let context = require_context(context)?;
@@ -127,7 +128,7 @@ async fn update_edge(
 async fn delete_edge(
     Extension(state): Extension<OpenState>,
     context: Option<Extension<MemoryOpenApiRequestContext>>,
-    Path(edge_id): Path<String>,
+    MemoryPath(edge_id): MemoryPath<String>,
 ) -> Result<Response, ApiProblem> {
     let product = state.require_product()?;
     let context = require_context(context)?;

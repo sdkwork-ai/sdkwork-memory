@@ -49,12 +49,13 @@ Generated route manifests and authority OpenAPI files are the operation inventor
 - Console cannot import or call Backend SDK operations. Admin cannot substitute raw HTTP for the composed Backend SDK.
 - Interactive lists use server pagination. High-volume histories use store-level keyset windows and never download all rows for client slicing.
 - SDKWork-owned HTTP success responses use the standard response envelope; errors use `application/problem+json` with numeric `code` and `traceId`.
-- Memory mutations preserve evidence and audit semantics. Destructive commands require typed reasons where the domain requires a reason; ordinary `DELETE` operations use explicit confirmation and no fictitious request body.
+- Memory mutations preserve evidence and audit semantics. Destructive commands require typed reasons where the domain requires a reason; ordinary `DELETE` operations use explicit confirmation and no fictitious request body. Bulk `delete_all` returns a count-only receipt — the deleted id list is never returned.
 - Embeddings are optional. Native SQL retrieval remains operational when external providers are absent or degraded.
 - Restricted and sensitive data access fails closed and is constrained before the store query or provider call.
 - Exports use approved Drive integration when a Drive target is requested. Credentials and provider secrets are references, never repository data.
 - Export memory is bounded: inline defaults to 4 MiB, Drive defaults to 64 MiB, and neither path may exceed the 256 MiB hard cap until streaming multipart is implemented and verified.
-- Cluster workers use database-fenced leases; an expired Outbox, learning, or evaluation worker cannot acknowledge or complete work after takeover.
+- Cluster workers use database-fenced leases; an expired Outbox, learning, or evaluation worker cannot acknowledge or complete work after takeover. Learning execution errors requeue with attempt-aware backoff, and exhausted attempt budgets dead-letter with logged, metric-exported transitions.
+- A scheduled retention worker hard-deletes terminal outbox events, terminal learning/evaluation jobs, retrieval traces with their hits and context packs, and audit logs past per-table configurable windows, so high-churn tables stay bounded under production traffic.
 
 ## Quality And Operations Targets
 

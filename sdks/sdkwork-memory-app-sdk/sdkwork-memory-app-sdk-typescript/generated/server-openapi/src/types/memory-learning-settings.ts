@@ -1,9 +1,5 @@
 export interface MemoryLearningSettings {
-  autoExtractEnabled: boolean;
-  autoApproveThreshold: number;
-  reviewRequiredBelowThreshold: boolean;
-  habitPromotionThreshold: number;
-  retentionPolicyRef?: string | null;
+  autoPromoteCandidates: boolean;
+  habitLearningEnabled: boolean;
   updatedAt: string;
-  version: string;
 }

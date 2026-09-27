@@ -3,7 +3,5 @@ export interface MemoryFeedback {
   targetType: string;
   targetId: string;
   feedbackType: string;
-  rating?: number | null;
-  comment?: string | null;
   createdAt: string;
 }

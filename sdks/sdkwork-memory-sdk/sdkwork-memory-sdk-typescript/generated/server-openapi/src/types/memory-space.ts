@@ -10,7 +10,6 @@ export interface MemorySpace {
   defaultScope?: string;
   lifecycleStatus: string;
   metadata?: Record<string, unknown> | null;
-  policy?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
   version: string;

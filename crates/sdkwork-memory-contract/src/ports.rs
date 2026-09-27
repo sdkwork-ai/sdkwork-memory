@@ -225,7 +225,8 @@ pub trait MemoryOpenApi: Send + Sync + 'static {
     ) -> MemoryServiceResult<()>;
 
     /// Bulk-delete every active record in the space (optionally narrowed to one
-    /// owner), the analogue of mem0's `delete_all`. Returns the deleted ids.
+    /// owner), the analogue of mem0's `delete_all`. Returns the deleted count
+    /// only — the id list would scale with the swept scope.
     async fn delete_all_memories(
         &self,
         context: MemoryOpenApiRequestContext,

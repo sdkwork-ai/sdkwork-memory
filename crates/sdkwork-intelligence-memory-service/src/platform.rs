@@ -361,6 +361,25 @@ fn cursor_signing_key() -> &'static Vec<u8> {
     })
 }
 
+/// Rejects a production-like startup whose cursor-signing key is unset: the
+/// built-in fallback keeps tokens well-formed, but a public key gives the MAC
+/// no cross-deployment anti-forgery value, so production must set
+/// `SDKWORK_MEMORY_CURSOR_SIGNING_KEY` explicitly.
+pub fn validate_runtime_secrets_for_environment() -> Result<(), String> {
+    if is_production_like_environment()
+        && std::env::var("SDKWORK_MEMORY_CURSOR_SIGNING_KEY")
+            .map(|value| value.trim().is_empty())
+            .unwrap_or(true)
+    {
+        return Err(
+            "production Memory runtime requires SDKWORK_MEMORY_CURSOR_SIGNING_KEY: the built-in \
+             cursor-signing fallback is not acceptable for production deployments"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
 fn cursor_mac(raw: &str) -> String {
     use hmac::Mac;
     type HmacSha256 = hmac::Hmac<sha2::Sha256>;

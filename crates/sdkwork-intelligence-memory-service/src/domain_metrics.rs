@@ -76,6 +76,18 @@ impl Histogram {
     }
 }
 
+/// Retention sweep targets, mapping purge results to their metric counter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RetentionTable {
+    OutboxEvents,
+    LearningJobs,
+    EvalRuns,
+    RetrievalHits,
+    ContextPacks,
+    RetrievalTraces,
+    AuditLogs,
+}
+
 pub struct MemoryDomainMetrics {
     retrieval_total: AtomicU64,
     authz_denied_total: AtomicU64,
@@ -84,6 +96,15 @@ pub struct MemoryDomainMetrics {
     outbox_publish_failed_total: AtomicU64,
     outbox_delivery_failed_total: AtomicU64,
     outbox_dead_letter_total: AtomicU64,
+    learning_jobs_dead_total: AtomicU64,
+    eval_runs_dead_total: AtomicU64,
+    retention_outbox_events_purged_total: AtomicU64,
+    retention_learning_jobs_purged_total: AtomicU64,
+    retention_eval_runs_purged_total: AtomicU64,
+    retention_retrieval_hits_purged_total: AtomicU64,
+    retention_context_packs_purged_total: AtomicU64,
+    retention_retrieval_traces_purged_total: AtomicU64,
+    retention_audit_logs_purged_total: AtomicU64,
     serving: AtomicU64,
     retrieval_latency: Histogram,
     outbox_delivery_latency: Histogram,
@@ -100,6 +121,15 @@ impl MemoryDomainMetrics {
             outbox_publish_failed_total: AtomicU64::new(0),
             outbox_delivery_failed_total: AtomicU64::new(0),
             outbox_dead_letter_total: AtomicU64::new(0),
+            learning_jobs_dead_total: AtomicU64::new(0),
+            eval_runs_dead_total: AtomicU64::new(0),
+            retention_outbox_events_purged_total: AtomicU64::new(0),
+            retention_learning_jobs_purged_total: AtomicU64::new(0),
+            retention_eval_runs_purged_total: AtomicU64::new(0),
+            retention_retrieval_hits_purged_total: AtomicU64::new(0),
+            retention_context_packs_purged_total: AtomicU64::new(0),
+            retention_retrieval_traces_purged_total: AtomicU64::new(0),
+            retention_audit_logs_purged_total: AtomicU64::new(0),
             serving: AtomicU64::new(1),
             retrieval_latency: Histogram::new(LATENCY_BOUNDS_MS),
             outbox_delivery_latency: Histogram::new(LATENCY_BOUNDS_MS),
@@ -150,6 +180,31 @@ impl MemoryDomainMetrics {
             .fetch_add(1, Ordering::Relaxed);
     }
 
+    pub fn record_learning_jobs_dead(&self, count: u64) {
+        self.learning_jobs_dead_total
+            .fetch_add(count, Ordering::Relaxed);
+    }
+
+    pub fn record_eval_runs_dead(&self, count: u64) {
+        self.eval_runs_dead_total.fetch_add(count, Ordering::Relaxed);
+    }
+
+    pub fn record_retention_purged(&self, table: RetentionTable, count: u64) {
+        if count == 0 {
+            return;
+        }
+        let counter = match table {
+            RetentionTable::OutboxEvents => &self.retention_outbox_events_purged_total,
+            RetentionTable::LearningJobs => &self.retention_learning_jobs_purged_total,
+            RetentionTable::EvalRuns => &self.retention_eval_runs_purged_total,
+            RetentionTable::RetrievalHits => &self.retention_retrieval_hits_purged_total,
+            RetentionTable::ContextPacks => &self.retention_context_packs_purged_total,
+            RetentionTable::RetrievalTraces => &self.retention_retrieval_traces_purged_total,
+            RetentionTable::AuditLogs => &self.retention_audit_logs_purged_total,
+        };
+        counter.fetch_add(count, Ordering::Relaxed);
+    }
+
     pub fn set_serving(&self, serving: bool) {
         self.serving
             .store(if serving { 1 } else { 0 }, Ordering::Relaxed);
@@ -189,6 +244,33 @@ impl MemoryDomainMetrics {
              # HELP memory_outbox_dead_letter_total Memory outbox events moved to dead-letter (max retries exceeded).\n\
              # TYPE memory_outbox_dead_letter_total counter\n\
              memory_outbox_dead_letter_total{{{labels}}} {}\n\
+             # HELP memory_learning_jobs_dead_total Memory learning jobs moved to the terminal dead state (attempt ceiling exceeded).\n\
+             # TYPE memory_learning_jobs_dead_total counter\n\
+             memory_learning_jobs_dead_total{{{labels}}} {}\n\
+             # HELP memory_eval_runs_dead_total Memory evaluation runs moved to the terminal dead state (attempt ceiling exceeded).\n\
+             # TYPE memory_eval_runs_dead_total counter\n\
+             memory_eval_runs_dead_total{{{labels}}} {}\n\
+             # HELP memory_retention_outbox_events_purged_total Terminal outbox events hard-deleted by the retention sweep.\n\
+             # TYPE memory_retention_outbox_events_purged_total counter\n\
+             memory_retention_outbox_events_purged_total{{{labels}}} {}\n\
+             # HELP memory_retention_learning_jobs_purged_total Terminal learning jobs hard-deleted by the retention sweep.\n\
+             # TYPE memory_retention_learning_jobs_purged_total counter\n\
+             memory_retention_learning_jobs_purged_total{{{labels}}} {}\n\
+             # HELP memory_retention_eval_runs_purged_total Terminal evaluation runs hard-deleted by the retention sweep.\n\
+             # TYPE memory_retention_eval_runs_purged_total counter\n\
+             memory_retention_eval_runs_purged_total{{{labels}}} {}\n\
+             # HELP memory_retention_retrieval_hits_purged_total Retrieval hit rows hard-deleted by the retention sweep.\n\
+             # TYPE memory_retention_retrieval_hits_purged_total counter\n\
+             memory_retention_retrieval_hits_purged_total{{{labels}}} {}\n\
+             # HELP memory_retention_context_packs_purged_total Context pack rows hard-deleted by the retention sweep.\n\
+             # TYPE memory_retention_context_packs_purged_total counter\n\
+             memory_retention_context_packs_purged_total{{{labels}}} {}\n\
+             # HELP memory_retention_retrieval_traces_purged_total Retrieval traces hard-deleted by the retention sweep.\n\
+             # TYPE memory_retention_retrieval_traces_purged_total counter\n\
+             memory_retention_retrieval_traces_purged_total{{{labels}}} {}\n\
+             # HELP memory_retention_audit_logs_purged_total Audit log rows hard-deleted by the retention sweep.\n\
+             # TYPE memory_retention_audit_logs_purged_total counter\n\
+             memory_retention_audit_logs_purged_total{{{labels}}} {}\n\
              # HELP memory_health_status Memory service health (1=serving, 0=not serving).\n\
              # TYPE memory_health_status gauge\n\
              memory_health_status{{{labels}}} {}\n",
@@ -199,6 +281,15 @@ impl MemoryDomainMetrics {
             self.outbox_publish_failed_total.load(Ordering::Relaxed),
             self.outbox_delivery_failed_total.load(Ordering::Relaxed),
             self.outbox_dead_letter_total.load(Ordering::Relaxed),
+            self.learning_jobs_dead_total.load(Ordering::Relaxed),
+            self.eval_runs_dead_total.load(Ordering::Relaxed),
+            self.retention_outbox_events_purged_total.load(Ordering::Relaxed),
+            self.retention_learning_jobs_purged_total.load(Ordering::Relaxed),
+            self.retention_eval_runs_purged_total.load(Ordering::Relaxed),
+            self.retention_retrieval_hits_purged_total.load(Ordering::Relaxed),
+            self.retention_context_packs_purged_total.load(Ordering::Relaxed),
+            self.retention_retrieval_traces_purged_total.load(Ordering::Relaxed),
+            self.retention_audit_logs_purged_total.load(Ordering::Relaxed),
             self.serving.load(Ordering::Relaxed),
         ));
         rendered.push_str(&self.retrieval_latency.render(

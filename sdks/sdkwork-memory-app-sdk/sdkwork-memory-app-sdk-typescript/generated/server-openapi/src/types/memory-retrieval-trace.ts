@@ -5,10 +5,7 @@ export interface MemoryRetrievalTrace {
   actorId?: string | null;
   queryText?: string | null;
   queryHash: string;
-  retrievers?: Record<string, unknown> | null;
-  latencyMs?: number | null;
   resultCount: number;
   degraded: boolean;
-  metadata?: Record<string, unknown> | null;
   createdAt: string;
 }

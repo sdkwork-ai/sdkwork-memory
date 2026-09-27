@@ -1,11 +1,11 @@
 //! Commercial management route handlers for the backend API.
 
 use axum::{
-    extract::Path,
     response::{IntoResponse, Response},
     routing::{get, post},
-    Extension, Json, Router,
+    Extension, Router,
 };
+use sdkwork_routes_memory_support::{MemoryJson, MemoryPath};
 use sdkwork_intelligence_memory_service::OpenMemoryService;
 use sdkwork_memory_contract::{
     CreateBindingCommand, CreateCapabilityBindingCommand, CreateEdgeCommand, CreateEntityCommand,
@@ -81,7 +81,7 @@ pub fn commercial_routes() -> Router {
 async fn create_subject(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(mut cmd): Json<CreateSubjectCommand>,
+    MemoryJson(mut cmd): MemoryJson<CreateSubjectCommand>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -101,7 +101,7 @@ async fn create_subject(
 async fn retrieve_subject(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(subject_id): Path<String>,
+    MemoryPath(subject_id): MemoryPath<String>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -141,8 +141,8 @@ async fn list_subjects(
 async fn update_subject(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(subject_id): Path<String>,
-    Json(cmd): Json<UpdateSubjectCommand>,
+    MemoryPath(subject_id): MemoryPath<String>,
+    MemoryJson(cmd): MemoryJson<UpdateSubjectCommand>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -162,7 +162,7 @@ async fn update_subject(
 async fn delete_subject(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(subject_id): Path<String>,
+    MemoryPath(subject_id): MemoryPath<String>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -184,7 +184,7 @@ async fn delete_subject(
 async fn create_binding(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(mut cmd): Json<CreateBindingCommand>,
+    MemoryJson(mut cmd): MemoryJson<CreateBindingCommand>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -204,7 +204,7 @@ async fn create_binding(
 async fn retrieve_binding(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(binding_id): Path<String>,
+    MemoryPath(binding_id): MemoryPath<String>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -244,7 +244,7 @@ async fn list_bindings(
 async fn delete_binding(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(binding_id): Path<String>,
+    MemoryPath(binding_id): MemoryPath<String>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -266,7 +266,7 @@ async fn delete_binding(
 async fn create_capability_binding(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(mut cmd): Json<CreateCapabilityBindingCommand>,
+    MemoryJson(mut cmd): MemoryJson<CreateCapabilityBindingCommand>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -286,7 +286,7 @@ async fn create_capability_binding(
 async fn retrieve_capability_binding(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(cap_id): Path<String>,
+    MemoryPath(cap_id): MemoryPath<String>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -329,7 +329,7 @@ async fn list_capability_bindings(
 async fn delete_capability_binding(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(cap_id): Path<String>,
+    MemoryPath(cap_id): MemoryPath<String>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -351,7 +351,7 @@ async fn delete_capability_binding(
 async fn resolve_capabilities(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(mut req): Json<ResolveCapabilitiesQuery>,
+    MemoryJson(mut req): MemoryJson<ResolveCapabilitiesQuery>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -373,7 +373,7 @@ async fn resolve_capabilities(
 async fn create_entity(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(mut cmd): Json<CreateEntityCommand>,
+    MemoryJson(mut cmd): MemoryJson<CreateEntityCommand>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -396,7 +396,7 @@ async fn create_entity(
 async fn retrieve_entity(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(entity_id): Path<String>,
+    MemoryPath(entity_id): MemoryPath<String>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -446,8 +446,8 @@ async fn list_entities(
 async fn update_entity(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(entity_id): Path<String>,
-    Json(cmd): Json<UpdateEntityCommand>,
+    MemoryPath(entity_id): MemoryPath<String>,
+    MemoryJson(cmd): MemoryJson<UpdateEntityCommand>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -477,7 +477,7 @@ async fn update_entity(
 async fn create_edge(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(mut cmd): Json<CreateEdgeCommand>,
+    MemoryJson(mut cmd): MemoryJson<CreateEdgeCommand>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -500,7 +500,7 @@ async fn create_edge(
 async fn retrieve_edge(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(edge_id): Path<String>,
+    MemoryPath(edge_id): MemoryPath<String>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -550,8 +550,8 @@ async fn list_edges(
 async fn update_edge(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(edge_id): Path<String>,
-    Json(cmd): Json<UpdateEdgeCommand>,
+    MemoryPath(edge_id): MemoryPath<String>,
+    MemoryJson(cmd): MemoryJson<UpdateEdgeCommand>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -579,7 +579,7 @@ async fn update_edge(
 async fn delete_edge(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(edge_id): Path<String>,
+    MemoryPath(edge_id): MemoryPath<String>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -608,7 +608,7 @@ async fn delete_edge(
 async fn create_policy(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(mut cmd): Json<CreatePolicyCommand>,
+    MemoryJson(mut cmd): MemoryJson<CreatePolicyCommand>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -628,7 +628,7 @@ async fn create_policy(
 async fn retrieve_policy(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(policy_id): Path<String>,
+    MemoryPath(policy_id): MemoryPath<String>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -668,8 +668,8 @@ async fn list_policies(
 async fn update_policy(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(policy_id): Path<String>,
-    Json(cmd): Json<UpdatePolicyCommand>,
+    MemoryPath(policy_id): MemoryPath<String>,
+    MemoryJson(cmd): MemoryJson<UpdatePolicyCommand>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -689,7 +689,7 @@ async fn update_policy(
 async fn delete_policy(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(policy_id): Path<String>,
+    MemoryPath(policy_id): MemoryPath<String>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -711,7 +711,7 @@ async fn delete_policy(
 async fn create_policy_assignment(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(mut cmd): Json<CreatePolicyAssignmentCommand>,
+    MemoryJson(mut cmd): MemoryJson<CreatePolicyAssignmentCommand>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -731,7 +731,7 @@ async fn create_policy_assignment(
 async fn retrieve_policy_assignment(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(assignment_id): Path<String>,
+    MemoryPath(assignment_id): MemoryPath<String>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -774,8 +774,8 @@ async fn list_policy_assignments(
 async fn update_policy_assignment(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(assignment_id): Path<String>,
-    Json(cmd): Json<UpdatePolicyAssignmentCommand>,
+    MemoryPath(assignment_id): MemoryPath<String>,
+    MemoryJson(cmd): MemoryJson<UpdatePolicyAssignmentCommand>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -798,7 +798,7 @@ async fn update_policy_assignment(
 async fn delete_policy_assignment(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Path(assignment_id): Path<String>,
+    MemoryPath(assignment_id): MemoryPath<String>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,
@@ -842,7 +842,7 @@ async fn retrieve_commercial_readiness(
 async fn rebuild_commercial_readiness(
     Extension(state): Extension<BackendState>,
     context: Option<Extension<MemoryBackendRequestContext>>,
-    Json(mut cmd): Json<RebuildCommercialReadinessCommand>,
+    MemoryJson(mut cmd): MemoryJson<RebuildCommercialReadinessCommand>,
 ) -> Response {
     let product = match state.require_product() {
         Ok(product) => product,

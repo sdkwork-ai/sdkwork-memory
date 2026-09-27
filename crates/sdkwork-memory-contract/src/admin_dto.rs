@@ -333,8 +333,9 @@ pub struct MemoryAuditLog {
     pub resource_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resource_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
+    // `requestId` is forbidden on the wire (the shared envelope standard makes
+    // `traceId` the only wire correlation id), so the audit row's request
+    // reference stays a store-level column and never enters this DTO.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trace_id: Option<String>,
     pub result: String,

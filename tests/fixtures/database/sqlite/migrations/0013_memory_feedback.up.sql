@@ -3,7 +3,7 @@
 -- is the queryable per-target feedback record.
 
 CREATE TABLE IF NOT EXISTS ai_feedback (
-  id INTEGER PRIMARY KEY,
+  id BIGINT NOT NULL PRIMARY KEY,
   uuid TEXT NOT NULL,
   tenant_id INTEGER NOT NULL,
   space_id INTEGER NOT NULL,

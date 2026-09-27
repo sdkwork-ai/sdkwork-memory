@@ -88,12 +88,18 @@ pub trait MemoryGraphPort: Send + Sync {
     }
 
     /// Entity-to-memory provenance pairs for one space, flattened per edge
-    /// endpoint. This feeds the retrieval `entity` ranking signal.
+    /// endpoint, narrowed to `memory_ids` — the retrieval candidate pool the
+    /// links can actually boost. Implementations SHOULD push the narrowing
+    /// into the store query so the read stays O(pool), never O(graph); an
+    /// empty slice returns no links. This feeds the retrieval `entity`
+    /// ranking signal.
     async fn entity_memory_links(
         &self,
         scope: MemoryScopeContext,
+        memory_ids: &[String],
     ) -> MemorySpiResult<Vec<EntityMemoryLink>> {
         let _ = scope;
+        let _ = memory_ids;
         Err(graph_port_unsupported("entity_memory_links"))
     }
 }

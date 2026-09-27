@@ -15,6 +15,7 @@
 mod config;
 mod embeddings;
 mod llm;
+mod response;
 
 pub use config::OpenAiProviderConfig;
 pub use embeddings::{

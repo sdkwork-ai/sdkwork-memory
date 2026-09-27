@@ -37,9 +37,10 @@ pub fn build_context_pack_from_hits(
         let Some(memory) = hit.memory.as_ref() else {
             continue;
         };
+        // Dedup and over-budget skips are recorded separately; only budget
+        // pressure sets the pack-level `truncated` flag.
         if is_redundant(&memory.canonical_text, &selected_texts) {
             deduplicated_count += 1;
-            truncated = true;
             continue;
         }
 
@@ -54,7 +55,10 @@ pub fn build_context_pack_from_hits(
             if original_tokens <= remaining_tokens {
                 (memory.canonical_text.clone(), original_tokens, false)
             } else if fragments.is_empty() {
-                let text = truncate_to_token_budget(&memory.canonical_text, remaining_tokens);
+                // Reserve one token for the ellipsis marker so the cut is
+                // visible inside the text itself, not only in the flags.
+                let text = truncate_to_token_budget(&memory.canonical_text, remaining_tokens - 1);
+                let text = format!("{text}…");
                 let tokens = estimate_tokens(&text);
                 (text, tokens, true)
             } else {
@@ -63,7 +67,6 @@ pub fn build_context_pack_from_hits(
             };
 
         if canonical_text.is_empty() || fragment_tokens <= 0 {
-            truncated = true;
             continue;
         }
 

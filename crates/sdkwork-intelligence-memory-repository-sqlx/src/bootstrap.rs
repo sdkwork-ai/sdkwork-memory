@@ -111,6 +111,36 @@ fn registry_node_allocation_required(deployment_mode: MemoryDeploymentMode) -> b
     )
 }
 
+/// Requires PostgreSQL 15 or newer when the data plane boots on PostgreSQL.
+///
+/// The tenant-preference uniqueness contract (`NULLS NOT DISTINCT`) and the
+/// tenant-level upsert that depends on it are undefined on older servers; a
+/// fresh `0001` baseline fails there with a raw syntax error, and an existing
+/// install would break at the first tenant-level preference upsert. The
+/// startup gate turns both into one actionable diagnostic.
+async fn assert_postgres_server_version(pool: &MemoryDatabasePool) -> Result<(), String> {
+    const MIN_POSTGRES_VERSION_NUM: i64 = 150_000;
+    let postgres_pool = pool.as_postgres().ok_or_else(|| {
+        "memory data plane expected a PostgreSQL pool for the version gate".to_string()
+    })?;
+    let row: (i64,) = sqlx::query_as("SELECT current_setting('server_version_num')::bigint")
+        .fetch_one(postgres_pool)
+        .await
+        .map_err(|error| {
+            format!(
+                "memory data plane could not read the PostgreSQL server version: {error}"
+            )
+        })?;
+    if row.0 < MIN_POSTGRES_VERSION_NUM {
+        return Err(format!(
+            "memory data plane requires PostgreSQL 15 or newer (server_version_num {} < {}): \
+             the baseline schema uses NULLS NOT DISTINCT unique indexes",
+            row.0, MIN_POSTGRES_VERSION_NUM
+        ));
+    }
+    Ok(())
+}
+
 /// Single bootstrap entry for the API server and integration tests.
 pub async fn bootstrap_memory_data_plane_from_env() -> Result<MemoryDataPlane, String> {
     let config = DatabaseConfig::from_env("MEMORY").map_err(|error| error.to_string())?;
@@ -144,6 +174,14 @@ pub async fn bootstrap_memory_data_plane_from_env() -> Result<MemoryDataPlane, S
     let pool = create_pool_from_config(config.clone())
         .await
         .map_err(|error| format!("create memory database pool failed: {error}"))?;
+
+    // The baseline DDL uses `NULLS NOT DISTINCT` unique indexes, which
+    // PostgreSQL has only since 15; on 14 the migration fails with a parser
+    // error instead of a version diagnostic. Gate the server version here so
+    // the operator sees the actionable message.
+    if dialect == MemorySqlDialect::Postgres {
+        assert_postgres_server_version(&pool).await?;
+    }
 
     // Allocate a Snowflake node_id from the database before creating the
     // store. This prevents ID collisions in multi-instance deployments.

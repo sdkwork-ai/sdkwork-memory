@@ -188,6 +188,8 @@ async fn reference_runtime_outbox_context_eval_and_bridge_fail_closed_are_determ
         MarkMemoryOutboxPublishedCommand {
             scope: scope.clone(),
             outbox_id: "out-context".to_string(),
+            lease_owner: "test-worker".to_string(),
+            lease_token: "test-lease".to_string(),
         },
     )
     .await

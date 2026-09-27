@@ -175,9 +175,12 @@ pub struct DeleteAllCanonicalMemoryCommand {
     pub user_id: Option<i64>,
 }
 
+/// Bulk deletion stays count-only by contract: an id list grows with the
+/// swept scope, so returning every id would materialize the deleted scope in
+/// memory and in the HTTP response exactly once more than the sweep itself.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MemoryBulkDeletionReceipt {
-    pub deleted_ids: Vec<String>,
+    pub deleted_count: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -283,12 +286,21 @@ pub struct ListPendingMemoryOutboxQuery {
 pub struct MarkMemoryOutboxPublishedCommand {
     pub scope: MemoryScopeContext,
     pub outbox_id: String,
+    /// Lease identity of the delivering worker. Both fields are compared in
+    /// the UPDATE's WHERE clause so an expired worker cannot acknowledge an
+    /// event another worker now owns (cluster takeover fencing).
+    pub lease_owner: String,
+    pub lease_token: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MarkMemoryOutboxFailedCommand {
     pub scope: MemoryScopeContext,
     pub outbox_id: String,
+    /// Lease identity of the delivering worker; see
+    /// [`MarkMemoryOutboxPublishedCommand::lease_owner`].
+    pub lease_owner: String,
+    pub lease_token: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -914,10 +926,11 @@ pub trait MemoryRecordStorePort: Send + Sync {
     /// Bulk-delete every active canonical record in the scope (optionally
     /// narrowed to one owner), the analogue of mem0's `delete_all`.
     ///
-    /// Each deleted record gets its own outbox+audit journal entries inside the
-    /// same transaction; journal ids are derived deterministically from the
-    /// record id, so a repeat call over an already-cleared scope deletes
-    /// nothing and stays idempotent.
+    /// Each deleted record gets its own outbox+audit journal entries inside a
+    /// bounded batch transaction; journal ids are derived deterministically
+    /// from the record id, so a repeat call over an already-cleared scope
+    /// deletes nothing and stays idempotent. The receipt carries only the
+    /// deleted count — never the id list, which scales with the scope.
     async fn delete_all_canonical_atomic(
         &self,
         _command: DeleteAllCanonicalMemoryCommand,

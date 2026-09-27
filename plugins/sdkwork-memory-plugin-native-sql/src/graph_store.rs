@@ -523,6 +523,60 @@ impl NativeSqlMemoryStore {
         Ok(links)
     }
 
+    /// Entity-link pairs narrowed to the given memory ids. The id list comes
+    /// from the retrieval candidate pool, so the join stays bounded by the
+    /// pool instead of scanning every edge in the space; placeholders are
+    /// bound parameters, never interpolated values.
+    pub async fn list_entity_memory_links_for_memories(
+        &self,
+        tenant_id: i64,
+        space_id: i64,
+        memory_ids: &[String],
+    ) -> Result<Vec<NativeSqlEntityMemoryLink>, NativeSqlStoreError> {
+        if memory_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = vec!["?"; memory_ids.len()].join(", ");
+        let sql = format!(
+            r#"
+            SELECT src.canonical_name AS src_name,
+                   tgt.canonical_name AS tgt_name,
+                   r.uuid             AS memory_uuid
+            FROM ai_edge e
+            JOIN ai_entity src
+              ON src.id = e.source_entity_id AND src.tenant_id = e.tenant_id
+            JOIN ai_entity tgt
+              ON tgt.id = e.target_entity_id AND tgt.tenant_id = e.tenant_id
+            JOIN ai_record r
+              ON r.id = e.source_memory_id AND r.tenant_id = e.tenant_id
+            WHERE e.tenant_id = ? AND e.space_id = ? AND e.status <> 'deleted'
+              AND e.source_memory_id IN ({placeholders})
+            "#
+        );
+        let mut query = sqlx::query(&sql).bind(tenant_id).bind(space_id);
+        for memory_id in memory_ids {
+            query = query.bind(memory_id);
+        }
+        let rows = query.fetch_all(self.pool()).await?;
+        Ok(Self::entity_links_from_rows(rows))
+    }
+
+    fn entity_links_from_rows(rows: Vec<sqlx::any::AnyRow>) -> Vec<NativeSqlEntityMemoryLink> {
+        let mut links = Vec::with_capacity(rows.len() * 2);
+        for row in rows {
+            let memory_id: String = row.get("memory_uuid");
+            links.push(NativeSqlEntityMemoryLink {
+                entity_name: row.get("src_name"),
+                memory_id: memory_id.clone(),
+            });
+            links.push(NativeSqlEntityMemoryLink {
+                entity_name: row.get("tgt_name"),
+                memory_id,
+            });
+        }
+        links
+    }
+
     pub async fn insert_edge(&self, cmd: InsertEdgeCommand<'_>) -> Result<(), NativeSqlStoreError> {
         let now = now_text();
         sqlx::query(
@@ -1089,18 +1143,23 @@ impl MemoryGraphPort for NativeSqlMemoryStore {
     async fn entity_memory_links(
         &self,
         scope: MemoryScopeContext,
+        memory_ids: &[String],
     ) -> sdkwork_memory_spi::MemorySpiResult<Vec<EntityMemoryLink>> {
-        self.list_entity_memory_links(scope.tenant_id, scope.space_id)
-            .await
-            .map(|links| {
-                links
-                    .into_iter()
-                    .map(|link| EntityMemoryLink {
-                        entity_name: link.entity_name,
-                        memory_id: link.memory_id,
-                    })
-                    .collect()
-            })
-            .map_err(|err| crate::store::port_error("MemoryGraphPort", err))
+        self.list_entity_memory_links_for_memories(
+            scope.tenant_id,
+            scope.space_id,
+            memory_ids,
+        )
+        .await
+        .map(|links| {
+            links
+                .into_iter()
+                .map(|link| EntityMemoryLink {
+                    entity_name: link.entity_name,
+                    memory_id: link.memory_id,
+                })
+                .collect()
+        })
+        .map_err(|err| crate::store::port_error("MemoryGraphPort", err))
     }
 }

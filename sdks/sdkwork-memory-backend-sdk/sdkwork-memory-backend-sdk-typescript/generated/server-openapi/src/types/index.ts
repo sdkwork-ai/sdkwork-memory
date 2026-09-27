@@ -7,6 +7,7 @@ export type { MemoryEventRequest } from './memory-event-request';
 export type { MemoryEventList } from './memory-event-list';
 export type { MemoryRecord } from './memory-record';
 export type { MemoryRecordRequest } from './memory-record-request';
+export type { MemoryRecordPatch } from './memory-record-patch';
 export type { MemoryRecordList } from './memory-record-list';
 export type { MemoryRecordSource } from './memory-record-source';
 export type { MemoryRecordSourceList } from './memory-record-source-list';

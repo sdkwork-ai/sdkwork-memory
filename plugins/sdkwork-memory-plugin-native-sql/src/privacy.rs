@@ -156,13 +156,16 @@ impl NativeSqlMemoryStore {
     ) -> Result<ForgetScopeStats, NativeSqlStoreError> {
         let mut stats = ForgetScopeStats::default();
         let batch_size = i64::from(sdkwork_utils_rust::MAX_LIST_PAGE_SIZE);
+        // Keyset continuation: each batch resumes after the last seen id so a
+        // large purge does not re-scan the surviving prefix every batch.
+        let mut last_id: i64 = 0;
         loop {
             let rows = if let Some(space_id) = space_id {
                 sqlx::query(
                     r#"
-                    SELECT uuid, space_id
+                    SELECT uuid, space_id, id
                     FROM ai_record
-                    WHERE tenant_id = ? AND space_id = ? AND user_id = ?
+                    WHERE tenant_id = ? AND space_id = ? AND user_id = ? AND id > ?
                     ORDER BY id ASC
                     LIMIT ?
                     "#,
@@ -170,21 +173,23 @@ impl NativeSqlMemoryStore {
                 .bind(tenant_id)
                 .bind(space_id)
                 .bind(user_id)
+                .bind(last_id)
                 .bind(batch_size)
                 .fetch_all(self.pool())
                 .await?
             } else {
                 sqlx::query(
                     r#"
-                    SELECT uuid, space_id
+                    SELECT uuid, space_id, id
                     FROM ai_record
-                    WHERE tenant_id = ? AND user_id = ?
+                    WHERE tenant_id = ? AND user_id = ? AND id > ?
                     ORDER BY id ASC
                     LIMIT ?
                     "#,
                 )
                 .bind(tenant_id)
                 .bind(user_id)
+                .bind(last_id)
                 .bind(batch_size)
                 .fetch_all(self.pool())
                 .await?
@@ -200,6 +205,7 @@ impl NativeSqlMemoryStore {
                     organization_id: None,
                     user_id: Some(user_id),
                 };
+                last_id = row.get::<i64, _>("id");
                 let outcome = self
                     .hard_delete_record_with_cleanup(&scope, &memory_id)
                     .await?;

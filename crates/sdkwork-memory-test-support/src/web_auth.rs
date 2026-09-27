@@ -35,6 +35,10 @@ pub async fn lock_integration_test_env() -> MutexGuard<'static, ()> {
     let guard = INTEGRATION_TEST_ENV_LOCK.lock().await;
     std::env::set_var("SDKWORK_ENV", "dev");
     std::env::set_var("SDKWORK_IAM_ALLOW_DEV_AUTH_FALLBACK", "true");
+    // The web runtime hardening gate refuses to serve an undeclared
+    // environment, so every test that builds a wrapped router must declare
+    // one explicitly — development is the honest value for the suite.
+    std::env::set_var("SDKWORK_MEMORY_ENVIRONMENT", "development");
     guard
 }
 

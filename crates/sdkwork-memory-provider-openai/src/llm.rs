@@ -75,13 +75,12 @@ impl LanguageModelPort for OpenAiLlm {
                 message: format!("completion request failed: {error}"),
             })?;
         let status = response.status();
-        let body = response
-            .text()
-            .await
-            .map_err(|error| MemorySpiError::PortOperationFailed {
+        let body = crate::response::read_body_capped(response).await.map_err(
+            |error: MemorySpiError| MemorySpiError::PortOperationFailed {
                 port: "LanguageModelPort".to_string(),
-                message: format!("completion response read failed: {error}"),
-            })?;
+                message: error.to_string(),
+            },
+        )?;
         if !status.is_success() {
             return Err(MemorySpiError::PortOperationFailed {
                 port: "LanguageModelPort".to_string(),

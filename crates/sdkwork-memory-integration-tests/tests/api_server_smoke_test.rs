@@ -33,6 +33,7 @@ async fn api_server_bootstrap_auth_and_healthz_contracts() {
     let previous_auto_migrate = std::env::var("SDKWORK_DATABASE_AUTO_MIGRATE").ok();
     let previous_outbox_mode = std::env::var("SDKWORK_MEMORY_OUTBOX_DELIVERY_MODE").ok();
     let previous_outbox_url = std::env::var("SDKWORK_MEMORY_OUTBOX_DELIVERY_URL").ok();
+    let previous_cursor_key = std::env::var("SDKWORK_MEMORY_CURSOR_SIGNING_KEY").ok();
 
     std::env::set_var("SDKWORK_MEMORY_ENVIRONMENT", "development");
     std::env::set_var("SDKWORK_MEMORY_DEV_AUTH_BYPASS", "true");
@@ -105,6 +106,9 @@ async fn api_server_bootstrap_auth_and_healthz_contracts() {
     std::env::remove_var("SDKWORK_DATABASE_URL");
     std::env::set_var("SDKWORK_MEMORY_OUTBOX_DELIVERY_MODE", "disabled");
     std::env::remove_var("SDKWORK_MEMORY_OUTBOX_DELIVERY_URL");
+    // Production fail-fast also covers the cursor-signing key; providing one
+    // here keeps this test focused on the outbox admission error.
+    std::env::set_var("SDKWORK_MEMORY_CURSOR_SIGNING_KEY", "smoke-test-cursor-key");
 
     let production_bootstrap = sdkwork_api_memory_assembly::assemble_api_router_from_env().await;
     let Err(error) = production_bootstrap else {
@@ -156,6 +160,7 @@ async fn api_server_bootstrap_auth_and_healthz_contracts() {
     restore_optional_env("SDKWORK_DATABASE_AUTO_MIGRATE", previous_auto_migrate);
     restore_optional_env("SDKWORK_MEMORY_OUTBOX_DELIVERY_MODE", previous_outbox_mode);
     restore_optional_env("SDKWORK_MEMORY_OUTBOX_DELIVERY_URL", previous_outbox_url);
+    restore_optional_env("SDKWORK_MEMORY_CURSOR_SIGNING_KEY", previous_cursor_key);
 }
 
 /// `database/database.manifest.json` declares this module `databaseRole: authoritative-server`

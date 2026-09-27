@@ -8,12 +8,9 @@ export interface MemoryRecordRequest {
   objectText?: string | null;
   canonicalText: string;
   summaryText?: string | null;
-  confidence?: number | null;
-  validFrom?: string | null;
-  validTo?: string | null;
+  language?: string | null;
   expiresAt?: string | null;
   sensitivityLevel?: string;
   metadata?: Record<string, unknown> | null;
   tags?: string[] | null;
-  version?: string | null;
 }

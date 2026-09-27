@@ -6,6 +6,4 @@ export interface MemorySpaceRequest {
   displayName: string;
   defaultScope?: string;
   metadata?: Record<string, unknown> | null;
-  policy?: Record<string, unknown> | null;
-  version?: string | null;
 }

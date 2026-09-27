@@ -1,8 +1,10 @@
 //! Shared Memory router auth wiring for sdkwork-web-framework integration.
 
 pub mod correlation;
+pub mod extract;
 pub mod metrics;
 pub mod principal;
+pub mod panic_shield;
 pub mod problem;
 pub mod query;
 pub mod readiness;
@@ -22,6 +24,8 @@ pub use metrics::{
 };
 pub use web_runtime::memory_request_body_limit_bytes;
 pub use principal::{parse_principal_optional_u64, parse_principal_u64};
+pub use panic_shield::{MemoryPanicShield, MemoryPanicShieldLayer};
+pub use extract::{MemoryJson, MemoryPath};
 pub use problem::{MemoryApiError, MemoryApiProblem, MemoryApiResult};
 pub use query::{MemoryQuery, INVALID_QUERY_DETAIL};
 pub use readiness::memory_dependency_ready_check;

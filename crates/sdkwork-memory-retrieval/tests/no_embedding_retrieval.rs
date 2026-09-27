@@ -125,19 +125,34 @@ fn cjk_keyword_match_partial() {
 
 #[test]
 fn cjk_keyword_match_token_overlap() {
-    // Token overlap: each CJK character is a token
+    // Token overlap: CJK runs tokenize into adjacent character pairs, so a
+    // shared bigram is real adjacency evidence while a lone shared character
+    // contributes nothing.
     let score = keyword_match_score("知识管理", "知识库管理系统");
     assert!(
         score > 0.0,
         "Expected positive score for CJK token overlap, got {}",
         score
     );
-    // "知识管理" tokens: 知, 识, 管, 理
-    // "知识库管理系统" contains: 知, 识, 管, 理
-    // Should have high overlap
+    // "知识管理" bigrams: 知识, 识管, 管理
+    // "知识库管理系统" contains 知识 and 管理 (识管 is interrupted by 库),
+    // so precisely two of the three bigrams match.
     assert!(
-        score >= 0.75,
-        "Expected high token overlap score, got {}",
+        (score - 2.0 / 3.0).abs() < 1e-9,
+        "Expected 2/3 bigram overlap score, got {}",
+        score
+    );
+}
+
+#[test]
+fn cjk_keyword_match_rejects_unrelated_character_sharing() {
+    // Documents that merely share a generic character with the query must
+    // not score under unigram-style overlap: none of 知识/识管/管理 appears
+    // in the haystack.
+    let score = keyword_match_score("知识管理", "知人善任的大公司");
+    assert!(
+        score < 0.35,
+        "Character-sharing-only match should score low, got {}",
         score
     );
 }

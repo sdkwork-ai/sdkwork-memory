@@ -724,24 +724,19 @@ impl OpenMemoryService {
         }
     }
 
-    /// Score every candidate against the query on the provider's embedding
-    /// space. The query is embedded once, candidates in one batch call; both
-    /// vectors arrive unit-normalized, so the cosine is a bounded dot product.
-    pub(crate) async fn compute_vector_similarities(
+    /// Score every candidate against the pre-embedded query. The query vector
+    /// arrives from the caller so multi-space retrievals embed the query
+    /// exactly once; candidates score in one batch call, both vectors
+    /// unit-normalized so the cosine is a bounded dot product.
+    pub(crate) async fn score_records_against_query(
         &self,
         embedder: &dyn EmbeddingModelPort,
-        query: &str,
+        query_vector: &[f32],
         records: &[RetrievalRecordInput],
     ) -> MemoryServiceResult<Vec<VectorSimilarityInput>> {
         if records.is_empty() {
             return Ok(Vec::new());
         }
-        let query_vector = embedder
-            .embed(EmbeddingCommand {
-                input: query.to_string(),
-            })
-            .await
-            .map_err(map_memory_spi_error)?;
         let commands = records
             .iter()
             .map(|record| EmbeddingCommand {
@@ -757,7 +752,7 @@ impl OpenMemoryService {
             .zip(vectors.iter())
             .map(|(record, vector)| VectorSimilarityInput {
                 memory_id: record.memory_id.clone(),
-                similarity: cosine_similarity(&query_vector, vector),
+                similarity: cosine_similarity(query_vector, vector),
             })
             .filter(|input| input.similarity.is_finite() && input.similarity > 0.0)
             .collect())
@@ -1454,11 +1449,8 @@ impl MemoryOpenApi for OpenMemoryService {
             .runtime_data_plane
             .delete_all_canonical_memory_atomic(DeleteAllCanonicalMemoryCommand { scope, user_id })
             .await?;
-        let deleted_count = u64::try_from(receipt.deleted_ids.len())
-            .map_err(|_| MemoryServiceError::storage("bulk deletion count overflowed"))?;
         Ok(DeleteAllMemoriesResult {
-            deleted_count,
-            deleted_memory_ids: receipt.deleted_ids,
+            deleted_count: receipt.deleted_count,
         })
     }
 
@@ -1556,12 +1548,13 @@ impl MemoryOpenApi for OpenMemoryService {
                         fusion_policy,
                     )
                 } else {
-                    (
-                        platform::clamp_retrieval_top_k(request.top_k),
-                        None,
-                        self.default_retriever_profile(),
-                        RetrievalFusionPolicy::default(),
-                    )
+                    // A profile id the caller names is a contract reference:
+                    // silently ranking with deployment defaults would change
+                    // results behind the caller's back, so an unknown id is
+                    // the caller's error to see.
+                    return Err(MemoryServiceError::not_found(
+                        "retrieval profile not found for tenant",
+                    ));
                 }
             } else {
                 (
@@ -1651,6 +1644,21 @@ impl MemoryOpenApi for OpenMemoryService {
             })
             .collect();
         let search_results = futures::future::join_all(search_futures).await;
+
+        // The query embeds exactly once per retrieval and is reused by every
+        // space's scoring pass — embedding per space would send up to 32
+        // identical provider calls per request.
+        let shared_query_vector = match &self.embedder {
+            Some(embedder) => Some(
+                embedder
+                    .embed(EmbeddingCommand {
+                        input: request.query.clone(),
+                    })
+                    .await
+                    .map_err(map_memory_spi_error)?,
+            ),
+            None => None,
+        };
 
         // Step 3: combine and score results.
         for (space_idx, search_result) in search_results.into_iter().enumerate() {
@@ -1749,9 +1757,16 @@ impl MemoryOpenApi for OpenMemoryService {
             let entity_boost_inputs = if query_entities.is_empty() {
                 Vec::new()
             } else {
+                // Narrow the provenance read to the candidate pool: links for
+                // memories outside the pool cannot contribute a boost, so the
+                // store query stays O(pool) instead of O(graph size).
+                let candidate_memory_ids: Vec<String> = record_inputs
+                    .iter()
+                    .map(|record| record.memory_id.clone())
+                    .collect();
                 let links = self
                     .graph
-                    .entity_memory_links(scope.clone())
+                    .entity_memory_links(scope.clone(), &candidate_memory_ids)
                     .await
                     .map_err(map_memory_spi_error)?;
                 let mut matches: Vec<LinkedEntityMatch> = Vec::with_capacity(query_entities.len());
@@ -1778,13 +1793,14 @@ impl MemoryOpenApi for OpenMemoryService {
             // score every rehydrated candidate against the query. A provider
             // failure degrades the retrieval (lexical signals continue) rather
             // than failing the request.
-            let vector_similarities = match &self.embedder {
-                None => Vec::new(),
-                Some(embedder) => {
+            let embedder_bound = self.embedder.is_some();
+            let vector_similarities = match (&self.embedder, &shared_query_vector) {
+                (None, _) | (_, None) => Vec::new(),
+                (Some(embedder), Some(query_vector)) => {
                     match self
-                        .compute_vector_similarities(
+                        .score_records_against_query(
                             embedder.as_ref(),
-                            &request.query,
+                            query_vector,
                             &record_inputs,
                         )
                         .await
@@ -1809,6 +1825,15 @@ impl MemoryOpenApi for OpenMemoryService {
                 // the resolved entity boosts, and the vector similarities fused
                 // by score_and_rank with the semantic threshold gate. A single
                 // retriever list feeds RRF, which preserves its ordering.
+                // When the embedder is unavailable every semantic score is 0,
+                // so gating at the caller's threshold would drop every hit;
+                // degrade to pure lexical ranking instead of an empty result.
+                let effective_threshold =
+                    if vector_similarities.is_empty() && embedder_bound {
+                        0.0
+                    } else {
+                        semantic_threshold
+                    };
                 let inputs = record_inputs
                     .iter()
                     .map(|record| {
@@ -1833,7 +1858,7 @@ impl MemoryOpenApi for OpenMemoryService {
                     &request.query,
                     &inputs,
                     &entity_boost_map,
-                    semantic_threshold,
+                    effective_threshold,
                     candidate_limit as usize,
                     request.explain.unwrap_or(false),
                 ) {
@@ -1880,11 +1905,18 @@ impl MemoryOpenApi for OpenMemoryService {
             }
         }
 
-        let fused = fuse_retrieval_candidates_with_policy(
+        let mut fused = fuse_retrieval_candidates_with_policy(
             candidates,
             effective_top_k as usize,
             fusion_policy,
         );
+        if !additive_scoring && semantic_threshold > 0.0 {
+            // Threshold contract for the RRF strategies: the additive path
+            // gates on the semantic score before fusion, so here the caller's
+            // threshold applies to the normalized fused score (0..1) after
+            // fusion instead of being silently ignored.
+            fused.retain(|hit| hit.fused_score >= semantic_threshold);
+        }
         let retrieval_id = self.next_id()?;
         let trace_id = retrieval_id.to_string();
         let primary_scope = Self::scope(&context, request.space_ids[0])?;
@@ -1992,7 +2024,11 @@ impl MemoryOpenApi for OpenMemoryService {
             None
         };
 
-        let _ = self
+        // Trace persistence is best-effort: the ranking work is already done
+        // and the caller is entitled to the result even if the trace write
+        // fails. Failing the retrieval here turned an observability write
+        // into an availability bug.
+        if let Err(error) = self
             .runtime_data_plane
             .append_retrieval_trace(AppendMemoryRetrievalTraceCommand {
                 scope: primary_scope,
@@ -2007,7 +2043,14 @@ impl MemoryOpenApi for OpenMemoryService {
                 hits: trace_hits,
                 context_pack: None,
             })
-            .await?;
+            .await
+        {
+            tracing::warn!(
+                trace_id = %trace_id,
+                error = %error.detail,
+                "retrieval trace write failed; retrieval result is unaffected"
+            );
+        }
 
         let trace = if request.include_trace.unwrap_or(false) {
             Some(MemoryRetrievalTrace {

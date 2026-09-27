@@ -322,6 +322,8 @@ pub struct DeleteAllMemoriesRequest {
     pub user_id: Option<u64>,
 }
 
+/// Count-only bulk-deletion receipt: the deleted id list scales with the
+/// swept scope, so the contract never returns it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteAllMemoriesResult {
@@ -330,7 +332,6 @@ pub struct DeleteAllMemoriesResult {
         deserialize_with = "deserialize_u64_from_string_or_number"
     )]
     pub deleted_count: u64,
-    pub deleted_memory_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

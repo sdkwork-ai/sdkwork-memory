@@ -128,12 +128,41 @@ fn is_public_ipv6(ip: Ipv6Addr) -> bool {
         return is_public_ipv4(mapped);
     }
     let segments = ip.segments();
+    // IPv6 transition mechanisms embed an IPv4 endpoint: NAT64
+    // (`64:ff9b::/96`, IPv4 in the last 32 bits), 6to4 (`2002::/16`, IPv4 in
+    // segments 1-2), and Teredo (`2001::/32`, server IPv4 in segments 4-5).
+    // On dual-stack hosts they translate into arbitrary IPv4 space —
+    // including loopback and the cloud metadata address — so an embedded
+    // IPv4 that fails the IPv4 blocklist rejects the whole address.
+    let embedded_6to4 = Ipv4Addr::new(
+        (segments[1] >> 8) as u8,
+        (segments[1] & 0xff) as u8,
+        (segments[2] >> 8) as u8,
+        (segments[2] & 0xff) as u8,
+    );
+    let embedded_teredo_server = Ipv4Addr::new(
+        (segments[4] >> 8) as u8,
+        (segments[4] & 0xff) as u8,
+        (segments[5] >> 8) as u8,
+        (segments[5] & 0xff) as u8,
+    );
+    let embedded_nat64 = Ipv4Addr::new(
+        (segments[6] >> 8) as u8,
+        (segments[6] & 0xff) as u8,
+        (segments[7] >> 8) as u8,
+        (segments[7] & 0xff) as u8,
+    );
     !(ip.is_loopback()
         || ip.is_unspecified()
         || ip.is_multicast()
         || (segments[0] & 0xfe00) == 0xfc00
         || (segments[0] & 0xffc0) == 0xfe80
-        || (segments[0] == 0x2001 && segments[1] == 0x0db8))
+        || (segments[0] == 0x2001 && segments[1] == 0x0db8)
+        || (segments[0] == 0x2001 && segments[1] == 0 && !is_public_ipv4(embedded_teredo_server))
+        || (segments[0] == 0x0064
+            && segments[1] == 0xff9b
+            && !is_public_ipv4(embedded_nat64))
+        || (segments[0] == 0x2002 && !is_public_ipv4(embedded_6to4)))
 }
 
 #[cfg(test)]
@@ -157,6 +186,24 @@ mod tests {
     #[test]
     fn rejects_embedded_credentials() {
         assert!(validate_outbound_url("https://user:secret@example.com/hook").is_err());
+    }
+
+    #[test]
+    fn rejects_ipv6_transition_endpoints_with_embedded_private_ipv4() {
+        // NAT64 embedding the metadata address and a loopback IPv4.
+        assert!(validate_outbound_url("https://[64:ff9b::a9fe:a9fe]/hook").is_err());
+        assert!(validate_outbound_url("https://[64:ff9b::127.0.0.1]/hook").is_err());
+        // 6to4 embedding a private IPv4.
+        assert!(validate_outbound_url("https://[2002:ac10:fe::1]/hook").is_err());
+        // Teredo server side on a private IPv4.
+        assert!(validate_outbound_url("https://[2001:0:ac10:fe::]/hook").is_err());
+    }
+
+    #[test]
+    fn accepts_public_ipv6_transition_endpoints_with_public_ipv4() {
+        // NAT64 embedding a public IPv4 (203.0.113.10, TEST-NET-3 aside, the
+        // structure is what matters: a public embedded address is allowed).
+        assert!(validate_outbound_url("https://[64:ff9b::2001:ffff]/hook").is_ok());
     }
 
     #[test]

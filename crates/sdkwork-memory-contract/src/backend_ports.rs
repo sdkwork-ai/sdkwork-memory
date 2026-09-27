@@ -167,10 +167,14 @@ pub trait MemoryBackendApi: Send + Sync + 'static {
         request: MemoryIndexRequest,
     ) -> MemoryServiceResult<MemoryIndex>;
 
+    /// Rebuilds a search index. The declared request body carries the typed
+    /// review reason for this destructive operation; it is persisted into the
+    /// governance audit record alongside the job result.
     async fn rebuild_index(
         &self,
         context: MemoryBackendRequestContext,
         index_id: u64,
+        request: MemoryReviewRequest,
     ) -> MemoryServiceResult<MemoryLearningJob>;
 
     async fn list_retrieval_profiles(

@@ -10,7 +10,7 @@ use sdkwork_memory_contract::{
     MemoryRecordPatch, MemoryRecordRequest, MemoryRetrievalRequest, MemoryRetrievalResult,
     MemoryRetrieverKind, MemoryServiceResult,
 };
-use sdkwork_memory_test_support::web_auth::memory_dev_api_key;
+use sdkwork_memory_test_support::web_auth::{lock_integration_test_env, memory_dev_api_key};
 use sdkwork_routes_memory_open_api::{
     build_router_with_shared_open_api, wrap_router_with_web_framework,
 };
@@ -20,6 +20,7 @@ use tower::util::ServiceExt;
 
 #[tokio::test]
 async fn open_router_web_framework_rejects_unauthenticated_requests() {
+    let _env = lock_integration_test_env().await;
     let app = wrap_router_with_web_framework(
         DefaultWebRequestContextResolver::default(),
         build_router_with_shared_open_api(Arc::new(RecordingOpenApi::default())),
@@ -40,6 +41,7 @@ async fn open_router_web_framework_rejects_unauthenticated_requests() {
 
 #[tokio::test]
 async fn open_router_web_framework_accepts_dev_inline_api_key_before_handler() {
+    let _env = lock_integration_test_env().await;
     let service = RecordingOpenApi::default();
     let app = wrap_router_with_web_framework(
         DefaultWebRequestContextResolver::default(),

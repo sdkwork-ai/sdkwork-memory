@@ -718,7 +718,7 @@ impl MemoryRecordStorePort for ReferenceMemoryRuntime {
                 })
                 .collect()
         };
-        let mut deleted_ids = Vec::with_capacity(matches.len());
+        let mut deleted_count: u64 = 0;
         for (scope, memory_id) in matches {
             let journal = MemoryMutationJournal {
                 outbox_id: format!("outbox-memory-record-deleted-all-{memory_id}"),
@@ -743,10 +743,10 @@ impl MemoryRecordStorePort for ReferenceMemoryRuntime {
             )
             .await?;
             if receipt.deleted {
-                deleted_ids.push(memory_id);
+                deleted_count += 1;
             }
         }
-        Ok(MemoryBulkDeletionReceipt { deleted_ids })
+        Ok(MemoryBulkDeletionReceipt { deleted_count })
     }
 }
 

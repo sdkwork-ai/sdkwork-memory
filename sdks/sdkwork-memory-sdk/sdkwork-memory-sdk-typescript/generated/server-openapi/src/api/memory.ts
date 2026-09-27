@@ -1,7 +1,7 @@
 import { customApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { DeleteAllMemoriesRequest, MemoryCandidate, MemoryCapabilities, MemoryContextPack, MemoryContextPackRequest, MemoryEdge, MemoryEdgePatch, MemoryEdgeRequest, MemoryEntity, MemoryEntityPatch, MemoryEntityRequest, MemoryEvent, MemoryEventRequest, MemoryExtractionRequest, MemoryFeedback, MemoryFeedbackRequest, MemoryLearningJob, MemoryProviderHealth, MemoryRecord, MemoryRecordRequest, MemoryRetrievalRequest, MemoryRetrievalResult, PageInfo, SdkWorkCommandData } from '../types';
+import type { DeleteAllMemoriesRequest, DeleteAllMemoriesResult, MemoryCandidate, MemoryCapabilities, MemoryContextPack, MemoryContextPackRequest, MemoryEdge, MemoryEdgePatch, MemoryEdgeRequest, MemoryEntity, MemoryEntityPatch, MemoryEntityRequest, MemoryEvent, MemoryEventRequest, MemoryExtractionRequest, MemoryFeedback, MemoryFeedbackRequest, MemoryLearningJob, MemoryProviderHealth, MemoryRecord, MemoryRecordPatch, MemoryRecordRequest, MemoryRetrievalRequest, MemoryRetrievalResult, PageInfo } from '../types';
 
 
 export interface MemoryEdgesListParams {
@@ -380,7 +380,7 @@ async retrieve(memoryId: string, params: MemoryRetrieveParams, requestOptions?: 
     return this.client.request<MemoryRecord>(appendQueryString(customApiPath(`/memory/memories/${serializePathParameter(memoryId, { name: 'memoryId', style: 'simple', explode: false })}`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 
-async update(memoryId: string, body: MemoryRecordRequest, params: MemoryUpdateParams, requestOptions?: ApiRequestOptions): Promise<MemoryRecord> {
+async update(memoryId: string, body: MemoryRecordPatch, params: MemoryUpdateParams, requestOptions?: ApiRequestOptions): Promise<MemoryRecord> {
     const query = buildQueryString([
       { name: 'space_id', value: params.spaceId, style: 'form', explode: true, allowReserved: false },
     ]);
@@ -394,14 +394,14 @@ async delete(memoryId: string, params: MemoryDeleteParams, requestOptions?: ApiR
     return this.client.request<void>(appendQueryString(customApiPath(`/memory/memories/${serializePathParameter(memoryId, { name: 'memoryId', style: 'simple', explode: false })}`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
   }
 
-async deleteAll(body: DeleteAllMemoriesRequest, params: MemoryDeleteAllParams, requestOptions?: ApiRequestOptions): Promise<SdkWorkCommandData> {
+async deleteAll(body: DeleteAllMemoriesRequest, params: MemoryDeleteAllParams, requestOptions?: ApiRequestOptions): Promise<DeleteAllMemoriesResult> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
-    return this.client.request<SdkWorkCommandData>(customApiPath(`/memory/memories/delete_all`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'command' });
+    return this.client.request<DeleteAllMemoriesResult>(customApiPath(`/memory/memories/delete_all`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'data' });
   }
 }
 

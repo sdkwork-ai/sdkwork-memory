@@ -7,6 +7,15 @@ use sqlx::Row;
 use crate::pool_backend::MemorySqlDialect;
 use crate::store::{now_text, timestamp_after_seconds, NativeSqlMemoryStore, NativeSqlStoreError};
 
+/// Outcome of a stale-running sweep: jobs returned to `'queued'` with a fresh
+/// attempt charged, and jobs past the attempt ceiling that landed terminally
+/// in `'dead'`. The dead count is the operator's crash-loop signal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct StaleRequeueCounts {
+    pub requeued: u64,
+    pub dead: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NativeSqlLearningJobRow {
     pub job_uuid: String,
@@ -103,12 +112,12 @@ impl NativeSqlMemoryStore {
     pub async fn requeue_stale_running_learning_jobs(
         &self,
         max_attempts: u64,
-    ) -> Result<u64, NativeSqlStoreError> {
+    ) -> Result<StaleRequeueCounts, NativeSqlStoreError> {
         let timestamp = now_text();
         let max_attempts = i64::try_from(max_attempts).unwrap_or(i64::MAX);
         // Rows past the attempt ceiling converge on the terminal `dead` state so a
         // crash-looping or panicking job cannot consume the queue forever.
-        sqlx::query(
+        let dead = sqlx::query(
             r#"
             UPDATE ai_learning_job
             SET state = 'dead',
@@ -128,7 +137,7 @@ impl NativeSqlMemoryStore {
         .bind(max_attempts)
         .execute(self.pool())
         .await?;
-        let result = sqlx::query(
+        let requeued = sqlx::query(
             r#"
             UPDATE ai_learning_job
             SET state = 'queued',
@@ -148,7 +157,10 @@ impl NativeSqlMemoryStore {
         .bind(max_attempts)
         .execute(self.pool())
         .await?;
-        Ok(result.rows_affected())
+        Ok(StaleRequeueCounts {
+            requeued: requeued.rows_affected(),
+            dead: dead.rows_affected(),
+        })
     }
 
     pub async fn claim_queued_learning_jobs(
@@ -204,6 +216,7 @@ impl NativeSqlMemoryStore {
                 SELECT uuid, tenant_id
                 FROM ai_learning_job
                 WHERE state = 'queued'
+                  AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
                 ORDER BY priority DESC, created_at ASC
                 LIMIT ?
                 FOR UPDATE SKIP LOCKED
@@ -218,6 +231,7 @@ impl NativeSqlMemoryStore {
                       j.created_at, j.updated_at, j.version
             "#,
         )
+        .bind(&timestamp)
         .bind(&timestamp)
         .bind(lease_owner)
         .bind(lease_token)
@@ -238,6 +252,7 @@ impl NativeSqlMemoryStore {
     ) -> Result<Vec<NativeSqlLearningJobRow>, NativeSqlStoreError> {
         let mut connection = self.pool().acquire().await?;
         let mut claimed = Vec::new();
+        let timestamp = now_text();
         let rows = sqlx::query(
             r#"
             SELECT uuid, tenant_id, space_id, job_type, state, priority,
@@ -247,10 +262,12 @@ impl NativeSqlMemoryStore {
                    created_at, updated_at, version
             FROM ai_learning_job
             WHERE state = 'queued'
+              AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
             ORDER BY priority DESC, created_at ASC
             LIMIT ?
             "#,
         )
+        .bind(&timestamp)
         .bind(limit.max(1) as i64)
         .fetch_all(&mut *connection)
         .await?;
@@ -406,6 +423,63 @@ impl NativeSqlMemoryStore {
             .await
     }
 
+    /// Requeues a leased learning job whose execution errored: the attempt is
+    /// charged, the job returns to `'queued'` with a `next_attempt_at` backoff
+    /// while attempts remain, and lands terminally `'failed'` once the
+    /// ceiling is exhausted. The lease triple is compared in the WHERE clause
+    /// so a fenced worker cannot requeue a job another worker now owns.
+    /// Returns the resulting state, or `None` when the fence rejected the
+    /// update.
+    pub async fn requeue_failed_learning_job(
+        &self,
+        tenant_id: i64,
+        job_uuid: &str,
+        lease_owner: &str,
+        lease_token: &str,
+        max_attempts: i64,
+        backoff_seconds: u64,
+        error_json: &str,
+    ) -> Result<Option<String>, NativeSqlStoreError> {
+        let now = now_text();
+        let next_attempt_at = timestamp_after_seconds(backoff_seconds.max(1));
+        let updated = sqlx::query(
+            r#"
+            UPDATE ai_learning_job
+            SET state = CASE WHEN attempt_count + 1 >= ? THEN 'failed' ELSE 'queued' END,
+                attempt_count = attempt_count + 1,
+                next_attempt_at = CASE WHEN attempt_count + 1 >= ?
+                    THEN NULL ELSE ? END,
+                error_json = ?,
+                lease_owner = NULL,
+                lease_token = NULL,
+                lease_expires_at = NULL,
+                updated_at = ?,
+                version = version + 1
+            WHERE tenant_id = ? AND uuid = ? AND state = 'running'
+              AND lease_owner = ? AND lease_token = ? AND lease_expires_at > ?
+            "#,
+        )
+        .bind(max_attempts)
+        .bind(max_attempts)
+        .bind(&next_attempt_at)
+        .bind(error_json)
+        .bind(&now)
+        .bind(tenant_id)
+        .bind(job_uuid)
+        .bind(lease_owner)
+        .bind(lease_token)
+        .bind(&now)
+        .execute(self.pool())
+        .await?;
+        if updated.rows_affected() == 0 {
+            return Ok(None);
+        }
+        let row = self
+            .retrieve_learning_job_for_tenant(tenant_id, job_uuid)
+            .await?;
+        Ok(row.map(|job| job.state))
+    }
+
     pub async fn renew_learning_job_lease(
         &self,
         tenant_id: i64,
@@ -439,15 +513,16 @@ impl NativeSqlMemoryStore {
     pub async fn requeue_stale_running_eval_runs(
         &self,
         max_attempts: u64,
-    ) -> Result<u64, NativeSqlStoreError> {
+    ) -> Result<StaleRequeueCounts, NativeSqlStoreError> {
         let timestamp = now_text();
         let max_attempts = i64::try_from(max_attempts).unwrap_or(i64::MAX);
         // Same bounded-retry contract as learning jobs: past the ceiling the run
         // is terminal `dead` instead of being requeued forever.
-        sqlx::query(
+        let dead = sqlx::query(
             r#"
             UPDATE ai_eval_run
             SET state = 'dead',
+                error_json = ?,
                 lease_owner = NULL,
                 lease_token = NULL,
                 lease_expires_at = NULL,
@@ -457,12 +532,13 @@ impl NativeSqlMemoryStore {
               AND attempt_count >= ?
             "#,
         )
+        .bind(r#"{"error":"max_attempts_exceeded"}"#)
         .bind(&timestamp)
         .bind(&timestamp)
         .bind(max_attempts)
         .execute(self.pool())
         .await?;
-        let result = sqlx::query(
+        let requeued = sqlx::query(
             r#"
             UPDATE ai_eval_run
             SET state = 'queued',
@@ -482,7 +558,10 @@ impl NativeSqlMemoryStore {
         .bind(max_attempts)
         .execute(self.pool())
         .await?;
-        Ok(result.rows_affected())
+        Ok(StaleRequeueCounts {
+            requeued: requeued.rows_affected(),
+            dead: dead.rows_affected(),
+        })
     }
 
     pub async fn update_eval_run_state(
