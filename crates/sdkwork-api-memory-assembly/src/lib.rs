@@ -6,9 +6,10 @@ mod bootstrap;
 mod generated;
 
 pub use bootstrap::{
-    assemble_api_router, assemble_api_router_from_env,
-    assemble_api_router_retaining_background_from_env, run_database_migrate_only, web_module,
-    ApiAssembly, ApiAssemblyContribution, MemoryBackgroundWorkers, MemoryReadinessCheck,
+    app_api_route_manifest, assemble_api_router, assemble_api_router_from_env,
+    assemble_api_router_retaining_background_from_env, assemble_app_api_contribution_from_env,
+    run_database_migrate_only, web_module, ApiAssembly, ApiAssemblyContribution,
+    MemoryBackgroundWorkers, MemoryReadinessCheck,
 };
 
 pub fn assembly_route_count() -> usize {

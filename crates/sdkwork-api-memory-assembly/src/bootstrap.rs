@@ -234,6 +234,20 @@ async fn metrics(Extension(product): Extension<Arc<OpenMemoryService>>) -> impl 
 /// shutdown handle.
 async fn assemble_contribution_with_product_from_env(
 ) -> Result<(ApiAssemblyContribution, Arc<OpenMemoryService>), String> {
+    let product = open_memory_service_from_env().await?;
+    let readiness: Arc<dyn ReadinessCheck> = Arc::new(MemoryReadinessCheck::new(product.clone()));
+    let contribution = assemble_api_router(product.clone(), readiness).await?;
+
+    Ok((contribution, product))
+}
+
+/// Boots the Memory product service from `SDKWORK_DATABASE_*` environment.
+///
+/// Shared by the whole-module factory and the app-api-only factory so every
+/// entrypoint boots the identical product: runtime profile, data plane, Drive
+/// export uploader, and the optional OpenAI-compatible embedding/chat
+/// providers.
+async fn open_memory_service_from_env() -> Result<Arc<OpenMemoryService>, String> {
     refresh_memory_http_metric_dimensions();
     sdkwork_intelligence_memory_service::platform::validate_runtime_secrets_for_environment()?;
     validate_outbox_runtime_config().await?;
@@ -289,12 +303,51 @@ async fn assemble_contribution_with_product_from_env(
         .ready_check()
         .await
         .map_err(|_| "memory database schema preflight failed".to_owned())?;
-    let product = Arc::new(product);
+    Ok(Arc::new(product))
+}
 
-    let readiness: Arc<dyn ReadinessCheck> = Arc::new(MemoryReadinessCheck::new(product.clone()));
-    let contribution = assemble_api_router(product.clone(), readiness).await?;
+/// The Memory owner's app-api route manifest (API_ASSEMBLY_SPEC §4 "Export
+/// Completeness").
+///
+/// An embedding host composes its app-surface route manifest from every mounted
+/// capability's own manifest — the web-framework auth pipeline decides public
+/// versus protected from that composed manifest — so the app surface MUST be
+/// reachable through an assembly entrypoint instead of a direct
+/// `sdkwork-routes-memory-app-api` import (API_ASSEMBLY_SPEC §3).
+pub fn app_api_route_manifest() -> HttpRouteManifest {
+    sdkwork_routes_memory_app_api::app_route_manifest()
+}
 
-    Ok((contribution, product))
+/// Assembles the **app-api** Memory contribution for an embedding host
+/// (API_ASSEMBLY_SPEC §6.1, §6.2.1).
+///
+/// The embedding host — the Cloud Router unified runtime, for example — owns
+/// the process and serves the Memory app surface under the canonical
+/// `/app/v3/api/memory*` paths, so this factory publishes **only** that
+/// surface. Publishing the open-api and backend-api surfaces here would collide
+/// with the capability mounts the host already owns, and a host MUST NOT apply
+/// a second Web Framework layer on top of the returned contribution: every
+/// surface selects its own auth profile through `memory_web_auth_mode_from_env`.
+///
+/// The dependency keeps its own background plane. `MemoryBackgroundWorkers`
+/// carries no `Drop` that stops the workers, so dropping the handle leaves them
+/// running until process exit — the dependency-owned shape an embedded host
+/// expects — and every claimed job/outbox row is lease-fenced, so a rollout
+/// that kills them mid-batch loses no work.
+pub async fn assemble_app_api_contribution_from_env() -> Result<ApiAssembly, String> {
+    let product = open_memory_service_from_env().await?;
+    let _workers = OpenMemoryService::spawn_background_workers(&product);
+    let business_router = build_app_router_with_product(product.clone());
+    let router = wrap_app_router(business_router).await;
+
+    ApiAssemblyContribution::from_manifest(
+        "sdkwork-memory",
+        "SDKWork Memory App API",
+        router,
+        sdkwork_routes_memory_app_api::app_route_manifest(),
+        Vec::new(),
+        Arc::new(MemoryReadinessCheck::new(product)),
+    )
 }
 
 /// Assembles the complete Memory API contribution from `SDKWORK_DATABASE_*`
