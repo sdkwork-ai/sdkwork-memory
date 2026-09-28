@@ -73,13 +73,19 @@ async fn connect_memory_drive_pool(database_url: &str) -> Result<PgPool, String>
 /// The row is system-scoped: `tenant_id` keeps the schema default instead of claiming a business
 /// tenant, and `created_by`/`updated_by` record the seeding application.
 async fn seed_default_drive_storage_provider(pool: &PgPool) -> Result<(), String> {
-    let exists: Option<i64> =
-        sqlx::query_scalar("SELECT 1 FROM dr_drive_storage_provider WHERE id = $1")
-            .bind(DEFAULT_MEMORY_DRIVE_PROVIDER_ID)
-            .fetch_optional(pool)
-            .await
-            .map_err(|error| format!("read memory drive storage provider failed: {error}"))?;
-    if exists.is_some() {
+    // Existence probes must decode a PostgreSQL `bool`, never the bare projection `1`: that
+    // literal is `int4`, which SQLx cannot decode into `i64` (whose declared SQL type is `INT8`),
+    // so the check would fail on every boot once the provider row exists. The
+    // `SELECT EXISTS(SELECT 1 ...)` form is the workspace-wide idiom (see
+    // sdkwork-drive-install-worker's default_space_setup).
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM dr_drive_storage_provider WHERE id = $1)",
+    )
+    .bind(DEFAULT_MEMORY_DRIVE_PROVIDER_ID)
+    .fetch_one(pool)
+    .await
+    .map_err(|error| format!("read memory drive storage provider failed: {error}"))?;
+    if exists {
         return Ok(());
     }
 
