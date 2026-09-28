@@ -16,12 +16,23 @@ sdkwork-memory-contract.workspace = true
 sdkwork-intelligence-memory-service.workspace = true
 sdkwork-routes-memory-support.workspace = true
 sdkwork-iam-web-adapter.workspace = true
+sdkwork-utils-rust.workspace = true
 sdkwork-web-axum.workspace = true
 sdkwork-web-core.workspace = true
 
 [dev-dependencies]
-tokio.workspace = true
+# `net` is not in the workspace default. The official-SDK acceptance suite
+# (`tests/mem0_official_sdk_flow.rs`) has to bind a real socket: the point of
+# that suite is that a real HTTP client speaks to a real listener, which an
+# in-process `oneshot` request cannot demonstrate.
+tokio = { workspace = true, features = ["net"] }
 tower.workspace = true
 sdkwork-intelligence-memory-service.workspace = true
 sdkwork-memory-plugin-native-sql.workspace = true
+sdkwork-memory-plugin-search-first-vector.workspace = true
 sdkwork-memory-test-support.workspace = true
+# The materialization-time half of the vendor-compatibility exemption lives in
+# the framework (`validate_openapi_*_context_selectors_with_external_prefixes`).
+# `tests/mem0_wire_context_selector_contract.rs` asserts that the materialized
+# authority passes it with exactly the prefixes this crate declares at runtime.
+sdkwork-web-contract.workspace = true

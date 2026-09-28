@@ -68,7 +68,30 @@ assert.equal(
   "Memory open OpenAPI authority must advertise the /mem/v3/api public prefix",
 );
 
-for (const path of Object.keys(openApi.paths)) {
+// Vendor compatibility wire operations (sdkwork-specs/API_SPEC.md section 4.5.2)
+// mirror an upstream third-party protocol under that protocol's own path
+// prefixes (`/v1/...`, `/v3/...`) and are identified by the operation-level
+// marker pair below. They are exempt from the SDKWork-owned `/mem/v3/api/memory`
+// prefix rule; SDKWork-owned operations in the same document are not.
+const isExternalProtocolOperation = (operation) =>
+  operation?.["x-sdkwork-wire-protocol"] === "external" &&
+  typeof operation?.["x-sdkwork-external-protocol-id"] === "string" &&
+  operation["x-sdkwork-external-protocol-id"].trim().length > 0;
+
+let sdkWorkOwnedPathCount = 0;
+for (const [path, pathItem] of Object.entries(openApi.paths)) {
+  const ownedOperations = Object.values(pathItem ?? {}).filter(
+    (operation) =>
+      operation && typeof operation === "object" && operation.operationId !== undefined,
+  ).filter((operation) => !isExternalProtocolOperation(operation));
+  if (ownedOperations.length === 0) {
+    assert.ok(
+      Object.values(pathItem ?? {}).some(isExternalProtocolOperation),
+      `Memory open OpenAPI path must be either SDKWork-owned or an external-protocol operation: ${path}`,
+    );
+    continue;
+  }
+  sdkWorkOwnedPathCount += 1;
   assert.ok(
     path.startsWith(`${openApiPrefix}/memory`),
     `Memory open OpenAPI path must start with ${openApiPrefix}/memory: ${path}`,
@@ -78,6 +101,13 @@ for (const path of Object.keys(openApi.paths)) {
     `Memory open OpenAPI path must not keep legacy duplicated prefix: ${path}`,
   );
 }
+
+// Guard against the exemption silently swallowing the whole document: the
+// SDKWork-owned surface must still be present and prefix-correct.
+assert.ok(
+  sdkWorkOwnedPathCount > 0,
+  "Memory open OpenAPI must still expose SDKWork-owned /mem/v3/api/memory operations",
+);
 
 for (const markdownPath of collectMarkdownFiles(".")) {
   const markdown = fs.readFileSync(markdownPath, "utf8");

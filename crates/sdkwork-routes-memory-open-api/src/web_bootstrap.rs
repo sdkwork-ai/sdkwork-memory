@@ -17,8 +17,33 @@ pub fn memory_open_api_public_path_prefixes() -> Vec<String> {
     vec![paths::HEALTHZ.to_owned()]
 }
 
+/// Every path prefix this crate serves as an `open-api` surface.
+///
+/// The crate serves two open-api dialects on one router: the SDKWork Memory
+/// authority under `/mem/v3/api`, and the vendor-compatibility `mem0-platform`
+/// authority under `/v1`/`/v3` (`API_SPEC.md` section 4.5.2). Both are declared
+/// `apiSurface: open-api` in the route manifest, so both must be classified that
+/// way at runtime or `validate_route_auth_for_surfaces` rejects their `api-key`
+/// auth profile.
 pub fn memory_open_api_prefixes() -> Vec<String> {
-    vec![paths::PREFIX.to_owned()]
+    let mut prefixes = vec![paths::PREFIX.to_owned()];
+    prefixes.extend(memory_open_api_external_protocol_prefixes());
+    prefixes
+}
+
+/// The prefixes hosting the `mem0-platform` upstream protocol.
+///
+/// Declared to the framework as `external_protocol_prefixes`, which suspends the
+/// client context-selector guard for them. mem0's request vocabulary includes
+/// `user_id` and `app_id` as top-level body keys and query parameters — the
+/// entity a memory is filed under, not a tenant selector — and the official
+/// clients cannot be changed. See
+/// `sdkwork_web_core::WebRequestContextProfile::external_protocol_prefixes`.
+pub fn memory_open_api_external_protocol_prefixes() -> Vec<String> {
+    paths::MEM0_PATH_PREFIXES
+        .iter()
+        .map(|prefix| prefix.trim_end_matches('/').to_owned())
+        .collect()
 }
 
 #[derive(Clone, Default)]
@@ -67,16 +92,59 @@ where
         .validate_public_path_prefixes(&memory_open_api_public_path_prefixes())
         .expect("memory open-api public prefixes must not cover protected manifest routes");
 
+    // `classify_api_surface` tests the gateway prefixes before the open-api
+    // ones, and the framework default claims `/v1` for the gateway surface. That
+    // default is a property of a *gateway* host, not of this service: every
+    // route this crate serves under `/v1` is the mem0 compatibility authority,
+    // declared `api-key` in the manifest. Left in place, `/v1/ping/` would
+    // classify as gateway-api and the manifest validator would reject its
+    // credential profile — so the list is emptied here rather than in the shared
+    // default, which other services still need.
     let layer = WebFrameworkLayer::new(resolver)
         .with_profile(WebRequestContextProfile {
             open_api_prefixes: memory_open_api_prefixes(),
             public_path_prefixes: memory_open_api_public_path_prefixes(),
+            gateway_api_prefixes: Vec::new(),
+            external_protocol_prefixes: memory_open_api_external_protocol_prefixes(),
             ..WebRequestContextProfile::default()
         })
         .with_route_manifest(route_manifest.clone())
         .with_domain_injector(Arc::new(MemoryOpenApiContextInjector))
         .with_metrics(memory_http_metrics());
     harden_memory_web_framework_layer(layer, route_manifest)
+}
+
+/// Installs the mem0 wire adapters outside the web framework layer.
+///
+/// Both adapters have to straddle the framework layer — the credential bridge on
+/// the way in, the media-type bridge on the way out — and `Router::layer` wraps,
+/// so the layer applied last runs outermost. Order here is therefore:
+///
+/// ```text
+/// request  → credential bridge → problem bridge → [ framework layer → routes ]
+/// response ← credential bridge ← problem bridge ← [ framework layer ← routes ]
+/// ```
+///
+/// * The framework validates credential headers during surface classification
+///   (`SecurityPolicy::validate_route_auth_credentials`), so the credential
+///   rewrite has to be in front of it — hence applied last.
+/// * The framework's `ResponseIdentity` interceptor normalizes every 4xx/5xx
+///   body it sees, so the media-type rewrite has to be behind it — hence applied
+///   first, but still outside `with_web_request_context`.
+///
+/// The two are independent: neither order between *them* matters, only their
+/// position relative to the framework layer.
+fn with_mem0_wire_adapters<S>(router: Router<S>) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    router
+        .layer(axum::middleware::from_fn(
+            crate::mem0::mem0_problem_document_bridge,
+        ))
+        .layer(axum::middleware::from_fn(
+            crate::mem0::mem0_credential_bridge,
+        ))
 }
 
 /// Wrap router using the dev-inline web framework.
@@ -87,10 +155,10 @@ pub fn wrap_router_with_web_framework<S>(
 where
     S: Clone + Send + Sync + 'static,
 {
-    with_web_request_context(
+    with_mem0_wire_adapters(with_web_request_context(
         with_problem_correlation(router),
         build_open_api_framework_layer(resolver),
-    )
+    ))
     // Innermost body limit: this wins over the framework's own default and is
     // the single enforced bound (`SDKWORK_MEMORY_MAX_BODY_BYTES`).
     .layer(axum::extract::DefaultBodyLimit::max(
@@ -106,10 +174,10 @@ pub fn wrap_router_with_iam_database_web_framework<S>(
 where
     S: Clone + Send + Sync + 'static,
 {
-    with_web_request_context(
+    with_mem0_wire_adapters(with_web_request_context(
         with_problem_correlation(router),
         build_open_api_framework_layer(resolver),
-    )
+    ))
     // Innermost body limit: this wins over the framework's own default and is
     // the single enforced bound (`SDKWORK_MEMORY_MAX_BODY_BYTES`).
     .layer(axum::extract::DefaultBodyLimit::max(
@@ -126,9 +194,11 @@ where
         MemoryWebAuthMode::DevInline => {
             wrap_router_with_web_framework(DefaultWebRequestContextResolver::default(), router)
         }
-        MemoryWebAuthMode::ProductionFailClosed => with_web_request_context(
-            with_problem_correlation(router),
-            build_open_api_framework_layer(ProductionFailClosedResolver),
+        MemoryWebAuthMode::ProductionFailClosed => with_mem0_wire_adapters(
+            with_web_request_context(
+                with_problem_correlation(router),
+                build_open_api_framework_layer(ProductionFailClosedResolver),
+            ),
         ),
         MemoryWebAuthMode::IamDatabase(resolver) => {
             wrap_router_with_iam_database_web_framework(*resolver, router)

@@ -4917,6 +4917,1603 @@
         "x-sdkwork-idempotent": false,
         "x-sdkwork-rate-limit-tier": "openApiDefault"
       }
+    },
+    "/v1/ping/": {
+      "get": {
+        "operationId": "mem0.ping",
+        "tags": [
+          "memory"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0PingResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "x-sdkwork-owner": "sdkwork-memory",
+        "x-sdkwork-api-authority": "sdkwork-memory-open-api",
+        "x-sdkwork-api-surface": "open-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-domain": "intelligence",
+        "x-sdkwork-resource": "ping",
+        "x-sdkwork-permission": "memory.open.capabilities.read",
+        "x-sdkwork-tenant-scope": "tenant",
+        "x-sdkwork-data-scope": "owner",
+        "x-sdkwork-auth-mode": "api-key",
+        "x-sdkwork-audit-event": "memory.open.capabilities.read",
+        "x-sdkwork-idempotent": false,
+        "x-sdkwork-wire-protocol": "external",
+        "x-sdkwork-external-protocol-id": "mem0-platform"
+      }
+    },
+    "/v3/memories/add/": {
+      "post": {
+        "operationId": "mem0.memory.add",
+        "tags": [
+          "memory"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0AddResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "x-sdkwork-owner": "sdkwork-memory",
+        "x-sdkwork-api-authority": "sdkwork-memory-open-api",
+        "x-sdkwork-api-surface": "open-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-domain": "intelligence",
+        "x-sdkwork-resource": "memories",
+        "x-sdkwork-permission": "memory.open.records.write",
+        "x-sdkwork-tenant-scope": "tenant",
+        "x-sdkwork-data-scope": "owner",
+        "x-sdkwork-auth-mode": "api-key",
+        "x-sdkwork-audit-event": "memory.open.record.created",
+        "x-sdkwork-idempotent": false,
+        "x-sdkwork-rate-limit-tier": "openApiDefault",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Mem0AddRequest"
+              }
+            }
+          }
+        },
+        "x-sdkwork-wire-protocol": "external",
+        "x-sdkwork-external-protocol-id": "mem0-platform"
+      }
+    },
+    "/v3/memories/search/": {
+      "post": {
+        "operationId": "mem0.memory.search",
+        "tags": [
+          "memory"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0SearchResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "x-sdkwork-owner": "sdkwork-memory",
+        "x-sdkwork-api-authority": "sdkwork-memory-open-api",
+        "x-sdkwork-api-surface": "open-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-domain": "intelligence",
+        "x-sdkwork-resource": "memories",
+        "x-sdkwork-permission": "memory.open.retrievals.write",
+        "x-sdkwork-tenant-scope": "tenant",
+        "x-sdkwork-data-scope": "owner",
+        "x-sdkwork-auth-mode": "api-key",
+        "x-sdkwork-audit-event": "memory.open.retrieval.created",
+        "x-sdkwork-idempotent": false,
+        "x-sdkwork-rate-limit-tier": "openApiDefault",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Mem0SearchRequest"
+              }
+            }
+          }
+        },
+        "x-sdkwork-wire-protocol": "external",
+        "x-sdkwork-external-protocol-id": "mem0-platform"
+      }
+    },
+    "/v3/memories/": {
+      "post": {
+        "operationId": "mem0.memory.list",
+        "tags": [
+          "memory"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0PaginatedMemories"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "x-sdkwork-owner": "sdkwork-memory",
+        "x-sdkwork-api-authority": "sdkwork-memory-open-api",
+        "x-sdkwork-api-surface": "open-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-domain": "intelligence",
+        "x-sdkwork-resource": "memories",
+        "x-sdkwork-permission": "memory.open.records.read",
+        "x-sdkwork-tenant-scope": "tenant",
+        "x-sdkwork-data-scope": "owner",
+        "x-sdkwork-auth-mode": "api-key",
+        "x-sdkwork-audit-event": "memory.open.record.list",
+        "x-sdkwork-idempotent": false,
+        "x-sdkwork-rate-limit-tier": "openApiDefault",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Mem0ListRequest"
+              }
+            }
+          }
+        },
+        "x-sdkwork-wire-protocol": "external",
+        "x-sdkwork-external-protocol-id": "mem0-platform"
+      }
+    },
+    "/v1/memories/": {
+      "delete": {
+        "operationId": "mem0.memory.removeAll",
+        "tags": [
+          "memory"
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agent_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0MutationAck"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "x-sdkwork-owner": "sdkwork-memory",
+        "x-sdkwork-api-authority": "sdkwork-memory-open-api",
+        "x-sdkwork-api-surface": "open-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-domain": "intelligence",
+        "x-sdkwork-resource": "memories",
+        "x-sdkwork-permission": "memory.open.records.write",
+        "x-sdkwork-tenant-scope": "tenant",
+        "x-sdkwork-data-scope": "owner",
+        "x-sdkwork-auth-mode": "api-key",
+        "x-sdkwork-audit-event": "memory.open.record.deleted",
+        "x-sdkwork-idempotent": false,
+        "x-sdkwork-rate-limit-tier": "openApiDefault",
+        "x-sdkwork-wire-protocol": "external",
+        "x-sdkwork-external-protocol-id": "mem0-platform"
+      }
+    },
+    "/v1/memories/{memory_id}/": {
+      "get": {
+        "operationId": "mem0.memory.retrieve",
+        "tags": [
+          "memory"
+        ],
+        "parameters": [
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0Memory"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "x-sdkwork-owner": "sdkwork-memory",
+        "x-sdkwork-api-authority": "sdkwork-memory-open-api",
+        "x-sdkwork-api-surface": "open-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-domain": "intelligence",
+        "x-sdkwork-resource": "memories",
+        "x-sdkwork-permission": "memory.open.records.read",
+        "x-sdkwork-tenant-scope": "tenant",
+        "x-sdkwork-data-scope": "owner",
+        "x-sdkwork-auth-mode": "api-key",
+        "x-sdkwork-audit-event": "memory.open.record.read",
+        "x-sdkwork-idempotent": false,
+        "x-sdkwork-wire-protocol": "external",
+        "x-sdkwork-external-protocol-id": "mem0-platform"
+      },
+      "put": {
+        "operationId": "mem0.memory.update",
+        "tags": [
+          "memory"
+        ],
+        "parameters": [
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0Memory"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "x-sdkwork-owner": "sdkwork-memory",
+        "x-sdkwork-api-authority": "sdkwork-memory-open-api",
+        "x-sdkwork-api-surface": "open-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-domain": "intelligence",
+        "x-sdkwork-resource": "memories",
+        "x-sdkwork-permission": "memory.open.records.write",
+        "x-sdkwork-tenant-scope": "tenant",
+        "x-sdkwork-data-scope": "owner",
+        "x-sdkwork-auth-mode": "api-key",
+        "x-sdkwork-audit-event": "memory.open.record.updated",
+        "x-sdkwork-idempotent": false,
+        "x-sdkwork-rate-limit-tier": "openApiDefault",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Mem0UpdateRequest"
+              }
+            }
+          }
+        },
+        "x-sdkwork-wire-protocol": "external",
+        "x-sdkwork-external-protocol-id": "mem0-platform"
+      },
+      "delete": {
+        "operationId": "mem0.memory.remove",
+        "tags": [
+          "memory"
+        ],
+        "parameters": [
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "delete_linked",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0MutationAck"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "x-sdkwork-owner": "sdkwork-memory",
+        "x-sdkwork-api-authority": "sdkwork-memory-open-api",
+        "x-sdkwork-api-surface": "open-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-domain": "intelligence",
+        "x-sdkwork-resource": "memories",
+        "x-sdkwork-permission": "memory.open.records.write",
+        "x-sdkwork-tenant-scope": "tenant",
+        "x-sdkwork-data-scope": "owner",
+        "x-sdkwork-auth-mode": "api-key",
+        "x-sdkwork-audit-event": "memory.open.record.deleted",
+        "x-sdkwork-idempotent": false,
+        "x-sdkwork-rate-limit-tier": "openApiDefault",
+        "x-sdkwork-wire-protocol": "external",
+        "x-sdkwork-external-protocol-id": "mem0-platform"
+      }
+    },
+    "/v1/memories/{memory_id}/history/": {
+      "get": {
+        "operationId": "mem0.memory.history",
+        "tags": [
+          "memory"
+        ],
+        "parameters": [
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0HistoryList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "x-sdkwork-owner": "sdkwork-memory",
+        "x-sdkwork-api-authority": "sdkwork-memory-open-api",
+        "x-sdkwork-api-surface": "open-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-domain": "intelligence",
+        "x-sdkwork-resource": "memories",
+        "x-sdkwork-permission": "memory.open.events.read",
+        "x-sdkwork-tenant-scope": "tenant",
+        "x-sdkwork-data-scope": "owner",
+        "x-sdkwork-auth-mode": "api-key",
+        "x-sdkwork-audit-event": "memory.open.event.read",
+        "x-sdkwork-idempotent": false,
+        "x-sdkwork-wire-protocol": "external",
+        "x-sdkwork-external-protocol-id": "mem0-platform"
+      }
+    },
+    "/v1/entities/": {
+      "get": {
+        "operationId": "mem0.entity.list",
+        "tags": [
+          "memory"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0EntityList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "x-sdkwork-owner": "sdkwork-memory",
+        "x-sdkwork-api-authority": "sdkwork-memory-open-api",
+        "x-sdkwork-api-surface": "open-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-domain": "intelligence",
+        "x-sdkwork-resource": "entities",
+        "x-sdkwork-permission": "memory.open.entities.read",
+        "x-sdkwork-tenant-scope": "tenant",
+        "x-sdkwork-data-scope": "owner",
+        "x-sdkwork-auth-mode": "api-key",
+        "x-sdkwork-audit-event": "memory.open.entity.list",
+        "x-sdkwork-idempotent": false,
+        "x-sdkwork-wire-protocol": "external",
+        "x-sdkwork-external-protocol-id": "mem0-platform"
+      }
+    },
+    "/v1/feedback/": {
+      "post": {
+        "operationId": "mem0.feedback.create",
+        "tags": [
+          "memory"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0FeedbackResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "x-sdkwork-owner": "sdkwork-memory",
+        "x-sdkwork-api-authority": "sdkwork-memory-open-api",
+        "x-sdkwork-api-surface": "open-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-domain": "intelligence",
+        "x-sdkwork-resource": "feedback",
+        "x-sdkwork-permission": "memory.open.feedback.write",
+        "x-sdkwork-tenant-scope": "tenant",
+        "x-sdkwork-data-scope": "owner",
+        "x-sdkwork-auth-mode": "api-key",
+        "x-sdkwork-audit-event": "memory.open.feedback.created",
+        "x-sdkwork-idempotent": false,
+        "x-sdkwork-rate-limit-tier": "openApiDefault",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Mem0FeedbackRequest"
+              }
+            }
+          }
+        },
+        "x-sdkwork-wire-protocol": "external",
+        "x-sdkwork-external-protocol-id": "mem0-platform"
+      }
+    },
+    "/v1/batch/": {
+      "put": {
+        "operationId": "mem0.memory.batchUpdate",
+        "tags": [
+          "memory"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0BatchAck"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "x-sdkwork-owner": "sdkwork-memory",
+        "x-sdkwork-api-authority": "sdkwork-memory-open-api",
+        "x-sdkwork-api-surface": "open-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-domain": "intelligence",
+        "x-sdkwork-resource": "memories",
+        "x-sdkwork-permission": "memory.open.records.write",
+        "x-sdkwork-tenant-scope": "tenant",
+        "x-sdkwork-data-scope": "owner",
+        "x-sdkwork-auth-mode": "api-key",
+        "x-sdkwork-audit-event": "memory.open.record.updated",
+        "x-sdkwork-idempotent": false,
+        "x-sdkwork-rate-limit-tier": "openApiDefault",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Mem0BatchRequest"
+              }
+            }
+          }
+        },
+        "x-sdkwork-wire-protocol": "external",
+        "x-sdkwork-external-protocol-id": "mem0-platform"
+      },
+      "delete": {
+        "operationId": "mem0.memory.batchDelete",
+        "tags": [
+          "memory"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0BatchAck"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "mem0 upstream error shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mem0ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "x-sdkwork-owner": "sdkwork-memory",
+        "x-sdkwork-api-authority": "sdkwork-memory-open-api",
+        "x-sdkwork-api-surface": "open-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-domain": "intelligence",
+        "x-sdkwork-resource": "memories",
+        "x-sdkwork-permission": "memory.open.records.write",
+        "x-sdkwork-tenant-scope": "tenant",
+        "x-sdkwork-data-scope": "owner",
+        "x-sdkwork-auth-mode": "api-key",
+        "x-sdkwork-audit-event": "memory.open.record.deleted",
+        "x-sdkwork-idempotent": false,
+        "x-sdkwork-rate-limit-tier": "openApiDefault",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Mem0BatchRequest"
+              }
+            }
+          }
+        },
+        "x-sdkwork-wire-protocol": "external",
+        "x-sdkwork-external-protocol-id": "mem0-platform"
+      }
     }
   },
   "components": {
@@ -10190,6 +11787,668 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "Mem0Message": {
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        }
+      },
+      "Mem0Memory": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Memory uuid, addressed verbatim by the official clients."
+          },
+          "memory": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "role",
+                "content"
+              ],
+              "properties": {
+                "role": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "event": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "agent_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "run_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "app_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "score": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "metadata": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "categories": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expiration_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Mem0ErrorDetail": {
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "properties": {
+          "detail": {
+            "type": "string"
+          }
+        }
+      },
+      "Mem0AddResult": {
+        "type": "object",
+        "required": [
+          "results"
+        ],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Mem0Memory"
+            }
+          }
+        }
+      },
+      "Mem0SearchResult": {
+        "type": "object",
+        "required": [
+          "results"
+        ],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Mem0Memory"
+            }
+          }
+        }
+      },
+      "Mem0PaginatedMemories": {
+        "type": "object",
+        "required": [
+          "count",
+          "results"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "previous": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Mem0Memory"
+            }
+          }
+        }
+      },
+      "Mem0MutationAck": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "Mem0HistoryEntry": {
+        "type": "object",
+        "required": [
+          "id",
+          "memory_id",
+          "old_memory",
+          "new_memory",
+          "user_id",
+          "event",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "memory_id": {
+            "type": "string"
+          },
+          "input": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "object",
+              "required": [
+                "role",
+                "content"
+              ],
+              "properties": {
+                "role": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "old_memory": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "new_memory": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "user_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "categories": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "ADD",
+              "UPDATE",
+              "DELETE"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "Mem0HistoryList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Mem0HistoryEntry"
+        }
+      },
+      "Mem0EntityList": {
+        "type": "object",
+        "required": [
+          "count",
+          "next",
+          "previous",
+          "results"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "previous": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "created_at",
+                "updated_at",
+                "owner",
+                "type"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "agent",
+                    "app",
+                    "run"
+                  ]
+                },
+                "metadata": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": true
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Mem0PingResponse": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "org_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "project_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "user_email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Mem0AddRequest": {
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "role",
+                "content"
+              ],
+              "properties": {
+                "role": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "agent_id": {
+            "type": "string"
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "app_id": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "infer": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "Mem0SearchRequest": {
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "filters": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "top_k": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "threshold": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "explain": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "rerank": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "output_format": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "show_expired": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "agent_id": {
+            "type": "string"
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "app_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "Mem0ListRequest": {
+        "type": "object",
+        "properties": {
+          "filters": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "agent_id": {
+            "type": "string"
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "app_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "Mem0UpdateRequest": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "timestamp": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expiration_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "Mem0FeedbackRequest": {
+        "type": "object",
+        "required": [
+          "memory_id"
+        ],
+        "properties": {
+          "memory_id": {
+            "type": "string"
+          },
+          "feedback": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "POSITIVE",
+              "NEGATIVE",
+              "VERY_NEGATIVE",
+              null
+            ]
+          },
+          "feedback_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "Mem0FeedbackResult": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "feedback": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "feedback_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Mem0BatchItem": {
+        "type": "object",
+        "required": [
+          "memory_id"
+        ],
+        "properties": {
+          "memory_id": {
+            "type": "string"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "metadata": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "Mem0BatchRequest": {
+        "type": "object",
+        "required": [
+          "memories"
+        ],
+        "properties": {
+          "memories": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "$ref": "#/components/schemas/Mem0BatchItem"
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "Mem0BatchAck": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
           }
         }
       },

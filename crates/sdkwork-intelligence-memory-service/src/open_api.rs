@@ -492,7 +492,7 @@ impl OpenMemoryService {
         })
     }
 
-    async fn load_scoped_record(
+    pub(crate) async fn load_scoped_record(
         &self,
         context: &MemoryOpenApiRequestContext,
         space_id: u64,

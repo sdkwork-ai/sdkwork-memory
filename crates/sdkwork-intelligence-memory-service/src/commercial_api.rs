@@ -1591,7 +1591,7 @@ impl super::open_api::OpenMemoryService {
     }
 }
 
-fn commercial_mutation_scope(
+pub(crate) fn commercial_mutation_scope(
     context: &MemoryOpenApiRequestContext,
     tenant_id: i64,
     space_id: i64,
@@ -1613,7 +1613,7 @@ fn system_commercial_mutation_scope(tenant_id: i64) -> MemoryScopeContext {
     }
 }
 
-fn commercial_mutation_journal(
+pub(crate) fn commercial_mutation_journal(
     resource_type: &str,
     resource_id: &str,
     mutation: &str,

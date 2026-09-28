@@ -19,6 +19,30 @@ function Assert-Contains {
     }
 }
 
+# Vendor compatibility wire operations mirror an upstream third-party protocol
+# and are exempt from the SDKWork-owned envelope, list, and error-surface rules
+# (sdkwork-specs/API_SPEC.md section 4.5.2). The exemption is per operation and
+# requires the operation-level marker pair; SDKWork-owned operations in the same
+# document are still validated.
+function Test-ExternalProtocolOperation {
+    param([Parameter(Mandatory = $true)]$Operation)
+    $wireProtocol = $Operation.'x-sdkwork-wire-protocol'
+    $externalProtocolId = $Operation.'x-sdkwork-external-protocol-id'
+    if ($wireProtocol -eq "external") {
+        if (!$externalProtocolId -or ([string]$externalProtocolId).Trim().Length -eq 0) {
+            throw "external wire protocol operation requires x-sdkwork-external-protocol-id"
+        }
+        if (([string]$externalProtocolId) -notmatch '^[a-z0-9]+(-[a-z0-9]+)*$') {
+            throw "x-sdkwork-external-protocol-id must be lowercase kebab-case: $externalProtocolId"
+        }
+        return $true
+    }
+    if ($externalProtocolId) {
+        throw "x-sdkwork-external-protocol-id requires x-sdkwork-wire-protocol: external"
+    }
+    return $false
+}
+
 $requiredFiles = @(
     "AGENTS.md",
     "CODEX.md",
@@ -183,19 +207,35 @@ function Verify-OpenApi {
 
     $operationIds = New-Object System.Collections.Generic.HashSet[string]
     foreach ($pathProperty in $spec.paths.PSObject.Properties) {
-        if (!$pathProperty.Name.StartsWith($Prefix)) {
-            throw "$Path contains non-canonical path prefix: $($pathProperty.Name)"
+        $pathHasSdkWorkOwnedOperation = $false
+        foreach ($pathMethod in $pathProperty.Value.PSObject.Properties) {
+            $pathMethodName = [string]$pathMethod.Name
+            if ($pathMethodName -notin @("get", "post", "put", "patch", "delete")) {
+                continue
+            }
+            if (-not (Test-ExternalProtocolOperation $pathMethod.Value)) {
+                $pathHasSdkWorkOwnedOperation = $true
+            }
         }
-        if ($AuthMode -eq "api-key" -and ($pathProperty.Name.StartsWith("/app/v3/api") -or $pathProperty.Name.StartsWith("/backend/v3/api"))) {
-            throw "$Path open API must not use app/backend prefix: $($pathProperty.Name)"
-        }
-        if (($AuthMode -eq "api-key" -or $Prefix -eq "/backend/v3/api") -and $pathProperty.Name -match "/auth|/login|/sessions|/refresh|/logout") {
-            throw "$Path backend/open API must not expose auth/session path: $($pathProperty.Name)"
+
+        # The canonical-prefix, cross-surface, and auth-path rules describe the
+        # SDKWork-owned surface. A path is only bound by them when it carries at
+        # least one non-external operation.
+        if ($pathHasSdkWorkOwnedOperation) {
+            if (!$pathProperty.Name.StartsWith($Prefix)) {
+                throw "$Path contains non-canonical path prefix: $($pathProperty.Name)"
+            }
+            if ($AuthMode -eq "api-key" -and ($pathProperty.Name.StartsWith("/app/v3/api") -or $pathProperty.Name.StartsWith("/backend/v3/api"))) {
+                throw "$Path open API must not use app/backend prefix: $($pathProperty.Name)"
+            }
+            if (($AuthMode -eq "api-key" -or $Prefix -eq "/backend/v3/api") -and $pathProperty.Name -match "/auth|/login|/sessions|/refresh|/logout") {
+                throw "$Path backend/open API must not expose auth/session path: $($pathProperty.Name)"
+            }
         }
 
         foreach ($methodProperty in $pathProperty.Value.PSObject.Properties) {
             $methodName = [string]$methodProperty.Name
-            if ($methodName -notin @("get", "post", "patch", "delete")) {
+            if ($methodName -notin @("get", "post", "put", "patch", "delete")) {
                 continue
             }
             $operation = $methodProperty.Value
@@ -207,6 +247,11 @@ function Verify-OpenApi {
                 throw "$Path operationId must use dotted lowerCamelCase style: $operationId"
             }
             [void]$operationIds.Add($operationId)
+            if (Test-ExternalProtocolOperation $operation) {
+                # Mirrored upstream wire: the marker pair was validated above, and
+                # the SDKWork envelope / error-surface rules do not apply.
+                continue
+            }
             if ($operation.'x-sdkwork-owner' -ne "sdkwork-memory" -or $operation.'x-sdkwork-api-authority' -ne $Authority) {
                 throw "$Path operation ownership mismatch: $operationId"
             }

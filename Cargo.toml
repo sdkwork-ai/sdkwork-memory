@@ -90,6 +90,7 @@ sdkwork-api-memory-standalone-gateway = { path = "crates/sdkwork-api-memory-stan
 sdkwork-iam-web-adapter = { path = "../sdkwork-iam/crates/sdkwork-iam-web-adapter" }
 sdkwork-routes-iam-app-api = { path = "../sdkwork-iam/crates/sdkwork-routes-iam-app-api" }
 sdkwork-web-core = { path = "../sdkwork-web-framework/crates/sdkwork-web-core" }
+sdkwork-web-contract = { path = "../sdkwork-web-framework/crates/sdkwork-web-contract" }
 sdkwork-web-axum = { path = "../sdkwork-web-framework/crates/sdkwork-web-axum" }
 sdkwork-web-bootstrap = { path = "../sdkwork-web-framework/crates/sdkwork-web-bootstrap", features = ["redis"] }
 sdkwork-database-config = { path = "../sdkwork-database/crates/sdkwork-database-config", package = "sdkwork-database-config" }

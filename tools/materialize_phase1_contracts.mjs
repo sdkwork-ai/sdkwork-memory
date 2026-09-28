@@ -28,6 +28,22 @@ const AUTH_CRITICAL_OPERATION_IDS = new Set([
   "indexes.rebuild",
 ]);
 
+// Vendor compatibility wire protocol (sdkwork-specs/API_SPEC.md section 4.5.2).
+// Operations carrying this marker mirror an upstream third-party wire (here the
+// mem0 platform REST surface the official mem0ai Python/TS clients speak) and are
+// exempt from the SDKWork-owned response envelope, list vocabulary, and
+// ProblemDetail rules. The exemption is per operation: an SDKWork-owned operation
+// in the same document never inherits it.
+const MEM0_PROTOCOL_ID = "mem0-platform";
+
+function isExternalProtocolOperation(op) {
+  return (
+    op?.["x-sdkwork-wire-protocol"] === "external" &&
+    typeof op?.["x-sdkwork-external-protocol-id"] === "string" &&
+    op["x-sdkwork-external-protocol-id"].trim().length > 0
+  );
+}
+
 function resolveRateLimitTier({ rateLimitTier, authMode, method, operationId }) {
   if (rateLimitTier) {
     return rateLimitTier;
@@ -35,7 +51,13 @@ function resolveRateLimitTier({ rateLimitTier, authMode, method, operationId }) 
   if (AUTH_CRITICAL_OPERATION_IDS.has(operationId)) {
     return "authCritical";
   }
-  if (authMode === "api-key" && ["post", "patch", "delete"].includes(method)) {
+  // Every mutating verb on an api-key surface is rate limited. `put` belongs in
+  // this list for the same reason `patch` does: it is a state-changing call and
+  // the contract test (`tests/contracts/openapi_phase1_contract_test.mjs`)
+  // requires a tier on all four mutating verbs. It was missing here, and nothing
+  // noticed until the mem0 compatibility wire introduced this authority's first
+  // and only `PUT` — canonical updates are spelled `PATCH`.
+  if (authMode === "api-key" && ["post", "put", "patch", "delete"].includes(method)) {
     return "openApiDefault";
   }
   return null;
@@ -142,11 +164,49 @@ function reassertDeclaredSuccessPayloads(document, declared) {
   }
 }
 
+/**
+ * Vendor compatibility wire operations declare their own upstream response
+ * shapes. `migrateOpenApiDocument` unconditionally wraps bare 2xx JSON bodies in
+ * the SDKWork envelope (`bootstrapBareSuccessResponses`) and injects
+ * `application/problem+json` into every non-2xx response
+ * (`ensureProblemResponses`). Both passes are correct for SDKWork-owned
+ * operations and wrong for a mirrored upstream wire, so the declared responses
+ * are captured before migration and reinstated verbatim afterwards.
+ */
+function captureExternalProtocolResponses(document) {
+  const captured = new Map();
+  for (const [routePath, pathItem] of Object.entries(document.paths ?? {})) {
+    if (!pathItem || typeof pathItem !== "object") continue;
+    for (const [method, operation] of Object.entries(pathItem)) {
+      if (!operation || typeof operation !== "object") continue;
+      if (!isExternalProtocolOperation(operation)) continue;
+      if (!operation.responses) continue;
+      captured.set(`${method}|${routePath}`, structuredClone(operation.responses));
+    }
+  }
+  return captured;
+}
+
+function restoreExternalProtocolResponses(document, captured) {
+  if (captured.size === 0) return;
+  for (const [routePath, pathItem] of Object.entries(document.paths ?? {})) {
+    if (!pathItem || typeof pathItem !== "object") continue;
+    for (const [method, operation] of Object.entries(pathItem)) {
+      if (!operation || typeof operation !== "object") continue;
+      const declared = captured.get(`${method}|${routePath}`);
+      if (!declared) continue;
+      operation.responses = structuredClone(declared);
+    }
+  }
+}
+
 function writeAlignedOpenApi(relativePath, document) {
   const declared = captureCommandHeuristicSuccessPayloads(document);
+  const externalResponses = captureExternalProtocolResponses(document);
   const aligned = migrateOpenApiDocument(document);
   alignProblemDetailWithImplementation(aligned);
   reassertDeclaredSuccessPayloads(aligned, declared);
+  restoreExternalProtocolResponses(aligned, externalResponses);
   writeJson(relativePath, aligned);
 }
 
@@ -3118,7 +3178,7 @@ function securitySchemesFor(authMode) {
   };
 }
 
-function createOpenApi({ title, authority, prefix, sdkFamily, paths, authMode = "dual-token" }) {
+function createOpenApi({ title, authority, prefix, sdkFamily, paths, authMode = "dual-token", extraSchemas = {} }) {
   return {
     openapi: "3.1.2",
     info: {
@@ -3131,7 +3191,7 @@ function createOpenApi({ title, authority, prefix, sdkFamily, paths, authMode = 
     ],
     paths,
     components: {
-      schemas: baseSchemas(),
+      schemas: { ...baseSchemas(), ...extraSchemas },
       securitySchemes: securitySchemesFor(authMode)
     },
     "x-sdkwork-owner": owner,
@@ -3146,6 +3206,500 @@ function createOpenApi({ title, authority, prefix, sdkFamily, paths, authMode = 
 
 function openOperation(args) {
   return operation({ ...args, authMode: "api-key" });
+}
+
+// ---------------------------------------------------------------------------
+// mem0 platform wire compatibility (API_SPEC.md section 4.5.2, protocol id
+// `mem0-platform`).
+//
+// The official mem0ai clients (`external/mem0/mem0/client/main.py` and
+// `mem0-ts/src/client/mem0.ts`) speak a platform REST surface, NOT the mem0
+// self-hosted OSS server shape:
+//
+//   GET    /v1/ping/
+//   POST   /v3/memories/add/
+//   POST   /v3/memories/search/
+//   POST   /v3/memories/?page&page_size
+//   GET    /v1/memories/{memory_id}/
+//   PUT    /v1/memories/{memory_id}/
+//   DELETE /v1/memories/{memory_id}/?delete_linked
+//   DELETE /v1/memories/?user_id|agent_id|run_id|app_id
+//   GET    /v1/memories/{memory_id}/history/
+//   GET    /v1/entities/
+//   POST   /v1/feedback/
+//   PUT    /v1/batch/
+//   DELETE /v1/batch/
+//
+// Authentication is `Authorization: Token <api_key>` (main.py:189). The wire key
+// convention is snake_case: the TypeScript client converts *inbound* snake_case
+// to camelCase (`utils.ts` snakeToCamelKeys), so the server contract is
+// snake_case and the Python client returns the JSON untransformed.
+//
+// These operations are exempt from the SDKWork response envelope, list
+// vocabulary, and ProblemDetail rules; errors use the upstream `{"detail": ...}`
+// shape. Response shapes are captured and reinstated verbatim after
+// `migrateOpenApiDocument` (see captureExternalProtocolResponses).
+// ---------------------------------------------------------------------------
+
+// mem0 reuses the Memory open-api authority's permission/audit vocabulary so the
+// compatibility surface is authorised and audited by the same policy set.
+const MEM0_OPERATION_METADATA = {
+  "mem0.ping": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "ping" },
+  "mem0.memory.add": { permission: "memory.open.records.write", auditEvent: "memory.open.record.created", resource: "memories" },
+  "mem0.memory.search": { permission: "memory.open.retrievals.write", auditEvent: "memory.open.retrieval.created", resource: "memories" },
+  "mem0.memory.list": { permission: "memory.open.records.read", auditEvent: "memory.open.record.list", resource: "memories" },
+  "mem0.memory.retrieve": { permission: "memory.open.records.read", auditEvent: "memory.open.record.read", resource: "memories" },
+  "mem0.memory.update": { permission: "memory.open.records.write", auditEvent: "memory.open.record.updated", resource: "memories" },
+  "mem0.memory.remove": { permission: "memory.open.records.write", auditEvent: "memory.open.record.deleted", resource: "memories" },
+  "mem0.memory.removeAll": { permission: "memory.open.records.write", auditEvent: "memory.open.record.deleted", resource: "memories" },
+  "mem0.memory.history": { permission: "memory.open.events.read", auditEvent: "memory.open.event.read", resource: "memories" },
+  "mem0.entity.list": { permission: "memory.open.entities.read", auditEvent: "memory.open.entity.list", resource: "entities" },
+  "mem0.feedback.create": { permission: "memory.open.feedback.write", auditEvent: "memory.open.feedback.created", resource: "feedback" },
+  "mem0.memory.batchUpdate": { permission: "memory.open.records.write", auditEvent: "memory.open.record.updated", resource: "memories" },
+  "mem0.memory.batchDelete": { permission: "memory.open.records.write", auditEvent: "memory.open.record.deleted", resource: "memories" },
+};
+
+function mem0Schemas() {
+  const mem0Message = {
+    type: "object",
+    required: ["role", "content"],
+    properties: {
+      role: { type: "string" },
+      content: { type: "string" }
+    }
+  };
+  const mem0Memory = {
+    type: "object",
+    required: ["id"],
+    properties: {
+      id: { type: "string", description: "Memory uuid, addressed verbatim by the official clients." },
+      memory: { type: "string" },
+      messages: { type: "array", items: mem0Message },
+      event: { type: "string" },
+      user_id: { type: ["string", "null"] },
+      agent_id: { type: ["string", "null"] },
+      run_id: { type: ["string", "null"] },
+      app_id: { type: ["string", "null"] },
+      hash: { type: ["string", "null"] },
+      score: { type: ["number", "null"] },
+      metadata: { type: ["object", "null"], additionalProperties: true },
+      categories: { type: ["array", "null"], items: { type: "string" } },
+      created_at: { type: ["string", "null"] },
+      updated_at: { type: ["string", "null"] },
+      expiration_date: { type: ["string", "null"] }
+    }
+  };
+  const mem0ErrorDetail = {
+    type: "object",
+    required: ["detail"],
+    properties: {
+      detail: { type: "string" }
+    }
+  };
+  return {
+    Mem0Message: mem0Message,
+    Mem0Memory: mem0Memory,
+    Mem0ErrorDetail: mem0ErrorDetail,
+    // POST /v3/memories/add/ returns the v1.1 envelope: {"results": [...]}.
+    Mem0AddResult: {
+      type: "object",
+      required: ["results"],
+      properties: {
+        results: { type: "array", items: schemaRef("Mem0Memory") }
+      }
+    },
+    // POST /v3/memories/search/ returns {"results": [...]} with `score` set.
+    Mem0SearchResult: {
+      type: "object",
+      required: ["results"],
+      properties: {
+        results: { type: "array", items: schemaRef("Mem0Memory") }
+      }
+    },
+    // POST /v3/memories/ returns the DRF pagination envelope.
+    Mem0PaginatedMemories: {
+      type: "object",
+      required: ["count", "results"],
+      properties: {
+        count: { type: "integer" },
+        next: { type: ["string", "null"] },
+        previous: { type: ["string", "null"] },
+        results: { type: "array", items: schemaRef("Mem0Memory") }
+      }
+    },
+    Mem0MutationAck: {
+      type: "object",
+      additionalProperties: true,
+      properties: {
+        message: { type: "string" }
+      }
+    },
+    // Upstream (`external/mem0/docs/openapi.json`,
+    // `/v1/memories/{memory_id}/history/` 200 items) requires
+    // `[id, memory_id, input, new_memory, user_id, event, created_at, updated_at]`
+    // and declares `event` as the closed enum ADD/UPDATE/DELETE.
+    //
+    // This surface emits that set minus `input`: the canonical journal records
+    // *that* a mutation was accepted, never the memory text, so there is no
+    // snapshot to return. Copying record text into the audit trail would create
+    // a second copy of personal data under a different retention and erasure
+    // path, which `PRIVACY_SPEC` does not sanction for an audit trail. `input`
+    // is therefore optional here, and `old_memory`/`new_memory` are always
+    // present and null (the TypeScript client types both `string | null`).
+    //
+    // `is_deleted` is gone: upstream declares it on the *entity* response
+    // schemas (`UserResponse`/`AgentResponse`/`AppResponse`/`RunResponse`), never
+    // on a history item, and this surface does not emit it.
+    Mem0HistoryEntry: {
+      type: "object",
+      required: [
+        "id",
+        "memory_id",
+        "old_memory",
+        "new_memory",
+        "user_id",
+        "event",
+        "created_at",
+        "updated_at"
+      ],
+      properties: {
+        id: { type: "string" },
+        memory_id: { type: "string" },
+        input: { type: ["array", "null"], items: mem0Message },
+        old_memory: { type: ["string", "null"] },
+        new_memory: { type: ["string", "null"] },
+        user_id: { type: ["string", "null"] },
+        categories: { type: ["array", "null"], items: { type: "string" } },
+        event: { type: "string", enum: ["ADD", "UPDATE", "DELETE"] },
+        created_at: { type: "string" },
+        updated_at: { type: "string" }
+      }
+    },
+    Mem0HistoryList: {
+      type: "array",
+      items: schemaRef("Mem0HistoryEntry")
+    },
+    // Upstream (`external/mem0/docs/openapi.json`, `/v1/entities/` 200) requires
+    // `[count, next, previous, results]` on the envelope and
+    // `[id, name, created_at, updated_at, owner, type]` on each item, with
+    // `type` the closed enum user/agent/app/run and `metadata` a nullable object.
+    // The item is spelled out rather than left as `additionalProperties: true`,
+    // so a generated client gets the fields instead of an opaque bag.
+    //
+    // The envelope's optional `total_users`/`total_agents`/`total_apps`/
+    // `total_runs` are deliberately *not* declared: upstream documents them as
+    // project-wide totals, and this surface's listing is scoped to the caller's
+    // compatibility space. Declaring them would invite a client to read a
+    // space-derived number under a project-wide name.
+    Mem0EntityList: {
+      type: "object",
+      required: ["count", "next", "previous", "results"],
+      properties: {
+        count: { type: "integer" },
+        next: { type: ["string", "null"] },
+        previous: { type: ["string", "null"] },
+        results: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["id", "name", "created_at", "updated_at", "owner", "type"],
+            properties: {
+              id: { type: "string" },
+              name: { type: "string" },
+              owner: { type: "string" },
+              type: { type: "string", enum: ["user", "agent", "app", "run"] },
+              metadata: { type: ["object", "null"], additionalProperties: true },
+              created_at: { type: "string" },
+              updated_at: { type: "string" }
+            }
+          }
+        }
+      }
+    },
+    Mem0PingResponse: {
+      type: "object",
+      additionalProperties: true,
+      properties: {
+        org_id: { type: ["string", "null"] },
+        project_id: { type: ["string", "null"] },
+        user_email: { type: ["string", "null"] }
+      }
+    },
+    Mem0AddRequest: {
+      type: "object",
+      required: ["messages"],
+      properties: {
+        messages: { type: "array", items: mem0Message },
+        user_id: { type: "string" },
+        agent_id: { type: "string" },
+        run_id: { type: "string" },
+        app_id: { type: "string" },
+        metadata: { type: ["object", "null"], additionalProperties: true },
+        infer: { type: ["boolean", "null"] }
+      },
+      additionalProperties: true
+    },
+    Mem0SearchRequest: {
+      type: "object",
+      required: ["query"],
+      properties: {
+        query: { type: "string" },
+        filters: { type: ["object", "null"], additionalProperties: true },
+        top_k: { type: ["integer", "null"] },
+        threshold: { type: ["number", "null"] },
+        explain: { type: ["boolean", "null"] },
+        rerank: { type: ["boolean", "null"] },
+        output_format: { type: ["string", "null"] },
+        show_expired: { type: ["boolean", "null"] },
+        user_id: { type: "string" },
+        agent_id: { type: "string" },
+        run_id: { type: "string" },
+        app_id: { type: "string" }
+      },
+      additionalProperties: true
+    },
+    Mem0ListRequest: {
+      type: "object",
+      properties: {
+        filters: { type: ["object", "null"], additionalProperties: true },
+        user_id: { type: "string" },
+        agent_id: { type: "string" },
+        run_id: { type: "string" },
+        app_id: { type: "string" }
+      },
+      additionalProperties: true
+    },
+    Mem0UpdateRequest: {
+      type: "object",
+      properties: {
+        text: { type: "string" },
+        metadata: { type: ["object", "null"], additionalProperties: true },
+        timestamp: { type: ["string", "null"] },
+        expiration_date: { type: ["string", "null"] }
+      },
+      additionalProperties: true
+    },
+    // POST /v1/feedback/. Upstream requires only `memory_id`; `feedback` is a
+    // nullable member of a closed enum. This surface refuses an absent
+    // `feedback` (upstream reads it as a withdrawal the canonical record cannot
+    // express), so nothing here marks it required — a refusal is a 501, not a
+    // schema violation.
+    Mem0FeedbackRequest: {
+      type: "object",
+      required: ["memory_id"],
+      properties: {
+        memory_id: { type: "string" },
+        feedback: { type: ["string", "null"], enum: ["POSITIVE", "NEGATIVE", "VERY_NEGATIVE", null] },
+        feedback_reason: { type: ["string", "null"] }
+      },
+      additionalProperties: true
+    },
+    // `id` is deliberately NOT `format: uuid`: this surface reports the
+    // canonical feedback row's identifier, and declaring a uuid we do not
+    // produce would describe upstream rather than what is emitted.
+    Mem0FeedbackResult: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "string" },
+        feedback: { type: ["string", "null"] },
+        feedback_reason: { type: ["string", "null"] }
+      }
+    },
+    Mem0BatchItem: {
+      type: "object",
+      required: ["memory_id"],
+      properties: {
+        memory_id: { type: "string" },
+        text: { type: ["string", "null"] },
+        metadata: { type: ["object", "null"], additionalProperties: true }
+      },
+      additionalProperties: true
+    },
+    Mem0BatchRequest: {
+      type: "object",
+      required: ["memories"],
+      properties: {
+        memories: {
+          type: "array",
+          maxItems: 1000,
+          items: schemaRef("Mem0BatchItem")
+        }
+      },
+      additionalProperties: true
+    },
+    // Upstream's 200 is a bare count message — there is no per-item result
+    // channel. That is why the handlers prove the whole batch before applying
+    // any of it, and why a partially applied batch is reported as an error
+    // rather than under this message.
+    Mem0BatchAck: {
+      type: "object",
+      required: ["message"],
+      properties: {
+        message: { type: "string" }
+      }
+    }
+  };
+}
+
+function mem0ErrorResponses() {
+  const error = {
+    description: "mem0 upstream error shape",
+    content: {
+      "application/json": {
+        schema: schemaRef("Mem0ErrorDetail")
+      }
+    }
+  };
+  // 501 is not decorative: every capability this surface cannot honour is
+  // refused by name with a reason (filtered listing, page > 1, a timestamp
+  // update, delete_linked, feedback withdrawal) rather than degraded into a
+  // plausible-looking answer. A client generated from this authority has to be
+  // able to model that.
+  return { "400": error, "401": error, "404": error, "409": error, "429": error, "500": error, "501": error };
+}
+
+function mem0Operation({ method, operationId, status, requestSchema, responseSchema, pathParams = [], queryParams = [] }) {
+  const metadata = MEM0_OPERATION_METADATA[operationId];
+  if (!metadata) {
+    throw new Error(`mem0 operation ${operationId} has no declared permission/audit metadata`);
+  }
+  const op = operation({
+    method,
+    operationId,
+    tag: "memory",
+    authority: "sdkwork-memory-open-api",
+    permission: metadata.permission,
+    auditEvent: metadata.auditEvent,
+    resource: metadata.resource,
+    pathParams,
+    queryParams,
+    requestSchema,
+    responseSchema,
+    status,
+    authMode: "api-key"
+  });
+  // Upstream errors are `{"detail": ...}`, not ProblemDetail: replace the
+  // SDKWork-owned error surface entirely.
+  op.responses = {
+    [status ?? (method === "post" ? "200" : method === "delete" ? "200" : "200")]: successResponse(
+      status ?? "200",
+      responseSchema,
+    ),
+    ...mem0ErrorResponses()
+  };
+  op["x-sdkwork-wire-protocol"] = "external";
+  op["x-sdkwork-external-protocol-id"] = MEM0_PROTOCOL_ID;
+  return op;
+}
+
+function mem0Paths(paths) {
+  const mem0MemoryIdPathParam = {
+    name: "memory_id",
+    in: "path",
+    required: true,
+    schema: { type: "string" }
+  };
+
+  addPath(paths, "/v1/ping/", "get", mem0Operation({
+    method: "get",
+    operationId: "mem0.ping",
+    responseSchema: "Mem0PingResponse"
+  }));
+
+  addPath(paths, "/v3/memories/add/", "post", mem0Operation({
+    method: "post",
+    operationId: "mem0.memory.add",
+    requestSchema: "Mem0AddRequest",
+    responseSchema: "Mem0AddResult"
+  }));
+
+  addPath(paths, "/v3/memories/search/", "post", mem0Operation({
+    method: "post",
+    operationId: "mem0.memory.search",
+    requestSchema: "Mem0SearchRequest",
+    responseSchema: "Mem0SearchResult"
+  }));
+
+  addPath(paths, "/v3/memories/", "post", mem0Operation({
+    method: "post",
+    operationId: "mem0.memory.list",
+    requestSchema: "Mem0ListRequest",
+    responseSchema: "Mem0PaginatedMemories",
+    queryParams: [
+      { name: "page", in: "query", required: false, schema: { type: "integer" } },
+      { name: "page_size", in: "query", required: false, schema: { type: "integer" } }
+    ]
+  }));
+
+  addPath(paths, "/v1/memories/", "delete", mem0Operation({
+    method: "delete",
+    operationId: "mem0.memory.removeAll",
+    responseSchema: "Mem0MutationAck",
+    queryParams: [
+      { name: "user_id", in: "query", required: false, schema: { type: "string" } },
+      { name: "agent_id", in: "query", required: false, schema: { type: "string" } },
+      { name: "run_id", in: "query", required: false, schema: { type: "string" } },
+      { name: "app_id", in: "query", required: false, schema: { type: "string" } }
+    ]
+  }));
+
+  addPath(paths, "/v1/memories/{memory_id}/", "get", mem0Operation({
+    method: "get",
+    operationId: "mem0.memory.retrieve",
+    pathParams: [mem0MemoryIdPathParam],
+    responseSchema: "Mem0Memory"
+  }));
+
+  addPath(paths, "/v1/memories/{memory_id}/", "put", mem0Operation({
+    method: "put",
+    operationId: "mem0.memory.update",
+    pathParams: [mem0MemoryIdPathParam],
+    requestSchema: "Mem0UpdateRequest",
+    responseSchema: "Mem0Memory"
+  }));
+
+  addPath(paths, "/v1/memories/{memory_id}/", "delete", mem0Operation({
+    method: "delete",
+    operationId: "mem0.memory.remove",
+    pathParams: [mem0MemoryIdPathParam],
+    responseSchema: "Mem0MutationAck",
+    queryParams: [{ name: "delete_linked", in: "query", required: false, schema: { type: "boolean" } }]
+  }));
+
+  addPath(paths, "/v1/memories/{memory_id}/history/", "get", mem0Operation({
+    method: "get",
+    operationId: "mem0.memory.history",
+    pathParams: [mem0MemoryIdPathParam],
+    responseSchema: "Mem0HistoryList"
+  }));
+
+  addPath(paths, "/v1/entities/", "get", mem0Operation({
+    method: "get",
+    operationId: "mem0.entity.list",
+    responseSchema: "Mem0EntityList"
+  }));
+
+  addPath(paths, "/v1/feedback/", "post", mem0Operation({
+    method: "post",
+    operationId: "mem0.feedback.create",
+    requestSchema: "Mem0FeedbackRequest",
+    responseSchema: "Mem0FeedbackResult"
+  }));
+
+  addPath(paths, "/v1/batch/", "put", mem0Operation({
+    method: "put",
+    operationId: "mem0.memory.batchUpdate",
+    requestSchema: "Mem0BatchRequest",
+    responseSchema: "Mem0BatchAck"
+  }));
+
+  addPath(paths, "/v1/batch/", "delete", mem0Operation({
+    method: "delete",
+    operationId: "mem0.memory.batchDelete",
+    requestSchema: "Mem0BatchRequest",
+    responseSchema: "Mem0BatchAck"
+  }));
 }
 
 function writeOpenApi() {
@@ -3358,13 +3912,18 @@ function writeOpenApi() {
   addPath(paths, `${P}/edges/{edgeId}`, "patch", openOperation({ method: "patch", authority, operationId: "edges.update", permission: "memory.open.entities.write", auditEvent: "memory.open.edge.updated", pathParams: [pathParam("edgeId")], requestSchema: "MemoryEdgePatch", responseSchema: "MemoryEdge" }));
   addPath(paths, `${P}/edges/{edgeId}`, "delete", openOperation({ method: "delete", authority, operationId: "edges.delete", permission: "memory.open.entities.write", auditEvent: "memory.open.edge.deleted", pathParams: [pathParam("edgeId")], responseSchema: "MemoryEdge", status: "204" }));
 
+  // Vendor compatibility wire (mem0 platform). Exempt per operation from the
+  // SDKWork response envelope and problem+json error surface — API_SPEC §4.5.2.
+  mem0Paths(paths);
+
   writeAlignedOpenApi("sdks/sdkwork-memory-sdk/openapi/memory-open-api.openapi.json", createOpenApi({
     title: "SDKWork Memory Open API",
     authority,
     prefix: memoryOpenApiPrefix,
     sdkFamily: "sdkwork-memory-sdk",
     paths,
-    authMode: "api-key"
+    authMode: "api-key",
+    extraSchemas: mem0Schemas()
   }));
 }
 
@@ -3587,7 +4146,7 @@ function extractRoutesFromOpenApi(openapi) {
   const routes = [];
   for (const [pathKey, pathItem] of Object.entries(openapi.paths ?? {})) {
     for (const [method, operation] of Object.entries(pathItem ?? {})) {
-      if (!["get", "post", "patch", "delete"].includes(method)) {
+      if (!["get", "post", "put", "patch", "delete"].includes(method)) {
         continue;
       }
       routes.push({
@@ -3601,6 +4160,8 @@ function extractRoutesFromOpenApi(openapi) {
         permission: operation["x-sdkwork-permission"] ?? null,
         idempotent: operation["x-sdkwork-idempotent"] === true,
         rateLimitTier: operation["x-sdkwork-rate-limit-tier"] ?? null,
+        wireProtocol: operation["x-sdkwork-wire-protocol"] ?? null,
+        externalProtocolId: operation["x-sdkwork-external-protocol-id"] ?? null,
       });
     }
   }
@@ -3612,7 +4173,7 @@ function httpRouteAuthHelper(authMode) {
 }
 
 function httpMethodRust(method) {
-  const map = { GET: "Get", POST: "Post", PATCH: "Patch", DELETE: "Delete" };
+  const map = { GET: "Get", POST: "Post", PUT: "Put", PATCH: "Patch", DELETE: "Delete" };
   return map[method];
 }
 
@@ -3685,6 +4246,8 @@ function writeRouteManifestJson(profile, routes) {
       },
       requestContext: "WebRequestContext",
       apiSurface: route.apiSurface,
+      ...(route.wireProtocol ? { "x-sdkwork-wire-protocol": route.wireProtocol } : {}),
+      ...(route.externalProtocolId ? { "x-sdkwork-external-protocol-id": route.externalProtocolId } : {}),
       ...(route.rateLimitTier ? { rateLimitTier: route.rateLimitTier } : {}),
     }))
   });
@@ -3736,6 +4299,30 @@ function Assert-Contains {
     if (!$Content.Contains($Needle)) {
         throw "$Path must contain: $Needle"
     }
+}
+
+# Vendor compatibility wire operations mirror an upstream third-party protocol
+# and are exempt from the SDKWork-owned envelope, list, and error-surface rules
+# (sdkwork-specs/API_SPEC.md section 4.5.2). The exemption is per operation and
+# requires the operation-level marker pair; SDKWork-owned operations in the same
+# document are still validated.
+function Test-ExternalProtocolOperation {
+    param([Parameter(Mandatory = $true)]$Operation)
+    $wireProtocol = $Operation.'x-sdkwork-wire-protocol'
+    $externalProtocolId = $Operation.'x-sdkwork-external-protocol-id'
+    if ($wireProtocol -eq "external") {
+        if (!$externalProtocolId -or ([string]$externalProtocolId).Trim().Length -eq 0) {
+            throw "external wire protocol operation requires x-sdkwork-external-protocol-id"
+        }
+        if (([string]$externalProtocolId) -notmatch '^[a-z0-9]+(-[a-z0-9]+)*$') {
+            throw "x-sdkwork-external-protocol-id must be lowercase kebab-case: $externalProtocolId"
+        }
+        return $true
+    }
+    if ($externalProtocolId) {
+        throw "x-sdkwork-external-protocol-id requires x-sdkwork-wire-protocol: external"
+    }
+    return $false
 }
 
 $requiredFiles = @(
@@ -3902,19 +4489,35 @@ function Verify-OpenApi {
 
     $operationIds = New-Object System.Collections.Generic.HashSet[string]
     foreach ($pathProperty in $spec.paths.PSObject.Properties) {
-        if (!$pathProperty.Name.StartsWith($Prefix)) {
-            throw "$Path contains non-canonical path prefix: $($pathProperty.Name)"
+        $pathHasSdkWorkOwnedOperation = $false
+        foreach ($pathMethod in $pathProperty.Value.PSObject.Properties) {
+            $pathMethodName = [string]$pathMethod.Name
+            if ($pathMethodName -notin @("get", "post", "put", "patch", "delete")) {
+                continue
+            }
+            if (-not (Test-ExternalProtocolOperation $pathMethod.Value)) {
+                $pathHasSdkWorkOwnedOperation = $true
+            }
         }
-        if ($AuthMode -eq "api-key" -and ($pathProperty.Name.StartsWith("/app/v3/api") -or $pathProperty.Name.StartsWith("/backend/v3/api"))) {
-            throw "$Path open API must not use app/backend prefix: $($pathProperty.Name)"
-        }
-        if (($AuthMode -eq "api-key" -or $Prefix -eq "/backend/v3/api") -and $pathProperty.Name -match "/auth|/login|/sessions|/refresh|/logout") {
-            throw "$Path backend/open API must not expose auth/session path: $($pathProperty.Name)"
+
+        # The canonical-prefix, cross-surface, and auth-path rules describe the
+        # SDKWork-owned surface. A path is only bound by them when it carries at
+        # least one non-external operation.
+        if ($pathHasSdkWorkOwnedOperation) {
+            if (!$pathProperty.Name.StartsWith($Prefix)) {
+                throw "$Path contains non-canonical path prefix: $($pathProperty.Name)"
+            }
+            if ($AuthMode -eq "api-key" -and ($pathProperty.Name.StartsWith("/app/v3/api") -or $pathProperty.Name.StartsWith("/backend/v3/api"))) {
+                throw "$Path open API must not use app/backend prefix: $($pathProperty.Name)"
+            }
+            if (($AuthMode -eq "api-key" -or $Prefix -eq "/backend/v3/api") -and $pathProperty.Name -match "/auth|/login|/sessions|/refresh|/logout") {
+                throw "$Path backend/open API must not expose auth/session path: $($pathProperty.Name)"
+            }
         }
 
         foreach ($methodProperty in $pathProperty.Value.PSObject.Properties) {
             $methodName = [string]$methodProperty.Name
-            if ($methodName -notin @("get", "post", "patch", "delete")) {
+            if ($methodName -notin @("get", "post", "put", "patch", "delete")) {
                 continue
             }
             $operation = $methodProperty.Value
@@ -3926,6 +4529,11 @@ function Verify-OpenApi {
                 throw "$Path operationId must use dotted lowerCamelCase style: $operationId"
             }
             [void]$operationIds.Add($operationId)
+            if (Test-ExternalProtocolOperation $operation) {
+                # Mirrored upstream wire: the marker pair was validated above, and
+                # the SDKWork envelope / error-surface rules do not apply.
+                continue
+            }
             if ($operation.'x-sdkwork-owner' -ne "sdkwork-memory" -or $operation.'x-sdkwork-api-authority' -ne $Authority) {
                 throw "$Path operation ownership mismatch: $operationId"
             }

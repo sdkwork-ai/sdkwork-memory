@@ -9,6 +9,7 @@ mod domain_metrics;
 pub mod endpoint_validation;
 mod implementation_migration;
 mod job_worker;
+pub mod mem0_compat;
 mod open_api;
 mod outbox_delivery;
 mod outbox_publisher;

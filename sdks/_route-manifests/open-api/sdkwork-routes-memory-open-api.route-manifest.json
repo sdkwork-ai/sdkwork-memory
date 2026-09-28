@@ -622,6 +622,327 @@
       "requestContext": "WebRequestContext",
       "apiSurface": "open-api",
       "rateLimitTier": "openApiDefault"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/ping/",
+      "operationId": "mem0.ping",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform"
+    },
+    {
+      "method": "POST",
+      "path": "/v3/memories/add/",
+      "operationId": "mem0.memory.add",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform",
+      "rateLimitTier": "openApiDefault"
+    },
+    {
+      "method": "POST",
+      "path": "/v3/memories/search/",
+      "operationId": "mem0.memory.search",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform",
+      "rateLimitTier": "openApiDefault"
+    },
+    {
+      "method": "POST",
+      "path": "/v3/memories/",
+      "operationId": "mem0.memory.list",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform",
+      "rateLimitTier": "openApiDefault"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/memories/",
+      "operationId": "mem0.memory.removeAll",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform",
+      "rateLimitTier": "openApiDefault"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/memories/{memory_id}/",
+      "operationId": "mem0.memory.retrieve",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/memories/{memory_id}/",
+      "operationId": "mem0.memory.update",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform",
+      "rateLimitTier": "openApiDefault"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/memories/{memory_id}/",
+      "operationId": "mem0.memory.remove",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform",
+      "rateLimitTier": "openApiDefault"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/memories/{memory_id}/history/",
+      "operationId": "mem0.memory.history",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/entities/",
+      "operationId": "mem0.entity.list",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/feedback/",
+      "operationId": "mem0.feedback.create",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform",
+      "rateLimitTier": "openApiDefault"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/batch/",
+      "operationId": "mem0.memory.batchUpdate",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform",
+      "rateLimitTier": "openApiDefault"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/batch/",
+      "operationId": "mem0.memory.batchDelete",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform",
+      "rateLimitTier": "openApiDefault"
     }
   ]
 }

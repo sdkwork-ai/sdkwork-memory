@@ -7,9 +7,11 @@ use sdkwork_memory_spi::{
     CountUserOwnedMemorySpacesQuery, CreateCanonicalMemoryCommand, CreateMemoryCandidateCommand,
     CreateMemoryRecordCommand, CreateMemorySpaceCommand, DecayMemoryHabitCommand,
     DeleteAllCanonicalMemoryCommand, DeleteCanonicalMemoryCommand, DeleteMemoryRecordCommand,
-    ExternalMemoryBridgePort, ListMemoryCandidatesQuery, ListMemoryRetrievalTracesQuery,
+    ExternalMemoryBridgePort, ListMemoryAuditHistoryQuery, ListMemoryCandidatesQuery,
+    ListMemoryRetrievalTracesQuery,
     ListPendingMemoryOutboxQuery, MarkMemoryOutboxFailedCommand, MarkMemoryOutboxPublishedCommand,
-    MemoryAuditRecord, MemoryBulkDeletionReceipt, MemoryCandidate, MemoryCandidateDetail,
+    MemoryAuditHistoryEntry, MemoryAuditRecord, MemoryBulkDeletionReceipt, MemoryCandidate,
+    MemoryCandidateDetail,
     MemoryCandidatePage, MemoryCandidatePromotion, MemoryCanonicalRecord,
     MemoryContextAssemblerPort, MemoryContextPackDraft, MemoryCoreRuntime, MemoryDeletionReceipt,
     MemoryGovernanceAccessPort, MemoryHabit, MemoryOutboxEvent, MemoryRecord,
@@ -293,6 +295,17 @@ impl MemoryRuntimeDataPlane {
     ) -> MemoryServiceResult<Option<MemoryAuditRecord>> {
         self.require_audit_store()?
             .retrieve(query)
+            .await
+            .map_err(map_memory_spi_error)
+    }
+
+    /// Mutation history of one resource, newest first.
+    pub async fn list_audit_history(
+        &self,
+        query: ListMemoryAuditHistoryQuery,
+    ) -> MemoryServiceResult<Vec<MemoryAuditHistoryEntry>> {
+        self.require_audit_store()?
+            .list_history(query)
             .await
             .map_err(map_memory_spi_error)
     }

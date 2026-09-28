@@ -76,6 +76,10 @@ fn build_open_router(state: OpenState) -> Router {
         .route(paths::CANDIDATE, get(retrieve_candidate))
         .route(paths::PROVIDER_HEALTH, get(retrieve_provider_health))
         .merge(crate::commercial_routes::commercial_routes())
+        // The mem0 compatibility wire shares this router because it shares the
+        // `OpenState` (and therefore the resolved `MemoryOpenApi`); it is
+        // merged before `Extension(state)` so the state layer covers it.
+        .merge(crate::mem0::mem0_routes())
         .layer(Extension(state))
 }
 

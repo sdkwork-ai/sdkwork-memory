@@ -7,8 +7,10 @@ use sdkwork_memory_spi::{
     AppendMemoryRetrievalTraceCommand, ApproveMemoryCandidateCommand, CreateCanonicalMemoryCommand,
     CreateMemoryCandidateCommand, CreateMemoryRecordCommand, DecayMemoryHabitCommand,
     DeleteAllCanonicalMemoryCommand, DeleteCanonicalMemoryCommand, DeleteMemoryRecordCommand,
-    ListMemoryCandidatesQuery, ListMemoryRetrievalTracesQuery, ListPendingMemoryOutboxQuery,
-    MarkMemoryOutboxFailedCommand, MarkMemoryOutboxPublishedCommand, MemoryAuditRecord,
+    ListMemoryAuditHistoryQuery, ListMemoryCandidatesQuery, ListMemoryRetrievalTracesQuery,
+    ListPendingMemoryOutboxQuery,
+    MarkMemoryOutboxFailedCommand, MarkMemoryOutboxPublishedCommand, MemoryAuditHistoryEntry,
+    MemoryAuditRecord,
     MemoryAuditStorePort, MemoryBulkDeletionReceipt, MemoryCandidate, MemoryCandidateDetail,
     MemoryCandidatePage, MemoryCandidatePromotion, MemoryCandidateStorePort,
     MemoryCandidateSummary, MemoryCanonicalRecord, MemoryContextPackSnapshot,
@@ -2867,6 +2869,52 @@ impl NativeSqlMemoryStore {
             resource_id: row.get("resource_id"),
             result: row.get("result"),
         }))
+    }
+
+    /// Mutation history of one resource, newest first.
+    ///
+    /// Ordered by the primary key descending, which is the key order the
+    /// baseline index `idx_ai_audit_resource_id` was created for
+    /// (`tenant_id, resource_type, id DESC`); the tenant and resource-type
+    /// terms seek into it and `resource_id` narrows what the seek returns.
+    pub async fn list_audit_history_for_resource(
+        &self,
+        tenant_id: i64,
+        resource_type: &str,
+        resource_id: &str,
+        page_size: i32,
+    ) -> Result<Vec<NativeSqlMemoryAuditHistoryRow>, NativeSqlStoreError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT uuid, actor_type, actor_id, action, resource_type, resource_id, result, created_at
+            FROM ai_audit_log
+            WHERE tenant_id = ?
+              AND resource_type = ?
+              AND resource_id = ?
+            ORDER BY id DESC
+            LIMIT ?
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(resource_type)
+        .bind(resource_id)
+        .bind(clamp_list_page_size(page_size))
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| NativeSqlMemoryAuditHistoryRow {
+                audit_id: row.get("uuid"),
+                actor_type: row.get("actor_type"),
+                actor_id: row.get("actor_id"),
+                action: row.get("action"),
+                resource_type: row.get("resource_type"),
+                resource_id: row.get("resource_id"),
+                result: row.get("result"),
+                created_at: row.get("created_at"),
+            })
+            .collect())
     }
 
     pub async fn append_outbox_event(
@@ -5756,6 +5804,35 @@ impl MemoryAuditStorePort for NativeSqlMemoryStore {
             result: audit.result,
         }))
     }
+
+    async fn list_history(
+        &self,
+        query: ListMemoryAuditHistoryQuery,
+    ) -> MemorySpiResult<Vec<MemoryAuditHistoryEntry>> {
+        let rows = self
+            .list_audit_history_for_resource(
+                query.scope.tenant_id,
+                &query.resource_type,
+                &query.resource_id,
+                query.page_size,
+            )
+            .await
+            .map_err(|err| port_error("MemoryAuditStorePort", err))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| MemoryAuditHistoryEntry {
+                audit_id: row.audit_id,
+                action: row.action,
+                resource_type: row.resource_type,
+                resource_id: row.resource_id,
+                result: row.result,
+                actor_type: row.actor_type,
+                actor_id: row.actor_id,
+                created_at: row.created_at,
+            })
+            .collect())
+    }
 }
 
 #[async_trait]
@@ -6341,6 +6418,19 @@ pub struct NativeSqlGovernanceJobRow {
     pub resource_type: String,
     pub result: String,
     pub metadata_json: Option<String>,
+    pub created_at: String,
+}
+
+/// One audit row as returned by a resource-scoped history read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NativeSqlMemoryAuditHistoryRow {
+    pub audit_id: String,
+    pub actor_type: String,
+    pub actor_id: Option<String>,
+    pub action: String,
+    pub resource_type: String,
+    pub resource_id: String,
+    pub result: String,
     pub created_at: String,
 }
 

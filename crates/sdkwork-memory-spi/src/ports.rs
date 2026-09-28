@@ -246,6 +246,39 @@ pub struct RetrieveMemoryAuditQuery {
     pub audit_id: String,
 }
 
+/// One entry of a resource's mutation history, resolved by resource instead of
+/// by audit id.
+///
+/// Deliberately not [`MemoryAuditRecord`]: a history read is ordered and
+/// time-stamped, so it carries the audit timestamp and the acting subject. The
+/// id-addressed record does not, because its callers resolve one row they
+/// already know the identity of.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryAuditHistoryEntry {
+    pub audit_id: String,
+    pub action: String,
+    pub resource_type: String,
+    pub resource_id: String,
+    pub result: String,
+    pub actor_type: String,
+    /// Actor that produced the mutation, when the store recorded one.
+    pub actor_id: Option<String>,
+    /// Audit timestamp, in the store's canonical datetime text form.
+    pub created_at: String,
+}
+
+/// Resource-scoped history query: every audit row for one `(resource_type,
+/// resource_id)` pair inside a tenant, newest first.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListMemoryAuditHistoryQuery {
+    pub scope: MemoryScopeContext,
+    pub resource_type: String,
+    pub resource_id: String,
+    /// Bounded page size; implementations must clamp it like every other list
+    /// read rather than trusting the caller.
+    pub page_size: i32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemoryOutboxEvent {
     pub outbox_id: String,
@@ -960,6 +993,21 @@ pub trait MemoryAuditStorePort: Send + Sync {
         &self,
         query: RetrieveMemoryAuditQuery,
     ) -> MemorySpiResult<Option<MemoryAuditRecord>>;
+
+    /// Mutation history of one resource, newest first.
+    ///
+    /// Defaults to an explicit unsupported error rather than an empty list: a
+    /// provider without an addressable audit trail must fail loudly, because a
+    /// caller cannot tell an empty history from "this resource never changed".
+    async fn list_history(
+        &self,
+        _query: ListMemoryAuditHistoryQuery,
+    ) -> MemorySpiResult<Vec<MemoryAuditHistoryEntry>> {
+        Err(MemorySpiError::PortOperationFailed {
+            port: "MemoryAuditStorePort".to_string(),
+            message: "resource-scoped audit history is not implemented".to_string(),
+        })
+    }
 }
 
 #[async_trait]
