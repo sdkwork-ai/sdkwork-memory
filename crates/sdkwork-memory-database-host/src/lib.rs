@@ -52,6 +52,37 @@ fn ensure_pool_engine_is_declared(
     ))
 }
 
+/// Minimum PostgreSQL server version for the memory baseline: the schema uses
+/// PostgreSQL 15 `NULLS NOT DISTINCT` unique indexes, so a PG14 server fails
+/// here with an actionable gate instead of a raw syntax error from the first
+/// DDL statement. Mirrors the data-plane assertion in
+/// `sdkwork-intelligence-memory-repository-sqlx` (which sits downstream of this
+/// crate, so the constant is restated rather than imported).
+const MIN_POSTGRES_VERSION_NUM: i64 = 150_000;
+
+/// Fails closed on a PostgreSQL server older than the baseline's requirements.
+///
+/// Runs before `init()` so an undersized server is named directly instead of
+/// surfacing as an unrelated-looking `NULLS NOT DISTINCT` syntax error in the
+/// middle of the migration.
+async fn assert_postgres_server_version(pool: &sdkwork_database_sqlx::DatabasePool) -> Result<(), String> {
+    let postgres_pool = pool.as_postgres().ok_or_else(|| {
+        "memory database version gate expected a PostgreSQL pool".to_string()
+    })?;
+    let row: (i64,) = sqlx::query_as("SELECT current_setting('server_version_num')::bigint")
+        .fetch_one(postgres_pool)
+        .await
+        .map_err(|error| format!("memory database could not read the PostgreSQL server version: {error}"))?;
+    if row.0 < MIN_POSTGRES_VERSION_NUM {
+        return Err(format!(
+            "memory database requires PostgreSQL 15 or newer (server_version_num {} < {}): \
+             the baseline schema uses NULLS NOT DISTINCT unique indexes",
+            row.0, MIN_POSTGRES_VERSION_NUM
+        ));
+    }
+    Ok(())
+}
+
 pub async fn bootstrap_memory_database(pool: DatabasePool) -> Result<MemoryDatabaseHost, String> {
     let app_root = resolve_app_root();
     let module = Arc::new(
@@ -62,6 +93,11 @@ pub async fn bootstrap_memory_database(pool: DatabasePool) -> Result<MemoryDatab
         .map_err(|error| format!("read memory database manifest failed: {error}"))?;
     ensure_pool_engine_is_declared(pool.engine(), &manifest)
         .map_err(|error| format!("memory database engine admission failed: {error}"))?;
+    if pool.engine() == DatabaseEngine::Postgres {
+        assert_postgres_server_version(&pool)
+            .await
+            .map_err(|error| format!("memory database server version admission failed: {error}"))?;
+    }
     let options = lifecycle_options_from_env("MEMORY", &manifest);
     let orchestrator =
         LifecycleOrchestrator::new(pool.clone(), module.clone()).with_applied_by("sdkwork-memory");

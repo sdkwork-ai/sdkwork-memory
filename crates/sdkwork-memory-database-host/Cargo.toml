@@ -15,6 +15,10 @@ path = "src/lib.rs"
 
 [dependencies]
 dotenvy = "0.15"
+# PostgreSQL-only driver surface for the server-version admission gate; the
+# workspace default features pull in the SQLite driver, which the production
+# library must not link (see the dev-dependency note below).
+sqlx = { workspace = true, default-features = false, features = ["runtime-tokio", "postgres"] }
 sdkwork-database-config = { workspace = true }
 sdkwork-database-lifecycle = { workspace = true }
 sdkwork-database-spi = { workspace = true }

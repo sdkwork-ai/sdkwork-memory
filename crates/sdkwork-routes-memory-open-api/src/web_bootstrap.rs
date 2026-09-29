@@ -194,12 +194,18 @@ where
         MemoryWebAuthMode::DevInline => {
             wrap_router_with_web_framework(DefaultWebRequestContextResolver::default(), router)
         }
-        MemoryWebAuthMode::ProductionFailClosed => with_mem0_wire_adapters(
-            with_web_request_context(
+        MemoryWebAuthMode::ProductionFailClosed => {
+            with_mem0_wire_adapters(with_web_request_context(
                 with_problem_correlation(router),
                 build_open_api_framework_layer(ProductionFailClosedResolver),
-            ),
-        ),
+            ))
+            // Same innermost body limit as the other auth modes: every mode
+            // must enforce the single configured bound
+            // (`SDKWORK_MEMORY_MAX_BODY_BYTES`), not the framework default.
+            .layer(axum::extract::DefaultBodyLimit::max(
+                sdkwork_routes_memory_support::memory_request_body_limit_bytes(),
+            ))
+        }
         MemoryWebAuthMode::IamDatabase(resolver) => {
             wrap_router_with_iam_database_web_framework(*resolver, router)
         }

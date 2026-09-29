@@ -943,6 +943,153 @@
       "x-sdkwork-wire-protocol": "external",
       "x-sdkwork-external-protocol-id": "mem0-platform",
       "rateLimitTier": "openApiDefault"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/entities/{entity_type}/{entity_id}/",
+      "operationId": "mem0.entity.delete",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform",
+      "rateLimitTier": "openApiDefault"
+    },
+    {
+      "method": "GET",
+      "path": "/v2/entities/{entity_type}/{entity_id}/profile/",
+      "operationId": "mem0.entity.profile",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform"
+    },
+    {
+      "method": "POST",
+      "path": "/v2/profiles/jobs/",
+      "operationId": "mem0.profile.job.create",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform",
+      "rateLimitTier": "openApiDefault"
+    },
+    {
+      "method": "GET",
+      "path": "/v2/profiles/jobs/{job_id}/",
+      "operationId": "mem0.profile.job.retrieve",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform"
+    },
+    {
+      "method": "GET",
+      "path": "/v2/profiles/settings/",
+      "operationId": "mem0.profile.settings.retrieve",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform"
+    },
+    {
+      "method": "POST",
+      "path": "/v2/profiles/settings/",
+      "operationId": "mem0.profile.settings.update",
+      "tags": [
+        "memory"
+      ],
+      "auth": {
+        "mode": "api-key",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-memory",
+        "apiAuthority": "sdkwork-memory-open-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "open-api",
+      "x-sdkwork-wire-protocol": "external",
+      "x-sdkwork-external-protocol-id": "mem0-platform",
+      "rateLimitTier": "openApiDefault"
     }
   ]
 }

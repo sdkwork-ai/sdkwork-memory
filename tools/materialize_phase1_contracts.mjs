@@ -1975,8 +1975,22 @@ function requiredSpaceIdQueryParam() {
 // PAGINATION_SPEC section 3.1 mandates a single page_size contract for every
 // list surface: default 20, max 200. Both list helpers share the factory so the
 // default can never drift between offset and cursor paging again.
+//
+// Section 3 additionally makes mode selection part of the contract and `MUST`
+// be documented per operation; every owned list operation takes its pagination
+// parameters from the two builders below, so the descriptions here document
+// the cursor mode on each of them at once.
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 200;
+
+const CURSOR_PARAM_DOC =
+  "Opaque server-issued keyset cursor (pagination mode `cursor`, PAGINATION_SPEC section 3). \
+Pass `data.pageInfo.nextCursor` from the previous page; omit for the first page. \
+Client-constructed or forged cursors are rejected as invalid parameters.";
+
+const PAGE_SIZE_PARAM_DOC =
+  "Page size for this cursor-mode listing: default 20, maximum 200. \
+Page boundaries are stable keyset positions, not ordinal page numbers.";
 
 function pageSizeSchema() {
   return {
@@ -1984,14 +1998,20 @@ function pageSizeSchema() {
     format: "int32",
     minimum: 1,
     maximum: MAX_PAGE_SIZE,
-    default: DEFAULT_PAGE_SIZE
+    default: DEFAULT_PAGE_SIZE,
+    description: PAGE_SIZE_PARAM_DOC
   };
 }
 
 function listParams(extra = []) {
   return [
     { name: "q", in: "query", required: false, schema: { type: "string" } },
-    { name: "cursor", in: "query", required: false, schema: { type: "string" } },
+    {
+      name: "cursor",
+      in: "query",
+      required: false,
+      schema: { type: "string", description: CURSOR_PARAM_DOC }
+    },
     { name: "page_size", in: "query", required: false, schema: pageSizeSchema() },
     ...extra
   ];
@@ -1999,7 +2019,12 @@ function listParams(extra = []) {
 
 function cursorListParams(extra = []) {
   return [
-    { name: "cursor", in: "query", required: false, schema: { type: "string" } },
+    {
+      name: "cursor",
+      in: "query",
+      required: false,
+      schema: { type: "string", description: CURSOR_PARAM_DOC }
+    },
     { name: "page_size", in: "query", required: false, schema: pageSizeSchema() },
     ...extra
   ];
@@ -3230,6 +3255,24 @@ function openOperation(args) {
 //   PUT    /v1/batch/
 //   DELETE /v1/batch/
 //
+// and, under `/v2/`, the shapes the same clients build that this surface
+// refuses by name rather than implements:
+//
+//   DELETE /v2/entities/{entity_type}/{entity_id}/          entity-scope erasure
+//   GET    /v2/entities/{entity_type}/{entity_id}/profile/  derived profile text
+//   POST   /v2/profiles/jobs/                               profile generation job
+//   GET    /v2/profiles/jobs/{job_id}/                      job state
+//   GET    /v2/profiles/settings/                           project-level settings
+//   POST   /v2/profiles/settings/                           project-level settings
+//
+// `/v2/` is declared (`paths::MEM0_PATH_PREFIXES`) even though nothing under it
+// is implemented: a prefix outside that list is answered by the framework's
+// surface classifier before either mem0 bridge runs, so the caller gets a `401`
+// whose body the clients cannot parse. Declaring it makes the refusal land in
+// the mem0 dialect. The runtime half is
+// `crates/sdkwork-routes-memory-open-api/src/paths.rs` (`MEM0_REFUSED_PATHS`) and
+// the handlers it names in `src/mem0/handlers.rs`.
+//
 // Authentication is `Authorization: Token <api_key>` (main.py:189). The wire key
 // convention is snake_case: the TypeScript client converts *inbound* snake_case
 // to camelCase (`utils.ts` snakeToCamelKeys), so the server contract is
@@ -3257,6 +3300,20 @@ const MEM0_OPERATION_METADATA = {
   "mem0.feedback.create": { permission: "memory.open.feedback.write", auditEvent: "memory.open.feedback.created", resource: "feedback" },
   "mem0.memory.batchUpdate": { permission: "memory.open.records.write", auditEvent: "memory.open.record.updated", resource: "memories" },
   "mem0.memory.batchDelete": { permission: "memory.open.records.write", auditEvent: "memory.open.record.deleted", resource: "memories" },
+  // `/v2/` refusals. These operations have no successful outcome, so their
+  // declared metadata is the capability probe they amount to — "can this surface
+  // do X" — which is `memory.open.capabilities.read`, the same pair `mem0.ping`
+  // uses. That is deliberate on both axes: it reuses vocabulary that already
+  // exists rather than inventing a permission an API key could never hold, and
+  // it records an audit event that is *true*. Declaring the effect they would
+  // have had (`memory.open.entity.updated` for the deletion, say) would put a
+  // change in the audit trail that this surface explicitly refuses to make.
+  "mem0.entity.delete": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
+  "mem0.entity.profile": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
+  "mem0.profile.job.create": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
+  "mem0.profile.job.retrieve": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
+  "mem0.profile.settings.retrieve": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
+  "mem0.profile.settings.update": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
 };
 
 function mem0Schemas() {
@@ -3422,7 +3479,12 @@ function mem0Schemas() {
       properties: {
         org_id: { type: ["string", "null"] },
         project_id: { type: ["string", "null"] },
-        user_email: { type: ["string", "null"] }
+        user_email: { type: ["string", "null"] },
+        status: {
+          type: "string",
+          description:
+            "Always \"ok\". The JavaScript client's ping() throws APIError(\"API Key is invalid\") for any other value, and the constructor then leaves organizationId/projectId unset; the Python client ignores this field entirely."
+        }
       }
     },
     Mem0AddRequest: {
@@ -3434,7 +3496,14 @@ function mem0Schemas() {
         agent_id: { type: "string" },
         run_id: { type: "string" },
         app_id: { type: "string" },
+        filters: { type: ["object", "null"], additionalProperties: true },
         metadata: { type: ["object", "null"], additionalProperties: true },
+        timestamp: { description: "Refused with 501 when present; this surface stamps its own instants.", type: ["string", "number", "boolean", "object", "array", "null"] },
+        expiration_date: { type: ["string", "null"] },
+        custom_categories: { description: "Refused with 501 when present.", type: ["string", "number", "boolean", "object", "array", "null"] },
+        custom_instructions: { description: "Refused with 501 when present.", type: ["string", "number", "boolean", "object", "array", "null"] },
+        agent_custom_instructions: { description: "Refused with 501 when present.", type: ["string", "number", "boolean", "object", "array", "null"] },
+        structured_data_schema: { description: "Refused with 501 when present.", type: ["string", "number", "boolean", "object", "array", "null"] },
         infer: { type: ["boolean", "null"] }
       },
       additionalProperties: true
@@ -3445,6 +3514,7 @@ function mem0Schemas() {
       properties: {
         query: { type: "string" },
         filters: { type: ["object", "null"], additionalProperties: true },
+        metadata: { description: "Exact-match metadata conditions, merged into the filter conjunction.", type: ["object", "null"], additionalProperties: true },
         top_k: { type: ["integer", "null"] },
         threshold: { type: ["number", "null"] },
         explain: { type: ["boolean", "null"] },
@@ -3454,7 +3524,13 @@ function mem0Schemas() {
         user_id: { type: "string" },
         agent_id: { type: "string" },
         run_id: { type: "string" },
-        app_id: { type: "string" }
+        app_id: { type: "string" },
+        fields: { description: "Refused with 501 when present.", type: ["string", "number", "boolean", "object", "array", "null"] },
+        categories: { description: "Refused with 501 when present.", type: ["string", "number", "boolean", "object", "array", "null"] },
+        reference_date: { description: "Refused with 501 when present.", type: ["string", "number", "boolean", "object", "array", "null"] },
+        latest_only: { description: "Refused with 501 when true.", type: ["boolean", "null"] },
+        keyword_search: { description: "Refused with 501 when present.", type: ["string", "number", "boolean", "object", "array", "null"] },
+        source: { description: "Accepted and ignored (upstream telemetry hint).", type: ["string", "number", "boolean", "object", "array", "null"] }
       },
       additionalProperties: true
     },
@@ -3465,7 +3541,12 @@ function mem0Schemas() {
         user_id: { type: "string" },
         agent_id: { type: "string" },
         run_id: { type: "string" },
-        app_id: { type: "string" }
+        app_id: { type: "string" },
+        show_expired: { type: ["boolean", "null"] },
+        start_date: { description: "Refused with 501 when present.", type: ["string", "number", "boolean", "object", "array", "null"] },
+        end_date: { description: "Refused with 501 when present.", type: ["string", "number", "boolean", "object", "array", "null"] },
+        categories: { description: "Refused with 501 when present.", type: ["string", "number", "boolean", "object", "array", "null"] },
+        latest_only: { description: "Refused with 501 when true.", type: ["boolean", "null"] }
       },
       additionalProperties: true
     },
@@ -3559,7 +3640,7 @@ function mem0ErrorResponses() {
   return { "400": error, "401": error, "404": error, "409": error, "429": error, "500": error, "501": error };
 }
 
-function mem0Operation({ method, operationId, status, requestSchema, responseSchema, pathParams = [], queryParams = [] }) {
+function mem0Operation({ method, operationId, status, requestSchema, responseSchema, pathParams = [], queryParams = [], refusal = false }) {
   const metadata = MEM0_OPERATION_METADATA[operationId];
   if (!metadata) {
     throw new Error(`mem0 operation ${operationId} has no declared permission/audit metadata`);
@@ -3581,13 +3662,20 @@ function mem0Operation({ method, operationId, status, requestSchema, responseSch
   });
   // Upstream errors are `{"detail": ...}`, not ProblemDetail: replace the
   // SDKWork-owned error surface entirely.
-  op.responses = {
-    [status ?? (method === "post" ? "200" : method === "delete" ? "200" : "200")]: successResponse(
-      status ?? "200",
-      responseSchema,
-    ),
-    ...mem0ErrorResponses()
-  };
+  //
+  // `refusal: true` declares an operation that has **no success shape at all**:
+  // it exists to answer `501` by name, so publishing a `200` would promise a
+  // response the surface can never produce. The mem0 error set is the whole
+  // contract for it, and `501` is already in that set for exactly this reason.
+  op.responses = refusal
+    ? mem0ErrorResponses()
+    : {
+        [status ?? (method === "post" ? "200" : method === "delete" ? "200" : "200")]: successResponse(
+          status ?? "200",
+          responseSchema,
+        ),
+        ...mem0ErrorResponses()
+      };
   op["x-sdkwork-wire-protocol"] = "external";
   op["x-sdkwork-external-protocol-id"] = MEM0_PROTOCOL_ID;
   return op;
@@ -3640,7 +3728,14 @@ function mem0Paths(paths) {
       { name: "user_id", in: "query", required: false, schema: { type: "string" } },
       { name: "agent_id", in: "query", required: false, schema: { type: "string" } },
       { name: "run_id", in: "query", required: false, schema: { type: "string" } },
-      { name: "app_id", in: "query", required: false, schema: { type: "string" } }
+      { name: "app_id", in: "query", required: false, schema: { type: "string" } },
+      // What `MemoryClient.delete_all(filters={...})` actually sends: the dict is
+      // handed straight to `httpx`, so the value is a `str()` of the dict rather
+      // than JSON — hence `string`, and hence the runtime reads it as opaque text
+      // whose mere presence is a filter. Declaring it is what makes the refusal
+      // reachable, and the refusal is what stops a scoped delete from becoming an
+      // unscoped one.
+      { name: "filters", in: "query", required: false, schema: { type: "string" } }
     ]
   }));
 
@@ -3677,6 +3772,14 @@ function mem0Paths(paths) {
   addPath(paths, "/v1/entities/", "get", mem0Operation({
     method: "get",
     operationId: "mem0.entity.list",
+    // `page_size` is accepted and bounded (handlers clamp through the shared
+    // 20/200 contract); `page` is declared and refused by name for any page
+    // past the first, mirroring `POST /v3/memories/?page=` — declaring both
+    // keeps the served wire and the authority document identical.
+    queryParams: [
+      { name: "page", in: "query", required: false, schema: { type: "integer" } },
+      { name: "page_size", in: "query", required: false, schema: { type: "integer" } }
+    ],
     responseSchema: "Mem0EntityList"
   }));
 
@@ -3699,6 +3802,62 @@ function mem0Paths(paths) {
     operationId: "mem0.memory.batchDelete",
     requestSchema: "Mem0BatchRequest",
     responseSchema: "Mem0BatchAck"
+  }));
+
+  // -------------------------------------------------------------------------
+  // `/v2/` refusals.
+  //
+  // Declared so the `/v2/` prefix is legal (a declared prefix must carry a path)
+  // and so a client that reaches them gets a named `501` in the mem0 dialect
+  // instead of the framework's `401`. Each carries `refusal: true`: there is no
+  // success response to publish, because there is no success.
+  //
+  // No `requestBody` is declared. These handlers read nothing from the request —
+  // the answer does not depend on it — and modelling a body the surface never
+  // inspects would suggest a partial honour that does not exist.
+  // -------------------------------------------------------------------------
+  const mem0V2EntityParams = [
+    { name: "entity_type", in: "path", required: true, schema: { type: "string" } },
+    { name: "entity_id", in: "path", required: true, schema: { type: "string" } }
+  ];
+
+  addPath(paths, "/v2/entities/{entity_type}/{entity_id}/", "delete", mem0Operation({
+    method: "delete",
+    operationId: "mem0.entity.delete",
+    pathParams: mem0V2EntityParams,
+    refusal: true
+  }));
+
+  addPath(paths, "/v2/entities/{entity_type}/{entity_id}/profile/", "get", mem0Operation({
+    method: "get",
+    operationId: "mem0.entity.profile",
+    pathParams: mem0V2EntityParams,
+    refusal: true
+  }));
+
+  addPath(paths, "/v2/profiles/jobs/", "post", mem0Operation({
+    method: "post",
+    operationId: "mem0.profile.job.create",
+    refusal: true
+  }));
+
+  addPath(paths, "/v2/profiles/jobs/{job_id}/", "get", mem0Operation({
+    method: "get",
+    operationId: "mem0.profile.job.retrieve",
+    pathParams: [{ name: "job_id", in: "path", required: true, schema: { type: "string" } }],
+    refusal: true
+  }));
+
+  addPath(paths, "/v2/profiles/settings/", "get", mem0Operation({
+    method: "get",
+    operationId: "mem0.profile.settings.retrieve",
+    refusal: true
+  }));
+
+  addPath(paths, "/v2/profiles/settings/", "post", mem0Operation({
+    method: "post",
+    operationId: "mem0.profile.settings.update",
+    refusal: true
   }));
 }
 

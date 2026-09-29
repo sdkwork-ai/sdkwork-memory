@@ -10,6 +10,15 @@ Canonical lifecycle assets for `sdkwork-memory` under `DATABASE_FRAMEWORK_SPEC.m
   outside this authoritative root — they are owned by
   `plugins/sdkwork-memory-plugin-native-sql` and materialized from
   `tests/fixtures/database/sqlite/`.
+- SQLite runtime profile: the pool is pinned to one connection (the `sqlx::Any`
+  pool cannot re-apply per-connection PRAGMAs on recycled connections, so the
+  store pins one), `foreign_keys = ON`, `busy_timeout = 5s`, and the default
+  rollback journal is kept (no WAL). Requests therefore serialize through one
+  writer by design, and a long keyset sweep blocks the local plane for its
+  duration; the local plane is a single-process convenience surface, and the
+  server-role engine admission rule that rejects SQLite for server roles is the
+  load-bearing guard. Concurrent multi-process access to one SQLite file is not
+  a supported deployment shape.
 
 ## Migration Authority
 
@@ -18,10 +27,17 @@ application-root directories:
 
 1. **Initialization state**: `database/ddl/baseline/postgres/0001_memory_baseline.sql`
    is the full DDL snapshot and the authority for greenfield deployments.
-2. `database/migrations/postgres/` is reserved for post-GA incremental schema
-   changes and is intentionally empty until the first post-GA migration; once a
-   migration exists, paired up/down files there are the incremental authority and
-   `pnpm db:materialize:baseline` folds them into the baseline.
+2. `database/migrations/postgres/` holds the post-baseline incremental deltas
+   (`0001_organization_id_not_null`, `0002_claim_order_and_keyset_indexes`,
+   `0003_hard_delete_cleanup_indexes`); paired up/down files there are the
+   incremental authority. Under the committed `baselineStrategy:
+   baseline-plus-migrations`, the checked-in baseline stays the authoritative
+   DDL source and is never regenerated from these deltas: greenfield
+   deployments apply the baseline and then replay the deltas, and a delta is
+   only absorbed into the baseline by a reviewed, deliberate baseline edit
+   (the folded blocks carry `-- source:` markers). `pnpm
+   db:materialize:baseline` validates this state and re-folds the SQLite
+   fixture projection.
 3. The plugin's embedded compatibility runner
    (`plugins/sdkwork-memory-plugin-native-sql`, version keys in `store.rs`) is a
    test/local-tool bootstrap only. Production never runs it: the store connects
@@ -81,9 +97,11 @@ This module is in **initialization state** for greenfield deployments:
 
 1. **Baseline** — `database/ddl/baseline/postgres/0001_memory_baseline.sql` contains
    the full DDL snapshot.
-2. **Migrations** — `database/migrations/postgres/` is reserved for post-GA
-   incremental schema changes only. It is intentionally empty at initialization
-   apart from data-shape migrations that ran before the baseline was folded.
+2. **Migrations** — `database/migrations/postgres/` holds the post-baseline
+   incremental deltas (paired up/down files); under `baselineStrategy:
+   baseline-plus-migrations` the checked-in baseline stays the authoritative
+   DDL source and greenfield deployments apply the baseline and then replay
+   the deltas.
 3. **Drift** — run `pnpm db:drift:check` before release.
 
 ## Commands

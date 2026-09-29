@@ -132,6 +132,11 @@
         "name": "Validate Memory contract and architecture",
         "shell": "pwsh",
         "run": "pnpm test:release-features && pnpm test:postgres:contract && cargo test --workspace && node tools/check_sdkwork_memory_architecture_alignment.mjs && node scripts/release/workflow-supply-chain-evidence.mjs verify"
+      },
+      {
+        "name": "Re-run the API/pagination/contract gates on the release commit",
+        "shell": "pwsh",
+        "run": "pnpm check && pnpm --dir apps/sdkwork-memory-pc check"
       }
     ],
     "sign": [

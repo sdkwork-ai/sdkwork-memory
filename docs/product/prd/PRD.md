@@ -54,7 +54,7 @@ Generated route manifests and authority OpenAPI files are the operation inventor
 - Restricted and sensitive data access fails closed and is constrained before the store query or provider call.
 - Exports use approved Drive integration when a Drive target is requested. Credentials and provider secrets are references, never repository data.
 - Export memory is bounded: inline defaults to 4 MiB, Drive defaults to 64 MiB, and neither path may exceed the 256 MiB hard cap until streaming multipart is implemented and verified.
-- Cluster workers use database-fenced leases; an expired Outbox, learning, or evaluation worker cannot acknowledge or complete work after takeover. Learning execution errors requeue with attempt-aware backoff, and exhausted attempt budgets dead-letter with logged, metric-exported transitions.
+- Cluster workers use database-fenced leases; an expired Outbox, learning, or evaluation worker cannot acknowledge or complete work after takeover. Learning execution errors requeue with attempt-aware backoff, and exhausted attempt budgets dead-letter with logged, metric-exported transitions. The retention sweep and provider-health probe are lease-admitted so exactly one replica runs each pass.
 - A scheduled retention worker hard-deletes terminal outbox events, terminal learning/evaluation jobs, retrieval traces with their hits and context packs, and audit logs past per-table configurable windows, so high-churn tables stay bounded under production traffic.
 
 ## Quality And Operations Targets

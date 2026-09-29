@@ -29,6 +29,15 @@
 //! Where a mem0 parameter cannot be honoured, the handler refuses it by name
 //! (501 with a reason) rather than answering with a narrower result that would
 //! be indistinguishable from success.
+//!
+//! Three prefixes carry the wire: `/v1/`, `/v3/`, and `/v2/`. The first two hold
+//! the operations this surface implements; `/v2/` holds the shapes the official
+//! clients call that it deliberately does not — entity-scope deletion and the
+//! whole profile/settings family — each answered `501` with its own reason.
+//! `/v2/` is declared rather than left out because a prefix that is not declared
+//! is answered by the framework's surface classifier *before* either bridge
+//! below runs, which turns a mem0 call into a `401` carrying a media type the
+//! clients cannot read.
 
 pub mod dto;
 pub mod error;
@@ -161,6 +170,12 @@ fn is_problem_json(response: &Response) -> bool {
 /// Paths and methods are exactly the generated manifest entries; mounting them
 /// here must not diverge from that manifest, which is what
 /// `open_router_mounts_every_open_openapi_operation_path` checks.
+///
+/// The `/v2/` half of this router is refusal-only. Those operations exist so the
+/// declared `/v2/` prefix carries real paths, and so a caller reaching them gets
+/// a named `501` in the mem0 failure dialect instead of the framework's
+/// mis-framed `401`. They are registered here and nowhere else — the router is
+/// the only place that decides which paths this surface answers at all.
 pub fn mem0_routes() -> Router {
     Router::new()
         .route(paths::MEM0_PING, get(handlers::ping))
@@ -180,6 +195,29 @@ pub fn mem0_routes() -> Router {
         .route(
             paths::MEM0_BATCH,
             put(handlers::batch_update_memories).delete(handlers::batch_delete_memories),
+        )
+        // `/v2/` — named refusals. See `handlers` for why each one cannot be
+        // answered rather than refused.
+        .route(
+            paths::MEM0_V2_ENTITIES,
+            delete(handlers::refuse_v2_entity_delete),
+        )
+        .route(
+            paths::MEM0_V2_ENTITY_PROFILE,
+            get(handlers::refuse_v2_entity_profile),
+        )
+        .route(
+            paths::MEM0_V2_PROFILE_JOBS,
+            post(handlers::refuse_v2_profile_job_create),
+        )
+        .route(
+            paths::MEM0_V2_PROFILE_JOB,
+            get(handlers::refuse_v2_profile_job_retrieve),
+        )
+        .route(
+            paths::MEM0_V2_PROFILE_SETTINGS,
+            get(handlers::refuse_v2_profile_settings_read)
+                .post(handlers::refuse_v2_profile_settings_update),
         )
 }
 

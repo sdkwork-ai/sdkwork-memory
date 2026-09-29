@@ -59,8 +59,15 @@ where
             });
     let cors_origins =
         sdkwork_web_bootstrap::cors_allowed_origins_from_env(&["SDKWORK_CORS_ALLOWED_ORIGINS"]);
-    let security_policy =
+    let mut security_policy =
         sdkwork_web_bootstrap::security_policy_for_environment(&WebEnvironment::Prod, cors_origins);
+    // Bound credential-stuffing in aggregate: the per-credential pre-auth key
+    // alone fragments when a caller rotates synthetic keys, each earning a
+    // fresh bucket. Production additionally charges one shared pre-auth bucket
+    // per path+tier at 20x the per-key tier, so rotated-key brute force
+    // against the IAM database is bounded while legitimate keys — which
+    // resolve to their tenant bucket after auth — keep their own budget.
+    security_policy.rate_limit.pre_auth_aggregate_multiplier = Some(20);
 
     layer
         .with_security_policy(security_policy)

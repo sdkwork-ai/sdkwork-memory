@@ -13,7 +13,9 @@ async-trait.workspace = true
 sdkwork-memory-contract.workspace = true
 sdkwork-memory-spi.workspace = true
 sdkwork-intelligence-memory-service.workspace = true
-sdkwork-memory-plugin-native-sql.workspace = true
+# Test fixtures boot in-memory SQLite stores, so the driver is required
+# here even though production server assemblies stay PostgreSQL-only.
+sdkwork-memory-plugin-native-sql = { workspace = true, features = ["sqlite"] }
 sdkwork-utils-rust.workspace = true
 sdkwork-web-core.workspace = true
 serde_json.workspace = true

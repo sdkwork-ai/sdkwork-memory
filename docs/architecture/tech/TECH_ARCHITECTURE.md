@@ -91,13 +91,13 @@ Both surfaces reuse visual primitives but do not share SDK clients, session cont
 - Canonical evidence is stored in `ai_event`, `ai_record`, and `ai_record_source`.
 - Learning jobs use `ai_learning_job`; extraction history is keyset-paginated by tenant, type, optional space, and stable row id.
 - Outbox, learning, and evaluation workers use persisted owner/token/expiry leases. Heartbeats extend current leases, and stale completion is fenced at the SQL update. Stale requeues increment `attempt_count`; rows past the configured ceiling land in a terminal `dead` state instead of looping, a panicking job isolates to its own task instead of aborting its batch, and dead transitions are logged and exported as `memory_*_dead_total` metrics. Learning execution errors requeue with attempt-aware backoff (`next_attempt_at`) instead of failing terminally; the outbox stale sweep charges the same retry budget as delivery failures and dead-letters past the ceiling.
-- A retention worker hard-deletes terminal and derived high-churn rows (terminal outbox events, terminal learning/eval jobs, retrieval traces with their hits and context packs, audit logs) in bounded keyset batches on per-table configurable windows (`SDKWORK_MEMORY_RETENTION_*`). Canonical records and events stay under product semantics (space retention jobs, forget), not mechanical cleanup.
+- A retention worker hard-deletes terminal and derived high-churn rows (terminal outbox events, terminal learning/eval jobs, retrieval traces with their context packs, audit logs) in bounded keyset batches on per-table configurable windows (`SDKWORK_MEMORY_RETENTION_*`). Canonical records and events stay under product semantics (space retention jobs, forget), not mechanical cleanup. The sweep is lease-admitted (`pg_try_advisory_lock` on a dedicated connection): exactly one replica sweeps per window, and the rest skip their tick.
 - Outbox acknowledge/fail port methods carry the lease triple and fence at the SQL UPDATE; the unfenced mutation surface was removed.
-- Forget, export, consolidation, retention, and migration jobs persist typed snapshots in `ai_audit_log`; App history also constrains the authenticated actor in SQL.
+- Forget, export, consolidation, retention, and migration jobs persist typed snapshots in `ai_audit_log`; App history also constrains the authenticated actor in SQL. Space- and user-scoped forget sweeps delete events in bounded 500-row batches (evidence sources before their events, per batch), and the expired-record purge updates in the same bounded form, so a large scope never pins its rows for one unbounded statement.
 - Entities, edges, policies, subjects, bindings, capability bindings, assignments, feedback signals (`ai_feedback`), and readiness snapshots use dedicated `ai_` tables with bounded-enum CHECK constraints on state columns.
 - Search indexes and provider projections are derived and rebuildable. Canonical relational data remains authoritative.
 - Outbox writes are part of mutation boundaries where domain event delivery is required.
-- PostgreSQL and SQLite share one logical storage model through `sqlx::Any`: application-generated Snowflake IDs, validated JSON/UTC instants stored as text, and floating algorithm scores stored as `DOUBLE PRECISION`/`REAL`.
+- PostgreSQL and SQLite share one logical storage model through `sqlx::Any`: application-generated Snowflake IDs, validated JSON/UTC instants stored as text, and floating algorithm scores stored as `DOUBLE PRECISION`/`REAL`. Both bootstrap paths assert the deployment floor before touching the schema: the data plane and the root database lifecycle each reject a PostgreSQL server older than 15 (`NULLS NOT DISTINCT` baseline requirement) with a named diagnostic.
 
 ## Security And Privacy
 
@@ -113,6 +113,11 @@ Both surfaces reuse visual primitives but do not share SDK clients, session cont
 - CJK keyword matching tokenizes runs into adjacent character pairs (bigrams), so shared single characters alone do not earn relevance.
 - Unknown retrieval profile ids fail as not-found instead of silently ranking with deployment defaults.
 - `ProblemDetail` exposes numeric code and server trace id; the PC never displays raw response bodies, tokens, or headers.
+- Cursor tokens are verified with a constant-time MAC comparison, and production startup rejects a `SDKWORK_MEMORY_CURSOR_SIGNING_KEY` shorter than 32 bytes as well as an unset one.
+- Production rate limiting additionally charges a shared pre-auth aggregate bucket per path+tier (`pre_auth_aggregate_multiplier = 20`) so rotating credential kinds cannot multiply the pre-auth budget; legitimate keys resolve to their tenant bucket after auth and are unaffected.
+- Extraction runs bound their prompt: input events are covered in request order until `SDKWORK_MEMORY_EXTRACTION_MAX_INPUT_BYTES` (default 2 MiB) is exhausted, and the result reports the remainder as `skippedEventCount` instead of silently truncating.
+- Exports admit through a process-level semaphore (`SDKWORK_MEMORY_EXPORT_MAX_CONCURRENCY`, default 2) so per-run byte caps cannot multiply across concurrent requests, and an unsupported export format is rejected before any payload is collected.
+- Retrieval rehydrates its candidate pool with one bulk store read per space instead of one point query per candidate, so a full candidate pool cannot pin the database pool with hundreds of concurrent round trips.
 - Production PC artifacts exclude source maps and repository-private runtime state.
 
 ## Deployment And Release

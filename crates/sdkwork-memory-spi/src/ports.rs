@@ -942,6 +942,32 @@ pub trait MemoryRecordStorePort: Send + Sync {
         Err(atomic_record_operation_required("retrieve_canonical"))
     }
 
+    /// Bulk variant of [`Self::retrieve_canonical`] used by retrieval
+    /// rehydration so a candidate pool rehydrates with one store round trip per
+    /// scope instead of one round trip per candidate.
+    ///
+    /// The returned options keep positional parity with `memory_ids`; a `None`
+    /// marks an id that is missing, deleted, or outside the scope. The default
+    /// implementation loops the single-record read so stores without a bulk
+    /// plan keep working; the SQL store overrides it with one IN-list query.
+    async fn retrieve_canonical_batch(
+        &self,
+        scope: MemoryScopeContext,
+        memory_ids: Vec<String>,
+    ) -> MemorySpiResult<Vec<Option<MemoryCanonicalRecord>>> {
+        let mut records = Vec::with_capacity(memory_ids.len());
+        for memory_id in memory_ids {
+            records.push(
+                self.retrieve_canonical(RetrieveCanonicalMemoryQuery {
+                    scope: scope.clone(),
+                    memory_id,
+                })
+                .await?,
+            );
+        }
+        Ok(records)
+    }
+
     async fn update_canonical_atomic(
         &self,
         _command: UpdateCanonicalMemoryCommand,

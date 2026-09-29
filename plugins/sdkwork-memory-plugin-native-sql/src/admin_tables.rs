@@ -5,6 +5,42 @@ use crate::store::{now_text, NativeSqlMemoryStore, NativeSqlStoreError};
 
 const PROVIDER_HEALTH_ADVISORY_LOCK_ID: i64 = 0x4D45_4D48_5052_4F42;
 
+const RETENTION_ADVISORY_LOCK_ID: i64 = 0x4D45_4D48_5245_5431;
+
+/// Session-scoped retention sweep lock, same shape as the provider health
+/// lease: the sweep walks every high-churn table in bounded batches, so it
+/// takes a session-level advisory lock on a dedicated connection instead of
+/// holding a SQL transaction open for the whole pass.
+pub struct NativeSqlRetentionLease<'a> {
+    connection: Option<::sqlx::pool::PoolConnection<::sqlx::Any>>,
+    _lifetime: std::marker::PhantomData<&'a ()>,
+}
+
+impl NativeSqlRetentionLease<'_> {
+    pub async fn release(mut self) -> Result<(), NativeSqlStoreError> {
+        if let Some(connection) = self.connection.as_mut() {
+            sqlx::query("SELECT pg_advisory_unlock(?)")
+                .bind(RETENTION_ADVISORY_LOCK_ID)
+                .execute(&mut **connection)
+                .await?;
+        }
+        self.connection = None;
+        Ok(())
+    }
+}
+
+impl Drop for NativeSqlRetentionLease<'_> {
+    fn drop(&mut self) {
+        if let Some(connection) = self.connection.take() {
+            // Session advisory locks survive a connection returning to the
+            // pool, so a lease dropped without release must NOT go back:
+            // detaching closes the connection, which releases the lock.
+            let _detached = connection.detach();
+            tracing::warn!("retention lease dropped without explicit release");
+        }
+    }
+}
+
 /// Session-scoped provider health probe lock.
 ///
 /// The probe pass walks every tenant/binding page with real HTTP probes, so
@@ -918,6 +954,33 @@ impl NativeSqlMemoryStore {
             return Ok(None);
         }
         Ok(Some(NativeSqlProviderHealthLease {
+            connection: Some(connection),
+            _lifetime: std::marker::PhantomData,
+        }))
+    }
+
+    /// Cluster-wide retention sweep admission: one replica sweeps, the rest
+    /// skip their tick. SQLite (the single-process local plane) always
+    /// "acquires" — there is no second replica to collide with.
+    pub async fn try_acquire_retention_lease(
+        &self,
+    ) -> Result<Option<NativeSqlRetentionLease<'_>>, NativeSqlStoreError> {
+        if self.dialect() == crate::MemorySqlDialect::Sqlite {
+            return Ok(Some(NativeSqlRetentionLease {
+                connection: None,
+                _lifetime: std::marker::PhantomData,
+            }));
+        }
+
+        let mut connection = self.pool().acquire().await?;
+        let acquired: bool = sqlx::query_scalar("SELECT pg_try_advisory_lock(?)")
+            .bind(RETENTION_ADVISORY_LOCK_ID)
+            .fetch_one(&mut *connection)
+            .await?;
+        if !acquired {
+            return Ok(None);
+        }
+        Ok(Some(NativeSqlRetentionLease {
             connection: Some(connection),
             _lifetime: std::marker::PhantomData,
         }))

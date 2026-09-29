@@ -85,7 +85,8 @@ spec:
                 secretKeyRef:
                   name: sdkwork-memory-redis
                   key: redis-url
-            - name: SDKWORK_MEMORY_CORS_ALLOWED_ORIGINS
+            # Canonical key read by sdkwork-web-bootstrap::cors_allowed_origins_from_env.
+            - name: SDKWORK_CORS_ALLOWED_ORIGINS
               valueFrom:
                 configMapKeyRef:
                   name: sdkwork-memory-runtime

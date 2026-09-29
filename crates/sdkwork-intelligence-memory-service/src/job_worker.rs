@@ -238,6 +238,22 @@ fn read_retention_days(variable: &str, default_days: u64) -> u64 {
 }
 
 async fn run_retention_sweep(service: &OpenMemoryService, config: &RetentionConfig) {
+    // Cluster admission: exactly one replica sweeps per window. The purge
+    // statements are idempotent, so N replicas would not corrupt data — but
+    // each would repeat the full batched scans against live traffic every
+    // window, so the lease turns N-fold duplicated work into one sweep.
+    let lease = match service.store.try_acquire_retention_lease().await {
+        Ok(Some(lease)) => lease,
+        Ok(None) => {
+            tracing::debug!("memory retention sweep skipped: another replica holds the lease");
+            return;
+        }
+        Err(error) => {
+            tracing::warn!(error = %error, "memory retention lease acquisition failed; skipping this sweep");
+            return;
+        }
+    };
+
     let metrics = crate::domain_metrics::memory_domain_metrics();
     let store = service.store.as_ref();
 
@@ -303,6 +319,12 @@ async fn run_retention_sweep(service: &OpenMemoryService, config: &RetentionConf
         config.audit_days,
         |window| store.purge_audit_logs(window)
     );
+
+    if let Err(error) = lease.release().await {
+        // The Drop safety net detaches the connection, so the lock is still
+        // released even when this explicit unlock fails.
+        tracing::warn!(error = %error, "memory retention lease release failed");
+    }
 }
 
 fn spawn_provider_health_probe(

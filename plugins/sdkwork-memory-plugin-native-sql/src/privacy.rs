@@ -96,6 +96,8 @@ impl NativeSqlMemoryStore {
             // Forget is a physical privacy purge: it must enumerate every record in the
             // scope regardless of lifecycle status or sensitivity so soft-deleted rows and
             // their evidence sources cannot survive the workflow.
+            // Fetch one sentinel row past the page so a full page is not mistaken for
+            // the end of the scope; a batch exactly page-sized must continue sweeping.
             let rows = sqlx::query(
                 r#"
                 SELECT uuid
@@ -108,7 +110,7 @@ impl NativeSqlMemoryStore {
             .bind(scope.tenant_id)
             .bind(scope.space_id)
             .bind(&cursor)
-            .bind(batch_size)
+            .bind(batch_size + 1)
             .fetch_all(self.pool())
             .await?;
             if rows.is_empty() {
@@ -288,9 +290,9 @@ impl NativeSqlMemoryStore {
                 WHERE tenant_id = ?
                   AND space_id = ?
                   AND (
-                    canonical_text LIKE ? ESCAPE '\'
-                    OR object_text LIKE ? ESCAPE '\'
-                    OR COALESCE(subject, '') LIKE ? ESCAPE '\'
+                    lower(canonical_text) LIKE lower(?) ESCAPE '\'
+                    OR lower(object_text) LIKE lower(?) ESCAPE '\'
+                    OR lower(COALESCE(subject, '')) LIKE lower(?) ESCAPE '\'
                   )
                 LIMIT ?
                 "#,
@@ -465,47 +467,11 @@ impl NativeSqlMemoryStore {
         tenant_id: i64,
         space_id: i64,
     ) -> Result<u32, NativeSqlStoreError> {
-        self.delete_sources_referencing_space_events(tenant_id, space_id)
-            .await?;
-        let purged = sqlx::query(
-            r#"
-            DELETE FROM ai_event
-            WHERE tenant_id = ? AND space_id = ?
-            "#,
+        self.delete_events_batched(
+            "tenant_id = ? AND space_id = ?",
+            &[tenant_id, space_id],
         )
-        .bind(tenant_id)
-        .bind(space_id)
-        .execute(self.pool())
-        .await?
-        .rows_affected();
-        Ok(purged as u32)
-    }
-
-    /// Removes evidence-source rows that reference the events about to be purged,
-    /// including sources that point at records outside the forget scope (an event
-    /// authored by the forgotten subject can have sourced another actor's record).
-    /// Without this purge the `ai_record_source.event_id` foreign key would abort
-    /// the event deletion and permanently block the forget workflow.
-    async fn delete_sources_referencing_space_events(
-        &self,
-        tenant_id: i64,
-        space_id: i64,
-    ) -> Result<(), NativeSqlStoreError> {
-        sqlx::query(
-            r#"
-            DELETE FROM ai_record_source
-            WHERE tenant_id = ?
-              AND event_id IN (
-                SELECT id FROM ai_event WHERE tenant_id = ? AND space_id = ?
-              )
-            "#,
-        )
-        .bind(tenant_id)
-        .bind(tenant_id)
-        .bind(space_id)
-        .execute(self.pool())
-        .await?;
-        Ok(())
+        .await
     }
 
     async fn delete_events_for_user_all_spaces(
@@ -513,32 +479,63 @@ impl NativeSqlMemoryStore {
         tenant_id: i64,
         user_id: i64,
     ) -> Result<u32, NativeSqlStoreError> {
-        sqlx::query(
-            r#"
-            DELETE FROM ai_record_source
-            WHERE tenant_id = ?
-              AND event_id IN (
-                SELECT id FROM ai_event WHERE tenant_id = ? AND user_id = ?
-              )
-            "#,
-        )
-        .bind(tenant_id)
-        .bind(tenant_id)
-        .bind(user_id)
-        .execute(self.pool())
-        .await?;
-        let purged = sqlx::query(
-            r#"
-            DELETE FROM ai_event
-            WHERE tenant_id = ? AND user_id = ?
-            "#,
-        )
-        .bind(tenant_id)
-        .bind(user_id)
-        .execute(self.pool())
-        .await?
-        .rows_affected();
-        Ok(purged as u32)
+        self.delete_events_batched("tenant_id = ? AND user_id = ?", &[tenant_id, user_id])
+            .await
+    }
+
+    /// Removes evidence-source rows that reference the events about to be purged,
+    /// including sources that point at records outside the forget scope (an event
+    /// authored by the forgotten subject can have sourced another actor's record).
+    /// Without this purge the `ai_record_source.event_id` foreign key would abort
+    /// the event deletion and permanently block the forget workflow.
+    ///
+    /// The sweep runs in bounded batches: each batch removes the sources
+    /// referencing the batch's events, then the events themselves. A single
+    /// unbounded sweep would pin every scope row for the whole pass and spike
+    /// WAL on a large space; batches keep every transaction short and the
+    /// parent/child order per batch preserves the foreign-kry invariant.
+    ///
+    /// `scope_where` is a code-controlled `ai_event` WHERE fragment owned by
+    /// the calling constants below, fully parameterized by `binds` — never
+    /// request content.
+    async fn delete_events_batched(
+        &self,
+        scope_where: &str,
+        binds: &[i64],
+    ) -> Result<u32, NativeSqlStoreError> {
+        const FORGET_DELETE_BATCH: i64 = 500;
+        let select_sql = format!(
+            "SELECT id FROM ai_event WHERE {scope_where} ORDER BY id ASC LIMIT {FORGET_DELETE_BATCH}"
+        );
+        let mut purged = 0_u64;
+        loop {
+            let mut select = sqlx::query_scalar::<_, i64>(&select_sql);
+            for bind in binds {
+                select = select.bind(bind);
+            }
+            let ids = select.fetch_all(self.pool()).await?;
+            if ids.is_empty() {
+                break;
+            }
+            let placeholders = crate::store::sql_placeholders(ids.len());
+
+            // Children first: the foreign key from ai_record_source.event_id
+            // aborts the event delete otherwise.
+            let mut source_delete =
+                sqlx::query(&format!("DELETE FROM ai_record_source WHERE event_id IN ({placeholders})"));
+            for id in &ids {
+                source_delete = source_delete.bind(id);
+            }
+            source_delete.execute(self.pool()).await?;
+
+            let mut event_delete =
+                sqlx::query(&format!("DELETE FROM ai_event WHERE id IN ({placeholders})"));
+            for id in &ids {
+                event_delete = event_delete.bind(id);
+            }
+            purged += event_delete.execute(self.pool()).await?.rows_affected();
+        }
+        Ok(u32::try_from(purged).unwrap_or(u32::MAX))
     }
 
     async fn delete_events_for_user_in_space(
@@ -547,34 +544,11 @@ impl NativeSqlMemoryStore {
         user_id: i64,
         space_id: i64,
     ) -> Result<u32, NativeSqlStoreError> {
-        sqlx::query(
-            r#"
-            DELETE FROM ai_record_source
-            WHERE tenant_id = ?
-              AND event_id IN (
-                SELECT id FROM ai_event WHERE tenant_id = ? AND user_id = ? AND space_id = ?
-              )
-            "#,
+        self.delete_events_batched(
+            "tenant_id = ? AND user_id = ? AND space_id = ?",
+            &[tenant_id, user_id, space_id],
         )
-        .bind(tenant_id)
-        .bind(tenant_id)
-        .bind(user_id)
-        .bind(space_id)
-        .execute(self.pool())
-        .await?;
-        let purged = sqlx::query(
-            r#"
-            DELETE FROM ai_event
-            WHERE tenant_id = ? AND user_id = ? AND space_id = ?
-            "#,
-        )
-        .bind(tenant_id)
-        .bind(user_id)
-        .bind(space_id)
-        .execute(self.pool())
-        .await?
-        .rows_affected();
-        Ok(purged as u32)
+        .await
     }
 }
 

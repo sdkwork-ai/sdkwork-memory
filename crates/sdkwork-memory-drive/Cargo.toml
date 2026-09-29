@@ -8,6 +8,14 @@ license.workspace = true
 
 [lints]
 workspace = true
+
+# SQLite is a client-local/desktop engine only; server drives stay
+# PostgreSQL-backed. The engine is opt-in so embedding assemblies never
+# link the SQLite driver unless they declare it.
+[features]
+default = []
+sqlite = ["sqlx/sqlite"]
+
 [dependencies]
 async-trait.workspace = true
 sdkwork-database-config.workspace = true
@@ -20,5 +28,5 @@ sdkwork-drive-uploader-service = { workspace = true }
 sdkwork-drive-workspace-service = { workspace = true }
 sdkwork-memory-spi.workspace = true
 sdkwork-utils-rust.workspace = true
-sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite", "postgres", "any", "derive"] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "postgres", "any", "derive"] }
 tracing.workspace = true

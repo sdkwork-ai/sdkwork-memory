@@ -5,7 +5,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 
 use crate::pool_backend::MemorySqlDialect;
-use crate::store::{now_text, timestamp_after_seconds, NativeSqlMemoryStore, NativeSqlStoreError};
+use crate::store::{
+    is_unique_violation, now_text, timestamp_after_seconds, NativeSqlMemoryStore,
+    NativeSqlStoreError,
+};
 
 /// Outcome of a stale-running sweep: jobs returned to `'queued'` with a fresh
 /// attempt charged, and jobs past the attempt ceiling that landed terminally
@@ -84,7 +87,7 @@ impl NativeSqlMemoryStore {
         command: InsertLearningJobCommand<'_>,
     ) -> Result<(), NativeSqlStoreError> {
         let now = now_text();
-        sqlx::query(
+        let insert_result = sqlx::query(
             r#"
             INSERT INTO ai_learning_job (
               id, uuid, tenant_id, space_id, job_type, state, priority,
@@ -105,7 +108,18 @@ impl NativeSqlMemoryStore {
         .bind(&now)
         .bind(&now)
         .execute(self.pool())
-        .await?;
+        .await;
+        if let Err(error) = insert_result {
+            // The partial unique index on (tenant_id, job_type, idempotency_key)
+            // only applies when a key was supplied: a concurrent replica then
+            // enqueued the same logical job first, which is exactly the
+            // idempotent success the key exists to express. Without a key
+            // there is nothing idempotent to fall back on, so the constraint
+            // error surfaces.
+            if command.idempotency_key.is_none() || !is_unique_violation(&error) {
+                return Err(error.into());
+            }
+        }
         Ok(())
     }
 
@@ -113,13 +127,62 @@ impl NativeSqlMemoryStore {
         &self,
         max_attempts: u64,
     ) -> Result<StaleRequeueCounts, NativeSqlStoreError> {
+        self.requeue_stale_running_on_table("ai_learning_job", max_attempts)
+            .await
+    }
+
+    pub async fn requeue_stale_running_eval_runs(
+        &self,
+        max_attempts: u64,
+    ) -> Result<StaleRequeueCounts, NativeSqlStoreError> {
+        self.requeue_stale_running_on_table("ai_eval_run", max_attempts)
+            .await
+    }
+
+    /// Shared body of the two stale-running sweeps; `table` is a code-controlled
+    /// constant from the delegating methods above, never request input.
+    async fn requeue_stale_running_on_table(
+        &self,
+        table: &str,
+        max_attempts: u64,
+    ) -> Result<StaleRequeueCounts, NativeSqlStoreError> {
+        const SWEEP_BATCH: i64 = 500;
         let timestamp = now_text();
         let max_attempts = i64::try_from(max_attempts).unwrap_or(i64::MAX);
+        let mut counts = StaleRequeueCounts::default();
         // Rows past the attempt ceiling converge on the terminal `dead` state so a
         // crash-looping or panicking job cannot consume the queue forever.
-        let dead = sqlx::query(
+        //
+        // Bounded batches instead of one unbounded UPDATE: after a long worker
+        // outage the stale set can span every tenant, and a single
+        // lock-acquiring statement over all of it would pin rows for the whole
+        // sweep. Each batch enumerates ids first and updates by that list with
+        // the stale predicate re-attached, so a job re-claimed between the two
+        // statements keeps its fresh lease untouched, and the sweep always
+        // makes progress because every updated row leaves the candidate set.
+        let dead_candidates = format!(
             r#"
-            UPDATE ai_learning_job
+            SELECT id FROM {table}
+            WHERE state = 'running'
+              AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
+              AND attempt_count >= ?
+            ORDER BY id ASC
+            LIMIT ?
+            "#
+        );
+        let requeue_candidates = format!(
+            r#"
+            SELECT id FROM {table}
+            WHERE state = 'running'
+              AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
+              AND attempt_count < ?
+            ORDER BY id ASC
+            LIMIT ?
+            "#
+        );
+        let dead_update = format!(
+            r#"
+            UPDATE {table}
             SET state = 'dead',
                 error_json = ?,
                 lease_owner = NULL,
@@ -129,17 +192,13 @@ impl NativeSqlMemoryStore {
             WHERE state = 'running'
               AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
               AND attempt_count >= ?
+              AND id IN ({})
             "#,
-        )
-        .bind(r#"{"error":"max_attempts_exceeded"}"#)
-        .bind(&timestamp)
-        .bind(&timestamp)
-        .bind(max_attempts)
-        .execute(self.pool())
-        .await?;
-        let requeued = sqlx::query(
+            crate::store::sql_placeholders(SWEEP_BATCH as usize)
+        );
+        let requeue_update = format!(
             r#"
-            UPDATE ai_learning_job
+            UPDATE {table}
             SET state = 'queued',
                 attempt_count = attempt_count + 1,
                 started_at = NULL,
@@ -150,17 +209,51 @@ impl NativeSqlMemoryStore {
             WHERE state = 'running'
               AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
               AND attempt_count < ?
+              AND id IN ({})
             "#,
-        )
-        .bind(&timestamp)
-        .bind(&timestamp)
-        .bind(max_attempts)
-        .execute(self.pool())
-        .await?;
-        Ok(StaleRequeueCounts {
-            requeued: requeued.rows_affected(),
-            dead: dead.rows_affected(),
-        })
+            crate::store::sql_placeholders(SWEEP_BATCH as usize)
+        );
+        loop {
+            let dead_ids: Vec<i64> = sqlx::query_scalar(&dead_candidates)
+                .bind(&timestamp)
+                .bind(max_attempts)
+                .bind(SWEEP_BATCH)
+                .fetch_all(self.pool())
+                .await?;
+            let requeue_ids: Vec<i64> = sqlx::query_scalar(&requeue_candidates)
+                .bind(&timestamp)
+                .bind(max_attempts)
+                .bind(SWEEP_BATCH)
+                .fetch_all(self.pool())
+                .await?;
+            if dead_ids.is_empty() && requeue_ids.is_empty() {
+                break;
+            }
+
+            if !dead_ids.is_empty() {
+                let mut dead = sqlx::query(&dead_update)
+                    .bind(r#"{"error":"max_attempts_exceeded"}"#)
+                    .bind(&timestamp)
+                    .bind(&timestamp)
+                    .bind(max_attempts);
+                for id in &dead_ids {
+                    dead = dead.bind(id);
+                }
+                counts.dead += dead.execute(self.pool()).await?.rows_affected();
+            }
+
+            if !requeue_ids.is_empty() {
+                let mut requeued = sqlx::query(&requeue_update)
+                    .bind(&timestamp)
+                    .bind(&timestamp)
+                    .bind(max_attempts);
+                for id in &requeue_ids {
+                    requeued = requeued.bind(id);
+                }
+                counts.requeued += requeued.execute(self.pool()).await?.rows_affected();
+            }
+        }
+        Ok(counts)
     }
 
     pub async fn claim_queued_learning_jobs(
@@ -508,60 +601,6 @@ impl NativeSqlMemoryStore {
         .execute(self.pool())
         .await?;
         Ok(updated.rows_affected() == 1)
-    }
-
-    pub async fn requeue_stale_running_eval_runs(
-        &self,
-        max_attempts: u64,
-    ) -> Result<StaleRequeueCounts, NativeSqlStoreError> {
-        let timestamp = now_text();
-        let max_attempts = i64::try_from(max_attempts).unwrap_or(i64::MAX);
-        // Same bounded-retry contract as learning jobs: past the ceiling the run
-        // is terminal `dead` instead of being requeued forever.
-        let dead = sqlx::query(
-            r#"
-            UPDATE ai_eval_run
-            SET state = 'dead',
-                error_json = ?,
-                lease_owner = NULL,
-                lease_token = NULL,
-                lease_expires_at = NULL,
-                updated_at = ?
-            WHERE state = 'running'
-              AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
-              AND attempt_count >= ?
-            "#,
-        )
-        .bind(r#"{"error":"max_attempts_exceeded"}"#)
-        .bind(&timestamp)
-        .bind(&timestamp)
-        .bind(max_attempts)
-        .execute(self.pool())
-        .await?;
-        let requeued = sqlx::query(
-            r#"
-            UPDATE ai_eval_run
-            SET state = 'queued',
-                attempt_count = attempt_count + 1,
-                started_at = NULL,
-                lease_owner = NULL,
-                lease_token = NULL,
-                lease_expires_at = NULL,
-                updated_at = ?
-            WHERE state = 'running'
-              AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
-              AND attempt_count < ?
-            "#,
-        )
-        .bind(&timestamp)
-        .bind(&timestamp)
-        .bind(max_attempts)
-        .execute(self.pool())
-        .await?;
-        Ok(StaleRequeueCounts {
-            requeued: requeued.rows_affected(),
-            dead: dead.rows_affected(),
-        })
     }
 
     pub async fn update_eval_run_state(

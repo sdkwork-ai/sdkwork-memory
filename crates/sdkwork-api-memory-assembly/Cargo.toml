@@ -9,6 +9,17 @@ description = "Generated API assembly for sdkwork-memory application HTTP plane.
 
 [lints]
 workspace = true
+
+# Forwarded engine opt-in: default stays PostgreSQL-only so server
+# assemblies embedding the memory HTTP plane never link libsqlite3-sys.
+# Desktop/local surfaces enable `sqlite` explicitly.
+[features]
+default = []
+sqlite = [
+    "sdkwork-intelligence-memory-repository-sqlx/sqlite",
+    "sdkwork-memory-drive/sqlite",
+]
+
 [lib]
 name = "sdkwork_api_memory_assembly"
 path = "src/lib.rs"

@@ -45,4 +45,24 @@ entries:
     layer: work
     audience: [architecture, engineering, product, api, data, security, operations]
     status: reviewed
+  - id: REVIEW-20260923
+    path: docs/engineering/reviews/REVIEW-20260923-mem0-capability-parity-matrix.md
+    layer: work
+    audience: [architecture, engineering, product, api]
+    status: reviewed
+  - id: REVIEW-20260923
+    path: docs/engineering/reviews/REVIEW-20260923-memory-mem0-implementation-audit.md
+    layer: work
+    audience: [architecture, engineering, api, data, security]
+    status: reviewed
+  - id: REVIEW-20260928
+    path: docs/engineering/reviews/REVIEW-20260928-mem0-wire-compatibility-plan.md
+    layer: work
+    audience: [architecture, engineering, api, product]
+    status: reviewed
+  - id: REVIEW-20260929
+    path: docs/engineering/reviews/REVIEW-20260929-audit-remediation-record.md
+    layer: work
+    audience: [architecture, engineering, api, data, security, operations]
+    status: reviewed
 domains: []

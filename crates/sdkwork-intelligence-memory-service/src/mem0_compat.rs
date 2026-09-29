@@ -24,7 +24,7 @@
 //! crosses the mem0 boundary.
 
 use sdkwork_memory_contract::{
-    MemoryOpenApiRequestContext, MemoryServiceError, MemoryServiceResult,
+    MemoryOpenApiRequestContext, MemoryServiceError, MemoryServiceErrorKind, MemoryServiceResult,
 };
 use sdkwork_memory_spi::{
     CountActiveMemoryRecordsQuery, CreateGraphEntityCommand, CreateMemorySpaceCommand,
@@ -55,11 +55,6 @@ const MEM0_SPACE_DISPLAY_NAME: &str = "mem0 compatibility";
 /// already uses. `space_type` is an open column (no `CHECK` constraint) and no
 /// authorization decision reads it, so the additional kind is free.
 pub const MEM0_SPACE_TYPE: &str = "mem0";
-
-/// Bound on the principal-space scan used to find the mem0 space. A principal
-/// owning more spaces than this is still correct: the mem0 space, once created,
-/// is found by `default_scope`, and spaces are ordered by id.
-const MEM0_SPACE_LOOKUP_PAGE_SIZE: i32 = 200;
 
 /// `resource_type` the canonical memory mutation journal records for a memory
 /// record (`OpenMemoryService::memory_mutation_journal`). The history read
@@ -175,21 +170,24 @@ impl OpenMemoryService {
     }
 
     /// The principal's existing compatibility space, if it has one.
+    ///
+    /// An exact index seek on `uk_ai_space_owner_type` keyed by the space type:
+    /// a paged scan of the principal's spaces would miss the compatibility
+    /// space for any principal owning more spaces than one page, and then fail
+    /// on every subsequent call against the unique index.
     async fn mem0_existing_space_id(
         &self,
         tenant_id: i64,
         actor: &str,
     ) -> MemoryServiceResult<Option<u64>> {
-        let spaces = self
+        let space_id = self
             .store
-            .list_spaces_for_tenant(tenant_id, MEM0_SPACE_LOOKUP_PAGE_SIZE, 0, Some(actor))
+            .find_space_id_by_owner_and_type(tenant_id, "user", actor, MEM0_SPACE_TYPE)
             .await
             .map_err(map_native_sql_store_error)?;
-        spaces
-            .iter()
-            .find(|space| space.default_scope.as_deref() == Some(MEM0_SPACE_DEFAULT_SCOPE))
-            .map(|space| {
-                u64::try_from(space.space_id).map_err(|_| {
+        space_id
+            .map(|space_id| {
+                u64::try_from(space_id).map_err(|_| {
                     MemoryServiceError::storage("mem0 space id does not fit in an unsigned integer")
                 })
             })
@@ -296,8 +294,11 @@ impl OpenMemoryService {
 
     /// Mutation history of one canonical memory, newest first.
     ///
-    /// Authorization reuses the ordinary single-record read, so a caller can
-    /// only read the history of a memory it may read.
+    /// Authorization is the space read (the space survives every single-memory
+    /// mutation), so the history of a deleted memory stays readable: verifying
+    /// a deletion through the audit trail is the primary client flow for this
+    /// operation. The mem0 `user_id` scope comes from the live record's
+    /// metadata and is therefore absent once the record is deleted.
     pub async fn mem0_memory_history(
         &self,
         context: &MemoryOpenApiRequestContext,
@@ -305,13 +306,20 @@ impl OpenMemoryService {
         memory_id: u64,
         page_size: i32,
     ) -> MemoryServiceResult<Mem0MemoryHistory> {
-        let record = self.load_scoped_record(context, space_id, memory_id).await?;
-        let user_id = record
-            .metadata
-            .as_ref()
-            .and_then(|metadata| metadata.get("user_id"))
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_owned);
+        crate::access::assert_actor_can_access_space(&self.runtime_data_plane, context, space_id)
+            .await?;
+        let user_id = match self.load_scoped_record(context, space_id, memory_id).await {
+            Ok(record) => record
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get("user_id"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned),
+            // A deleted (or never-existing) record still serves its audit
+            // trail; only the filed entity scope is unavailable.
+            Err(error) if error.kind == MemoryServiceErrorKind::NotFound => None,
+            Err(error) => return Err(error),
+        };
         let scope = Self::scope(context, space_id)?;
         let entries = self
             .runtime_data_plane

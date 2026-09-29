@@ -25,6 +25,7 @@ config/*.local.toml
 .sdkwork/tmp/
 .sdkwork/cache/
 .sdkwork/secrets/
+.sdkwork/mem0-js-sdk/
 
 # Dependencies and build outputs
 node_modules/

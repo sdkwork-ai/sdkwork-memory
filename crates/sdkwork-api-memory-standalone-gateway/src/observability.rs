@@ -49,7 +49,7 @@ fn init_fmt_tracing() {
 fn init_otel_tracing(service_name: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use opentelemetry::trace::TracerProvider as _;
     use opentelemetry_otlp::WithExportConfig;
-    use opentelemetry_sdk::trace::TracerProvider;
+    use opentelemetry_sdk::trace::SdkTracerProvider;
     use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
     let endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")?;
@@ -57,8 +57,10 @@ fn init_otel_tracing(service_name: &str) -> Result<(), Box<dyn std::error::Error
         .with_http()
         .with_endpoint(endpoint)
         .build()?;
-    let provider = TracerProvider::builder()
-        .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
+    // The sdk's `rt-tokio` feature binds the batch processor to the Tokio
+    // runtime, so the exporter no longer takes a runtime argument.
+    let provider = SdkTracerProvider::builder()
+        .with_batch_exporter(exporter)
         .build();
     let tracer = provider.tracer(service_name.to_owned());
     let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);

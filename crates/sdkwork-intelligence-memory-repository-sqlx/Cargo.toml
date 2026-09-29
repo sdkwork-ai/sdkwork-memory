@@ -7,16 +7,28 @@ edition.workspace = true
 
 [lints]
 workspace = true
+
+# SQLite is a client-local/desktop engine only (DATABASE_SPEC: server
+# authoritative persistence is PostgreSQL). It is opt-in so server
+# assemblies that embed this repository never link libsqlite3-sys.
+[features]
+default = []
+sqlite = [
+    "sqlx/sqlite",
+    "sdkwork-database-sqlx/sqlite",
+    "sdkwork-memory-plugin-native-sql/sqlite",
+]
+
 [dependencies]
 async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "derive"] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "migrate", "derive"] }
 thiserror.workspace = true
 tracing.workspace = true
 sdkwork-database-config.workspace = true
 sdkwork-database-repository.workspace = true
-sdkwork-database-sqlx = { workspace = true, features = ["sqlite"] }
+sdkwork-database-sqlx.workspace = true
 sdkwork-database-id.workspace = true
 sdkwork-memory-database-host.workspace = true
 sdkwork-memory-plugin-native-sql.workspace = true

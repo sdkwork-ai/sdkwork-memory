@@ -415,7 +415,19 @@ pub async fn run_database_migrate_only() -> Result<(), String> {
 /// that must own worker lifecycle uses the paired factory
 /// [`assemble_api_router_retaining_background_from_env`] (API_ASSEMBLY_SPEC
 /// §6.2.1 "retaining background" rule).
+///
+/// The division is deliberate but must never be silent: without the background
+/// plane nothing drains `ai_outbox_event`, runs learning/eval jobs, or sweeps
+/// retention, and nothing else reports that gap. The one-time warning below is
+/// the operator's signal to either use the retaining-background factory or
+/// start the workers host-side.
 pub async fn web_module() -> Result<WebModule, String> {
+    tracing::warn!(
+        "memory web_module installed WITHOUT background workers: the outbox, learning, \
+         evaluation, retention, and provider-health planes are idle. Use \
+         assemble_api_router_retaining_background_from_env (and keep the returned handle \
+         alive) if this process should own them."
+    );
     Ok(WebModule::from_contribution(
         assemble_api_router_from_env().await?,
     ))

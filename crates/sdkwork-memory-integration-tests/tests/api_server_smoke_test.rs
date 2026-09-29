@@ -106,9 +106,13 @@ async fn api_server_bootstrap_auth_and_healthz_contracts() {
     std::env::remove_var("SDKWORK_DATABASE_URL");
     std::env::set_var("SDKWORK_MEMORY_OUTBOX_DELIVERY_MODE", "disabled");
     std::env::remove_var("SDKWORK_MEMORY_OUTBOX_DELIVERY_URL");
-    // Production fail-fast also covers the cursor-signing key; providing one
+    // Production fail-fast also covers the cursor-signing key (unset, blank,
+    // or shorter than 32 bytes are all rejected); providing a full-length one
     // here keeps this test focused on the outbox admission error.
-    std::env::set_var("SDKWORK_MEMORY_CURSOR_SIGNING_KEY", "smoke-test-cursor-key");
+    std::env::set_var(
+        "SDKWORK_MEMORY_CURSOR_SIGNING_KEY",
+        "smoke-test-cursor-key-0123456789abcdef",
+    );
 
     let production_bootstrap = sdkwork_api_memory_assembly::assemble_api_router_from_env().await;
     let Err(error) = production_bootstrap else {

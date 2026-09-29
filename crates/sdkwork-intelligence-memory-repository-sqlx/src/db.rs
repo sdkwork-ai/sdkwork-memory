@@ -19,7 +19,14 @@ pub async fn open_native_sql_store_from_pool(
     pool: &MemoryDatabasePool,
     id_generator: SnowflakeIdGenerator,
 ) -> Result<NativeSqlMemoryStore, String> {
-    if pool.as_sqlite().is_none() && pool.as_postgres().is_none() {
+    // The SQLite pool variant only exists in builds that opted in to the
+    // crate's `sqlite` feature; server builds stay PostgreSQL-only by
+    // default (DATABASE_SPEC: authoritative-server persistence).
+    #[cfg(feature = "sqlite")]
+    let sqlite_pool_present = pool.as_sqlite().is_some();
+    #[cfg(not(feature = "sqlite"))]
+    let sqlite_pool_present = false;
+    if !sqlite_pool_present && pool.as_postgres().is_none() {
         let configured_engine = std::env::var("SDKWORK_DATABASE_ENGINE").ok();
         if is_blank(configured_engine.as_deref()) {
             return Err(

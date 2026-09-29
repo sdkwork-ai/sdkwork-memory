@@ -1,0 +1,191 @@
+/*
+ * Memory space picker presentation.
+ *
+ * Owner: sdkwork-memory. The picker is embedded by host applications (the
+ * Agents editor is the first) so, like `models-pc-picker`, it carries its own
+ * scoped stylesheet and its own design tokens rather than depending on the host
+ * console's shell classes or on the Memory console's own scope root — a picker
+ * rendered through a portal sits outside both.
+ *
+ * Tokens are declared on the picker root with light defaults and re-declared
+ * under the resolved dark-mode class (`THEME_DARKMODE_SPEC`: the theme provider
+ * puts `dark` on `documentElement`), so one component serves a light Memory
+ * console and a dark Agents console without the host restating Memory UI rules.
+ */
+
+.sdkwork-memory-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(15 23 20 / 45%);
+}
+
+.sdkwork-memory-picker {
+  --picker-ink: #1a211e;
+  --picker-muted: #65706a;
+  --picker-line: #d8ddd8;
+  --picker-panel: #ffffff;
+  --picker-soft: #f4f5f2;
+  --picker-accent: #147d64;
+  --picker-accent-ink: #ffffff;
+  --picker-accent-soft: #e6f3ee;
+  --picker-danger: #b42318;
+
+  display: flex;
+  width: min(560px, 100%);
+  max-height: min(640px, calc(100vh - 48px));
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--picker-line);
+  border-radius: 10px;
+  color: var(--picker-ink);
+  background: var(--picker-panel);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 32%);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.dark .sdkwork-memory-picker {
+  --picker-ink: #e8e8ea;
+  --picker-muted: #9a9aa2;
+  --picker-line: #34343a;
+  --picker-panel: #1c1c1e;
+  --picker-soft: #232326;
+  --picker-accent: #3fae8b;
+  --picker-accent-ink: #08110e;
+  --picker-accent-soft: #14302742;
+  --picker-danger: #f97066;
+}
+
+.sdkwork-memory-picker *,
+.sdkwork-memory-picker *::before,
+.sdkwork-memory-picker *::after { box-sizing: border-box; }
+
+.sdkwork-memory-picker button,
+.sdkwork-memory-picker input { font: inherit; }
+
+.sdkwork-memory-picker button:focus-visible,
+.sdkwork-memory-picker input:focus-visible { outline: 2px solid var(--picker-accent); outline-offset: 2px; }
+
+.sdkwork-memory-picker-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--picker-line);
+  padding: 16px 18px 14px;
+}
+
+.sdkwork-memory-picker-header h2 { margin: 0 0 4px; font-size: 15px; font-weight: 650; }
+.sdkwork-memory-picker-header p { margin: 0; color: var(--picker-muted); font-size: 12px; line-height: 1.5; }
+
+.sdkwork-memory-picker-close {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border: 1px solid var(--picker-line);
+  border-radius: 6px;
+  color: var(--picker-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.sdkwork-memory-picker-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px 10px; }
+
+.sdkwork-memory-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.sdkwork-memory-picker-row:hover { background: var(--picker-soft); }
+.sdkwork-memory-picker-row[data-attached='true'] { background: var(--picker-accent-soft); }
+
+.sdkwork-memory-picker-row-icon {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--picker-accent);
+  background: var(--picker-accent-soft);
+}
+
+.sdkwork-memory-picker-row-copy { flex: 1 1 auto; min-width: 0; }
+.sdkwork-memory-picker-row-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.sdkwork-memory-picker-row-name strong { overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.sdkwork-memory-picker-row-meta { margin-top: 3px; color: var(--picker-muted); font-size: 11px; }
+
+.sdkwork-memory-picker-tag {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 650;
+  color: var(--picker-accent);
+  background: var(--picker-accent-soft);
+}
+
+.sdkwork-memory-picker-tag[data-tone='muted'] { color: var(--picker-muted); background: var(--picker-soft); }
+
+.sdkwork-memory-picker-actions { display: flex; flex: 0 0 auto; gap: 6px; }
+
+.sdkwork-memory-picker-button {
+  border: 1px solid var(--picker-line);
+  border-radius: 6px;
+  color: var(--picker-ink);
+  background: transparent;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.sdkwork-memory-picker-button:hover:not(:disabled) { border-color: var(--picker-accent); color: var(--picker-accent); }
+.sdkwork-memory-picker-button[data-variant='primary'] { border-color: transparent; color: var(--picker-accent-ink); background: var(--picker-accent); }
+.sdkwork-memory-picker-button[data-variant='primary']:hover:not(:disabled) { color: var(--picker-accent-ink); opacity: .9; }
+.sdkwork-memory-picker-button:disabled { cursor: not-allowed; opacity: .5; }
+
+.sdkwork-memory-picker-state { padding: 28px 18px; color: var(--picker-muted); text-align: center; font-size: 12px; }
+.sdkwork-memory-picker-state[data-tone='danger'] { color: var(--picker-danger); }
+
+.sdkwork-memory-picker-compose {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  border-top: 1px solid var(--picker-line);
+  padding: 12px 18px;
+}
+
+.sdkwork-memory-picker-compose label { flex: 0 0 auto; color: var(--picker-muted); font-size: 12px; }
+.sdkwork-memory-picker-compose input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--picker-line);
+  border-radius: 6px;
+  color: var(--picker-ink);
+  background: transparent;
+  padding: 6px 9px;
+  font-size: 12px;
+}
+
+.sdkwork-memory-picker-compose-hint { border-top: 1px solid var(--picker-line); padding: 10px 18px; color: var(--picker-muted); font-size: 11px; }
+
+.sdkwork-memory-picker-spin { animation: sdkwork-memory-picker-spin 900ms linear infinite; }
+
+@keyframes sdkwork-memory-picker-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sdkwork-memory-picker-spin { animation: none; }
+}

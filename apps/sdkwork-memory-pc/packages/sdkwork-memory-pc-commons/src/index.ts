@@ -5,5 +5,6 @@ export * from "./components/MemoryConsoleScope.tsx";
 export * from "./components/MemoryErrorBoundary.tsx";
 export * from "./components/MemoryModulePage.tsx";
 export * from "./components/MemoryPermissionState.tsx";
+export * from "./components/MemorySpacePicker.tsx";
 export * from "./components/MemorySurfaceShell.tsx";
 export * from "./components/MemorySurfaceWorkspace.tsx";

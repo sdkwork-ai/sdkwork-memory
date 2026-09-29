@@ -15,7 +15,7 @@ use sdkwork_intelligence_memory_service::OpenMemoryService;
 use sdkwork_memory_contract::{
     DeleteAllMemoriesRequest, ListEntitiesQuery, ListMemoriesQuery, MemoryFeedbackRequest,
     MemoryOpenApi, MemoryOpenApiRequestContext, MemoryRecordPatch, MemoryRecordRequest,
-    MemoryRetrievalRequest, MemoryType,
+    MemoryRetrievalRequest, MemoryServiceErrorKind, MemoryType,
 };
 use sdkwork_utils_rust::MAX_LIST_PAGE_SIZE;
 use serde_json::{Map, Value};
@@ -93,6 +93,18 @@ fn entity_value<'a>(metadata_key: &str, request: &'a Mem0AddRequest) -> Option<&
 }
 
 fn conversation_text(messages: &[crate::mem0::dto::Mem0Message]) -> Result<String, Mem0Error> {
+    // Upstream declares no count cap, but an unbounded `Vec` of one-line
+    // messages would let the join fan the request into one giant record under
+    // this surface's own control; the body limit already bounds bytes, and
+    // this bounds the entry count alongside it. 1000 entries is far above any
+    // real conversation the official clients assemble.
+    const MAX_ADD_MESSAGES: usize = 1000;
+    if messages.len() > MAX_ADD_MESSAGES {
+        return Err(Mem0Error::invalid_parameter(format!(
+            "messages must hold at most {MAX_ADD_MESSAGES} entries, received {}",
+            messages.len()
+        )));
+    }
     let parts: Vec<&str> = messages
         .iter()
         .map(|message| message.content.trim())
@@ -113,7 +125,10 @@ fn conversation_text(messages: &[crate::mem0::dto::Mem0Message]) -> Result<Strin
 /// language reads record metadata. They are written after the caller's own
 /// metadata so a caller cannot shadow the entity a record was actually filed
 /// under and make it invisible to that filter.
-fn add_metadata(request: &Mem0AddRequest) -> Result<Option<Value>, Mem0Error> {
+fn add_metadata(
+    request: &Mem0AddRequest,
+    entity_references: &[(&'static str, &'static str, String)],
+) -> Result<Option<Value>, Mem0Error> {
     let mut merged = match request.metadata.clone() {
         None => Map::new(),
         Some(Value::Object(map)) => map,
@@ -123,13 +138,11 @@ fn add_metadata(request: &Mem0AddRequest) -> Result<Option<Value>, Mem0Error> {
             ))
         }
     };
-    for (_, metadata_key) in MEM0_ENTITY_SCOPES {
-        if let Some(reference) = entity_value(metadata_key, request) {
-            merged.insert(
-                metadata_key.to_string(),
-                Value::String(reference.to_string()),
-            );
-        }
+    for (_, metadata_key, reference) in entity_references {
+        merged.insert(
+            metadata_key.to_string(),
+            Value::String(reference.clone()),
+        );
     }
     if merged.is_empty() {
         Ok(None)
@@ -138,11 +151,70 @@ fn add_metadata(request: &Mem0AddRequest) -> Result<Option<Value>, Mem0Error> {
     }
 }
 
+/// The identity axes this add is filed under, from both spellings: the
+/// top-level v1/v2 names and the v3 `filters` object. For one axis given in
+/// both, the top-level value wins, matching how the write merges caller
+/// metadata (entity identifiers are written after it).
+///
+/// Keys inside `filters` that are not identity axes are refused: an unknown
+/// key has no canonical meaning on this surface, and dropping it silently
+/// would repeat the exact false success this wire refuses to produce.
+fn add_entity_references(
+    request: &Mem0AddRequest,
+) -> Result<Vec<(&'static str, &'static str, String)>, Mem0Error> {
+    if let Some(filters) = &request.filters {
+        let object = filters.as_object().ok_or_else(|| {
+            Mem0Error::invalid_parameter("filters must be a JSON object")
+        })?;
+        for key in object.keys() {
+            if !MEM0_ENTITY_SCOPES.iter().any(|(_, metadata_key)| *metadata_key == key.as_str()) {
+                return Err(Mem0Error::invalid_parameter(format!(
+                    "filters key `{key}` is not an identity axis on this surface; file caller \
+                     metadata through `metadata` and scope the memory with the identity filters"
+                )));
+            }
+        }
+    }
+
+    let mut references: Vec<(&'static str, &'static str, String)> = Vec::new();
+    for (entity_kind, metadata_key) in MEM0_ENTITY_SCOPES {
+        if let Some(Value::Object(map)) = &request.filters {
+            if let Some(value) = map.get(metadata_key).and_then(Value::as_str) {
+                references.push((entity_kind, metadata_key, value.to_string()));
+            }
+        }
+        if let Some(reference) = entity_value(metadata_key, request) {
+            references.retain(|(existing_kind, _, _)| *existing_kind != entity_kind);
+            references.push((entity_kind, metadata_key, reference.to_string()));
+        }
+    }
+    Ok(references)
+}
+
+/// Refuses a request field this surface cannot honour, by name.
+///
+/// The field is declared on the request DTO precisely so presence is
+/// observable; answering 200 with the field dropped would be a false success.
+fn refuse_unsupported_field(
+    present: Option<&Value>,
+    field: &str,
+    reason: &str,
+) -> Result<(), Mem0Error> {
+    if present.is_some() {
+        return Err(Mem0Error::unsupported(field, reason.to_string()));
+    }
+    Ok(())
+}
+
 /// Merges explicit `filters` with any top-level entity parameters.
 ///
 /// mem0's filter language is a conjunction at the root, and `AND` groups are
-/// flattened into it, so adding entity conditions to the caller's object keeps
-/// both sets of constraints in force.
+/// flattened into it, so every axis present in either spelling stays in force.
+/// When one axis arrives in both spellings with different values, the
+/// `filters` value wins (`or_insert_with` keeps the entry that is already
+/// there); the official clients send an axis through one spelling only, so
+/// the precedence resolves a caller contradiction rather than silently
+/// dropping a constraint the caller asked for twice.
 fn entity_filter(
     explicit: &Option<Value>,
     top_level: [(&str, Option<&str>); 4],
@@ -189,6 +261,8 @@ pub(crate) async fn ping(
         org_id: Some(tenant.clone()),
         project_id: Some(tenant),
         user_email: None,
+        // The JavaScript client requires this literal; see `Mem0PingResponse`.
+        status: "ok",
     }))
 }
 
@@ -202,18 +276,64 @@ pub(crate) async fn add_memory(
     let context = require_context(context)?;
     let space_id = space_id(&product, &context).await?;
     let text = conversation_text(&request.messages)?;
-    let metadata = add_metadata(&request)?;
+
+    // Fields this surface cannot honour are refused by name, never dropped:
+    // answering 200 with a field silently discarded is a false success.
+    refuse_unsupported_field(
+        request.timestamp.as_ref(),
+        "timestamp",
+        "the canonical record keeps the store's own creation and update instants and does not \
+         accept a caller-supplied timestamp",
+    )?;
+    refuse_unsupported_field(
+        request.custom_categories.as_ref(),
+        "custom_categories",
+        "category vocabularies are deployment configuration, not a per-request switch",
+    )?;
+    refuse_unsupported_field(
+        request.custom_instructions.as_ref(),
+        "custom_instructions",
+        "extraction instructions are deployment configuration, and this surface files the \
+         literal text without an extraction step",
+    )?;
+    refuse_unsupported_field(
+        request.agent_custom_instructions.as_ref(),
+        "agent_custom_instructions",
+        "extraction instructions are deployment configuration, and this surface files the \
+         literal text without an extraction step",
+    )?;
+    refuse_unsupported_field(
+        request.structured_data_schema.as_ref(),
+        "structured_data_schema",
+        "structured extraction is not a write shape on this surface; the literal conversation \
+         text is what gets filed",
+    )?;
+    let expiration_date = match request.expiration_date.as_ref() {
+        None => None,
+        Some(Value::String(value)) if !value.trim().is_empty() => Some(value.clone()),
+        Some(Value::String(_)) => {
+            return Err(Mem0Error::invalid_parameter(
+                "expiration_date must be a non-empty ISO-8601 string",
+            ))
+        }
+        Some(_) => {
+            return Err(Mem0Error::invalid_parameter(
+                "expiration_date must be an ISO-8601 string",
+            ))
+        }
+    };
+
+    let entity_references = add_entity_references(&request)?;
+    let metadata = add_metadata(&request, &entity_references)?;
 
     // Entity scopes are registered before the record so a failure here cannot
     // leave a memory that `GET /v1/entities/` does not account for. They are
     // derived metadata, so an entity without a memory is the harmless direction.
-    for (entity_kind, metadata_key) in MEM0_ENTITY_SCOPES {
-        if let Some(reference) = entity_value(metadata_key, &request) {
-            product
-                .mem0_register_entity_scope(&context, space_id, entity_kind, reference)
-                .await
-                .map_err(Mem0Error::from)?;
-        }
+    for (entity_kind, _, reference) in &entity_references {
+        product
+            .mem0_register_entity_scope(&context, space_id, entity_kind, reference)
+            .await
+            .map_err(Mem0Error::from)?;
     }
 
     let record = product
@@ -231,7 +351,7 @@ pub(crate) async fn add_memory(
                 summary_text: None,
                 language: None,
                 sensitivity_level: None,
-                expires_at: None,
+                expires_at: expiration_date,
                 metadata,
                 tags: None,
             },
@@ -268,7 +388,40 @@ pub(crate) async fn search_memories(
     let top_k = i32::try_from(top_k)
         .map_err(|_| Mem0Error::invalid_parameter("top_k must fit in a 32-bit integer"))?;
 
-    let filters = entity_filter(
+    // Fields this surface cannot honour are refused by name, never dropped.
+    refuse_unsupported_field(
+        request.fields.as_ref(),
+        "fields",
+        "a projection changes the response contract, and the mem0 memory shape on this surface \
+         is fixed",
+    )?;
+    refuse_unsupported_field(
+        request.categories.as_ref(),
+        "categories",
+        "mem0's category model has no counterpart in the canonical record; the response reports \
+         `categories` as absent",
+    )?;
+    refuse_unsupported_field(
+        request.reference_date.as_ref(),
+        "reference_date",
+        "relative-to-a-reference-date expiry semantics are undefined on this surface",
+    )?;
+    if request.latest_only == Some(true) {
+        return Err(Mem0Error::unsupported(
+            "latest_only",
+            "latest-version-only retrieval is a retrieval-profile decision, not a per-request \
+             switch",
+        ));
+    }
+    if request.keyword_search.is_some() {
+        return Err(Mem0Error::unsupported(
+            "keyword_search",
+            "retriever-kind selection is the retrieval profile's decision; lexical matching is \
+             already part of the default ranking",
+        ));
+    }
+
+    let mut filters = entity_filter(
         &request.filters,
         [
             ("user_id", request.user_id.as_deref()),
@@ -277,6 +430,27 @@ pub(crate) async fn search_memories(
             ("app_id", request.app_id.as_deref()),
         ],
     )?;
+    // `metadata` conditions are exact matches against record metadata — the
+    // same thing the canonical filter conjunction expresses with a flat
+    // `{key: value}` entry — so they merge into it instead of being dropped.
+    if let Some(metadata) = &request.metadata {
+        let object = metadata
+            .as_object()
+            .ok_or_else(|| Mem0Error::invalid_parameter("metadata must be a JSON object"))?;
+        let mut merged = filters.take().and_then(|value| value.as_object().cloned()).unwrap_or_default();
+        for (key, value) in object {
+            if matches!(key.as_str(), "AND" | "OR" | "NOT") {
+                return Err(Mem0Error::invalid_parameter(format!(
+                    "metadata key `{key}` collides with the filter grammar; express that \
+                     condition through `filters` instead"
+                )));
+            }
+            merged.insert(key.clone(), value.clone());
+        }
+        if !merged.is_empty() {
+            filters = Some(Value::Object(merged));
+        }
+    }
 
     let retrieval = product
         .create_retrieval(
@@ -369,6 +543,28 @@ pub(crate) async fn list_memories(
         }
     }
 
+    // Fields this surface cannot honour are refused by name, never dropped: a
+    // silently ignored date window or category filter would report a smaller
+    // result set as complete.
+    for (field, value) in [
+        ("start_date", request.start_date.as_ref()),
+        ("end_date", request.end_date.as_ref()),
+        ("categories", request.categories.as_ref()),
+    ] {
+        refuse_unsupported_field(
+            value,
+            field,
+            "the canonical listing has no date or category narrowing; use POST \
+             /v3/memories/search/ with `filters`, which applies conditions to candidate selection",
+        )?;
+    }
+    if request.latest_only == Some(true) {
+        return Err(Mem0Error::unsupported(
+            "latest_only",
+            "latest-version-only listing is a retrieval-profile decision, not a per-request switch",
+        ));
+    }
+
     let page_size = params
         .page_size
         .map(|value| i32::try_from(value).map_err(|_| invalid_page_size()))
@@ -383,7 +579,7 @@ pub(crate) async fn list_memories(
                 cursor: None,
                 page_size,
                 space_id: Some(space_id),
-                show_expired: None,
+                show_expired: request.show_expired,
             },
         )
         .await
@@ -519,22 +715,21 @@ pub(crate) async fn delete_all_memories(
     let context = require_context(context)?;
 
     // The canonical bulk deletion is space-scoped. Ignoring an entity filter
-    // would delete far more than the caller asked for, so any filter is refused.
-    for (key, value) in [
-        ("user_id", &params.user_id),
-        ("agent_id", &params.agent_id),
-        ("run_id", &params.run_id),
-        ("app_id", &params.app_id),
-    ] {
-        if value.is_some() {
-            return Err(Mem0Error::unsupported(
-                "filtered delete_all",
-                format!(
-                    "the `{key}` filter cannot be applied by the canonical bulk deletion, which is \
-                     space-scoped; delete the matching memories individually"
-                ),
-            ));
-        }
+    // would delete far more than the caller asked for, so any filter is refused
+    // — in **every** spelling the clients put on the wire, not only the declared
+    // one. `MemoryClient.delete_all(filters={...})` sends a single `filters`
+    // query parameter whose value is a `str()` of the dict; reading only the four
+    // top-level names is what let that call delete the whole space and report
+    // success.
+    if let Some((key, value)) = params.requested_filter() {
+        let received: String = value.chars().take(200).collect();
+        return Err(Mem0Error::unsupported(
+            "filtered delete_all",
+            format!(
+                "the `{key}` filter cannot be applied by the canonical bulk deletion, which is \
+                 space-scoped; delete the matching memories individually (received `{received}`)"
+            ),
+        ));
     }
 
     let space_id = space_id(&product, &context).await?;
@@ -631,6 +826,20 @@ pub(crate) async fn list_entities(
     let product = product(&state)?;
     let context = require_context(context)?;
     let space_id = space_id(&product, &context).await?;
+
+    // Refused by name, mirroring `POST /v3/memories/?page=`: the canonical
+    // listing is cursor-ordered and only its first page is addressable.
+    if let Some(page) = params.page {
+        if page != 1 {
+            return Err(Mem0Error::unsupported(
+                "page-based pagination",
+                format!(
+                    "page {page} was requested; this surface returns the first page only, because \
+                     the canonical listing is cursor-ordered and its cursor is not an ordinal"
+                ),
+            ));
+        }
+    }
 
     let page_size = match params.page_size {
         None => MAX_LIST_PAGE_SIZE,
@@ -815,7 +1024,17 @@ async fn resolve_batch_targets(
         product
             .retrieve_memory(context.clone(), target.id, space_id)
             .await
-            .map_err(|_| Mem0Error::new(StatusCode::NOT_FOUND, format!("memory {} not found", target.raw_id)))?;
+            .map_err(|error| match error.kind {
+                // The pre-flight can only fail with "addressable" honestly when
+                // the store says the record does not exist; every other cause
+                // (storage outage, authorization, quota) keeps its own status
+                // and detail instead of masquerading as a vanished memory.
+                MemoryServiceErrorKind::NotFound => Mem0Error::new(
+                    StatusCode::NOT_FOUND,
+                    format!("memory {} not found", target.raw_id),
+                ),
+                _ => Mem0Error::from(error),
+            })?;
     }
 
     Ok(targets)
@@ -910,4 +1129,201 @@ pub(crate) async fn batch_delete_memories(
     Ok(Json(Mem0BatchAck {
         message: format!("Successfully deleted {deleted} memories"),
     }))
+}
+
+// ---------------------------------------------------------------------------
+// `/v2/` refusals
+//
+// Each of these is a path the official clients build verbatim and this surface
+// does not implement. They are registered for two reasons, and both are load
+// bearing:
+//
+// * A declared prefix has to carry real paths
+//   (`mem0_wire_context_selector_contract`), or `/v2/` would be a declaration
+//   that exempts a path space nobody serves.
+// * A caller reaching them must get the mem0 failure dialect. Before `/v2/` was
+//   declared, these calls were answered by the framework's surface classifier
+//   *ahead of* both mem0 bridges: `401` with `application/problem+json`, which
+//   the Python client surfaces as raw text because `mem0/client/utils.py` only
+//   unwraps `detail` when the content type starts with `application/json`.
+//
+// Every handler below takes no body and reads no parameter. That is deliberate,
+// not an omission: the answer does not depend on the request, and parsing it
+// would suggest a partial honour that does not exist.
+// ---------------------------------------------------------------------------
+
+/// `DELETE /v2/entities/{entity_type}/{entity_id}/`.
+///
+/// The Python client's `delete_users` reaches this once per user scope. It is
+/// not a single-record delete: mem0 erases the *scope* — the entity together
+/// with the memories filed under it. This service has no entity-scope deletion
+/// at all (the canonical entity route is read/patch only), so the call could only
+/// be faked by deleting the scope's memories and leaving the scope behind, or by
+/// deleting nothing and reporting success. Either is indistinguishable from an
+/// erasure that did not happen, which is the one outcome a delete must never
+/// report.
+pub(crate) async fn refuse_v2_entity_delete() -> Mem0Error {
+    Mem0Error::unsupported(
+        "entity deletion",
+        "mem0 deletes an entity scope together with the memories filed under it, and this service \
+         has no entity-scope deletion (the canonical entity route is read/patch only). Delete the \
+         scope's memories individually on the canonical surface \
+         (/mem/v3/api/memory/memories/{memoryId}) instead of calling an operation that would have \
+         to report an erasure it did not perform",
+    )
+}
+
+/// `GET /v2/entities/{entity_type}/{entity_id}/profile/`.
+///
+/// mem0's "profile" is text mem0's platform *derives* from a scope's memories and
+/// stores beside them. This service stores records, retrievals, and context
+/// packs; it neither generates nor persists a derived profile. Returning the
+/// scope's raw memories under a `profile` key would present source records as
+/// derived text, and nothing in the response would let a caller tell them apart.
+pub(crate) async fn refuse_v2_entity_profile() -> Mem0Error {
+    Mem0Error::unsupported(
+        "entity profile retrieval",
+        "mem0's profile is text derived from a scope's memories and stored by mem0's platform; \
+         this service does not generate or store profiles. The records such a profile would \
+         summarise are readable on the canonical surface (/mem/v3/api/memory/memories)",
+    )
+}
+
+/// `POST /v2/profiles/jobs/`.
+///
+/// Both `generate_profile` and `sample_profiles` post here — they differ in the
+/// filters they send, not in the resource they create. This service generates no
+/// profiles, so a job would have nothing to run; queuing one would leave the
+/// caller holding an id that can never become an answer.
+pub(crate) async fn refuse_v2_profile_job_create() -> Mem0Error {
+    Mem0Error::unsupported(
+        "profile generation job",
+        "this service does not generate profiles, so a generation job would have nothing to run; \
+         the request is refused instead of being queued into a job that never completes",
+    )
+}
+
+/// `GET /v2/profiles/jobs/{job_id}/`.
+///
+/// The read half of the pair above. A job id this service never issued has no
+/// state to report, and `404` would not be honest about why: it reads as "that
+/// job is gone" rather than "no job is ever created here". The named refusal is
+/// the only answer that does not misattribute the id space to this service.
+pub(crate) async fn refuse_v2_profile_job_retrieve() -> Mem0Error {
+    Mem0Error::unsupported(
+        "profile job lookup",
+        "no profile job is ever created on this surface, so a job id has no state to report here, \
+         and a `not found` would read as a job that expired rather than one that never existed",
+    )
+}
+
+/// `GET /v2/profiles/settings/`.
+///
+/// mem0's profile settings are **project-level** — which model writes a profile
+/// and when. This service is not the owner of a mem0 project's configuration:
+/// project and organisation administration is mem0's platform-account plane,
+/// which this surface does not serve (the same reason the `/api/v1/orgs/...` and
+/// `/api/v1/webhooks/...` calls the official clients make are not served here).
+/// A settings document derived from this service's own space scope would be a
+/// different object published under the same name.
+pub(crate) async fn refuse_v2_profile_settings_read() -> Mem0Error {
+    Mem0Error::unsupported(
+        "profile settings retrieval",
+        "mem0's profile settings are project-level configuration owned by mem0's platform-account \
+         plane, which this surface does not serve; a settings document scoped to this service's \
+         own space would be a different object under the same name",
+    )
+}
+
+/// `POST /v2/profiles/settings/`.
+///
+/// The write half of the pair above, and the more dangerous of the two: a
+/// refusal is recoverable, but accepting the write would report a configuration
+/// change that took effect nowhere.
+pub(crate) async fn refuse_v2_profile_settings_update() -> Mem0Error {
+    Mem0Error::unsupported(
+        "profile settings update",
+        "mem0's profile settings are project-level configuration owned by mem0's platform-account \
+         plane, which this surface does not serve; accepting the write would report a \
+         configuration change that took effect nowhere",
+    )
+}
+
+#[cfg(test)]
+mod add_field_tests {
+    use super::*;
+    use crate::mem0::dto::Mem0Message;
+
+    fn add_request(messages: Vec<Mem0Message>) -> Mem0AddRequest {
+        Mem0AddRequest {
+            messages,
+            user_id: None,
+            agent_id: None,
+            run_id: None,
+            app_id: None,
+            filters: None,
+            metadata: None,
+            timestamp: None,
+            expiration_date: None,
+            custom_categories: None,
+            custom_instructions: None,
+            agent_custom_instructions: None,
+            structured_data_schema: None,
+            infer: None,
+        }
+    }
+
+    #[test]
+    fn v3_filters_file_the_identity_axes() {
+        let mut request = add_request(vec![Mem0Message {
+            role: "user".to_owned(),
+            content: "hello".to_owned(),
+        }]);
+        request.filters = Some(serde_json::json!({"user_id": "alice", "agent_id": "planner"}));
+        let references = add_entity_references(&request).expect("references");
+        assert!(references.contains(&("user", "user_id", "alice".to_owned())));
+        assert!(references.contains(&("agent", "agent_id", "planner".to_owned())));
+    }
+
+    #[test]
+    fn the_top_level_spelling_wins_for_one_axis() {
+        let mut request = add_request(vec![Mem0Message {
+            role: "user".to_owned(),
+            content: "hello".to_owned(),
+        }]);
+        request.filters = Some(serde_json::json!({"user_id": "from-filters"}));
+        request.user_id = Some("from-top-level".to_owned());
+        let references = add_entity_references(&request).expect("references");
+        assert_eq!(
+            references,
+            vec![("user", "user_id", "from-top-level".to_owned())],
+            "one axis given in both spellings resolves to the top-level value"
+        );
+    }
+
+    #[test]
+    fn an_unknown_filters_key_is_refused_not_dropped() {
+        let mut request = add_request(vec![Mem0Message {
+            role: "user".to_owned(),
+            content: "hello".to_owned(),
+        }]);
+        request.filters = Some(serde_json::json!({"user_id": "alice", "category": "tools"}));
+        let error = add_entity_references(&request).expect_err("unknown key");
+        assert!(
+            error.detail().contains("category"),
+            "the refusal must name the offending key, got: {}",
+            error.detail()
+        );
+    }
+
+    #[test]
+    fn a_present_unsupported_field_is_refused_and_an_absent_one_is_not() {
+        let mut request = add_request(vec![Mem0Message {
+            role: "user".to_owned(),
+            content: "hello".to_owned(),
+        }]);
+        request.timestamp = Some(serde_json::json!(1735689600));
+        assert!(refuse_unsupported_field(request.timestamp.as_ref(), "timestamp", "why").is_err());
+        assert!(refuse_unsupported_field(None, "timestamp", "why").is_ok());
+    }
 }

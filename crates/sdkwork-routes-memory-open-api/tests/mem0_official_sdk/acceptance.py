@@ -32,6 +32,7 @@ import json
 import os
 import sys
 import traceback
+import urllib.request
 
 # Set before `mem0` is imported: the package reads these at import time.
 # Telemetry is off so the run cannot depend on, or leak to, a third party, and
@@ -66,6 +67,15 @@ UNKNOWN_ID = os.environ["MEM0_E2E_UNKNOWN_ID"]
 
 failures = []
 
+# Every classified non-2xx probe, counted where the observation is made rather
+# than by the length of a particular list. The named lists are grouped by *why*
+# a call cannot be honoured (filters, batch payload, ...), so each one is a
+# partial view: a summary built from one list's length silently under-reports
+# what the run actually exercised, and a later regression pass reads that number
+# as the coverage. Count at the point of observation instead.
+refusals_total = 0
+rejections_total = 0
+
 
 def note(message):
     print(message, file=sys.stderr, flush=True)
@@ -98,6 +108,8 @@ def expect_refusal(label, call):
     try:
         value = call()
     except Exception as exc:  # noqa: BLE001 - the exception *is* the observation
+        global refusals_total
+        refusals_total += 1
         observed = describe(exc)
         note(f"  refused {label}: {observed['type']} {observed['error_code']}")
         check(f"{label} carries a reason", bool(observed["message"]), observed)
@@ -118,6 +130,8 @@ def expect_error(label, call):
     try:
         value = call()
     except Exception as exc:  # noqa: BLE001
+        global rejections_total
+        rejections_total += 1
         observed = describe(exc)
         note(f"  rejected {label}: {observed['type']} {observed['error_code']}")
         check(f"{label} carries a reason", bool(observed["message"]), observed)
@@ -153,14 +167,40 @@ def main():
     # if it is not a 2xx. Reaching the next line proves ping, the credential
     # bridge, and the media type all agree with the client.
     client = MemoryClient(api_key=API_KEY, host=BASE_URL)
+
+    # The raw body, captured independently of this client. The Python client is
+    # content with `org_id`/`project_id`, so it would never tell us whether the
+    # response also carries what the *other* official client demands — the
+    # JavaScript one refuses to initialise unless it reads exactly `"ok"` in
+    # `status`. Reading the body directly is what makes that literal an observed
+    # fact of the surface rather than something inferred from one client's
+    # tolerance.
+    try:
+        with urllib.request.urlopen(
+            urllib.request.Request(
+                f"{BASE_URL}/v1/ping/",
+                headers={"Authorization": f"Token {API_KEY}"},
+            ),
+            timeout=10,
+        ) as response:
+            raw_ping = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:  # noqa: BLE001 - the failure *is* the observation
+        raw_ping = {"error": str(exc)}
+
     observed["ping"] = {
         "org_id": client.org_id,
         "project_id": client.project_id,
         "user_email": client.user_email,
+        "status": raw_ping.get("status"),
     }
     note(f"ping: {observed['ping']}")
     check("ping reports the tenant as project", client.org_id == EXPECTED_TENANT, observed["ping"])
     check("ping reports the tenant as org", client.project_id == EXPECTED_TENANT, observed["ping"])
+    check(
+        "ping carries the status literal the JavaScript client requires",
+        observed["ping"]["status"] == "ok",
+        raw_ping,
+    )
 
     # --- write -----------------------------------------------------------------
     added = client.add(
@@ -375,16 +415,31 @@ def main():
     # target that is not the one already deleted above.
     sibling = client.add([{"role": "user", "content": CONVERSATION}], user_id="bob")
     sibling_id = sibling["results"][0]["id"]
-    observed["refusals"] = [
+    refusals = [
         expect_refusal("get_all(filters=user_id)", lambda: client.get_all(filters={"user_id": USER_ID})),
         expect_refusal("get_all(page=2)", lambda: client.get_all(page=2)),
         expect_refusal("delete_all(user_id=...)", lambda: client.delete_all(user_id=USER_ID)),
+        # The documented way to sweep a scope. It reaches the wire as a single
+        # `filters` parameter whose value is a `str()` of the dict — a different
+        # parameter name from `user_id`, so a surface that reads only the four
+        # top-level names sees no filter at all and deletes the whole space.
+        expect_refusal(
+            "delete_all(filters=user_id)",
+            lambda: client.delete_all(filters={"user_id": USER_ID}),
+        ),
         expect_refusal(
             "update(timestamp=...)",
             lambda: client.update(sibling_id, timestamp="2026-01-01T00:00:00Z"),
         ),
         expect_refusal("delete(delete_linked=True)", lambda: client.delete(sibling_id, delete_linked=True)),
     ]
+    observed["refusals"] = refusals
+    filtered_sweep = next(r for r in refusals if r["call"] == "delete_all(filters=user_id)")
+    check(
+        "the filters-sweep refusal names the parameter it could not apply",
+        "filters" in filtered_sweep["error"]["message"],
+        filtered_sweep["error"],
+    )
 
     # --- bulk sweep ------------------------------------------------------------
     swept = client.delete_all()
@@ -401,7 +456,14 @@ def main():
     check("the sweep really emptied the space", empty.get("count") == 0, observed["list_after_sweep"])
     check("an unfiltered listing is answered", observed["list_after_sweep"]["results"] == 0)
 
-    result = {"sdk": sdk, "observed": observed, "failures": failures, "ok": not failures}
+    result = {
+        "sdk": sdk,
+        "observed": observed,
+        "refusals_total": refusals_total,
+        "rejections_total": rejections_total,
+        "failures": failures,
+        "ok": not failures,
+    }
     print(RESULT_PREFIX + json.dumps(result), flush=True)
     return 0 if not failures else 1
 
@@ -413,7 +475,16 @@ if __name__ == "__main__":
         traceback.print_exc(file=sys.stderr)
         print(
             RESULT_PREFIX
-            + json.dumps({"sdk": None, "observed": {}, "failures": ["the driver itself crashed"], "ok": False}),
+            + json.dumps(
+                {
+                    "sdk": None,
+                    "observed": {},
+                    "refusals_total": refusals_total,
+                    "rejections_total": rejections_total,
+                    "failures": ["the driver itself crashed"],
+                    "ok": False,
+                }
+            ),
             flush=True,
         )
         sys.exit(2)

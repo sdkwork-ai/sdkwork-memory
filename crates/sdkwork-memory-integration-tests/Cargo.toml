@@ -27,6 +27,8 @@ sdkwork-routes-memory-open-api.workspace = true
 sdkwork-routes-memory-backend-api.workspace = true
 sdkwork-web-core.workspace = true
 sdkwork-web-bootstrap.workspace = true
-sdkwork-api-memory-assembly.workspace = true
+# Integration flows boot embedded SQLite pools locally; server deployments
+# of the same assembly stay PostgreSQL-only via default features.
+sdkwork-api-memory-assembly = { workspace = true, features = ["sqlite"] }
 sdkwork-api-memory-standalone-gateway.workspace = true
 sdkwork-memory-test-support.workspace = true

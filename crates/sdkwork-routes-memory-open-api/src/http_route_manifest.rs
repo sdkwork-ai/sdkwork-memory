@@ -243,6 +243,42 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "memory",
         "mem0.memory.batchDelete",
     ).with_required_permission("memory.open.records.write").with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    HttpRoute::api_key(
+        HttpMethod::Delete,
+        "/v2/entities/{entity_type}/{entity_id}/",
+        "memory",
+        "mem0.entity.delete",
+    ).with_required_permission("memory.open.capabilities.read").with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    HttpRoute::api_key(
+        HttpMethod::Get,
+        "/v2/entities/{entity_type}/{entity_id}/profile/",
+        "memory",
+        "mem0.entity.profile",
+    ).with_required_permission("memory.open.capabilities.read"),
+    HttpRoute::api_key(
+        HttpMethod::Post,
+        "/v2/profiles/jobs/",
+        "memory",
+        "mem0.profile.job.create",
+    ).with_required_permission("memory.open.capabilities.read").with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    HttpRoute::api_key(
+        HttpMethod::Get,
+        "/v2/profiles/jobs/{job_id}/",
+        "memory",
+        "mem0.profile.job.retrieve",
+    ).with_required_permission("memory.open.capabilities.read"),
+    HttpRoute::api_key(
+        HttpMethod::Get,
+        "/v2/profiles/settings/",
+        "memory",
+        "mem0.profile.settings.retrieve",
+    ).with_required_permission("memory.open.capabilities.read"),
+    HttpRoute::api_key(
+        HttpMethod::Post,
+        "/v2/profiles/settings/",
+        "memory",
+        "mem0.profile.settings.update",
+    ).with_required_permission("memory.open.capabilities.read").with_rate_limit_tier(RateLimitTier::OpenApiDefault),
 ];
 
 pub fn open_route_manifest() -> HttpRouteManifest {

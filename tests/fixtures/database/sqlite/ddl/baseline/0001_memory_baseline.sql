@@ -1006,3 +1006,21 @@ CREATE INDEX IF NOT EXISTS idx_ai_record_space_user
 ALTER TABLE ai_learning_job ADD COLUMN next_attempt_at TEXT;
 ALTER TABLE ai_eval_run ADD COLUMN next_attempt_at TEXT;
 ALTER TABLE ai_eval_run ADD COLUMN error_json TEXT;
+
+-- source: tests/fixtures/database/sqlite/migrations/0016_hard_delete_cleanup_indexes.up.sql
+-- Hard-delete cleanup reverse-reference indexes, mirroring the PostgreSQL 0003
+-- migration: the per-record hard-delete cleanup updates ai_habit by promoted
+-- memory, ai_edge by source memory, and ai_memory_binding by either endpoint.
+-- Without them a forget sweep runs one full table scan per deleted record.
+
+CREATE INDEX IF NOT EXISTS idx_ai_habit_promoted_memory
+  ON ai_habit (tenant_id, promoted_memory_id);
+
+CREATE INDEX IF NOT EXISTS idx_ai_edge_source_memory
+  ON ai_edge (tenant_id, source_memory_id);
+
+CREATE INDEX IF NOT EXISTS idx_ai_memory_binding_source
+  ON ai_memory_binding (tenant_id, source_memory_id);
+
+CREATE INDEX IF NOT EXISTS idx_ai_memory_binding_target
+  ON ai_memory_binding (tenant_id, target_memory_id);

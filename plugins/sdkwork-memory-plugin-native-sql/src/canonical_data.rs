@@ -11,7 +11,10 @@ use serde_json::Value;
 use sqlx::{any::AnyRow, Row};
 
 use crate::pool_backend::MemorySqlDialect;
-use crate::store::{NativeSqlMemoryRecordDetail, NativeSqlMemoryStore, NativeSqlStoreError};
+use crate::store::{
+    record_detail_from_row, NativeSqlMemoryRecordDetail, NativeSqlMemoryStore,
+    NativeSqlStoreError,
+};
 
 impl NativeSqlMemoryStore {
     pub async fn create_canonical_memory_atomic(
@@ -515,6 +518,75 @@ impl NativeSqlMemoryStore {
         self.retrieve_record_detail(scope, memory_id)
             .await
             .map(|record| record.map(into_canonical_record))
+    }
+
+    /// Rehydrates a candidate pool with one parameterized IN-list query per
+    /// chunk instead of one point query per candidate, mirroring
+    /// `retrieve_record_detail`'s predicates exactly (tenant, space, not
+    /// deleted). Chunks stay well under both engines' parameter ceilings.
+    pub async fn retrieve_canonical_memories_batch(
+        &self,
+        scope: &sdkwork_memory_spi::MemoryScopeContext,
+        memory_ids: &[String],
+    ) -> Result<Vec<Option<MemoryCanonicalRecord>>, NativeSqlStoreError> {
+        if memory_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        const CHUNK_SIZE: usize = 100;
+        let mut record_by_uuid = std::collections::BTreeMap::new();
+        for chunk in memory_ids.chunks(CHUNK_SIZE) {
+            let sql = format!(
+                r#"
+                SELECT
+                  r.uuid,
+                  r.space_id,
+                  r.user_id,
+                  r.scope,
+                  r.memory_type,
+                  r.subject,
+                  r.predicate,
+                  r.object_text,
+                  r.canonical_text,
+                  r.confidence,
+                  r.evidence_count,
+                  r.contradiction_count,
+                  r.status,
+                  r.sensitivity_level,
+                  r.created_at,
+                  r.updated_at,
+                  r.expires_at,
+                  r.metadata_json,
+                  r.version,
+                  sup.uuid AS supersedes_uuid,
+                  sub.uuid AS superseded_by_uuid
+                FROM ai_record r
+                LEFT JOIN ai_record sup
+                  ON sup.id = r.supersedes_memory_id AND sup.tenant_id = r.tenant_id
+                LEFT JOIN ai_record sub
+                  ON sub.id = r.superseded_by_memory_id AND sub.tenant_id = r.tenant_id
+                WHERE r.tenant_id = ?
+                  AND r.space_id = ?
+                  AND r.status <> 'deleted'
+                  AND r.uuid IN ({})
+                "#,
+                crate::store::sql_placeholders(chunk.len())
+            );
+            let mut query = sqlx::query(&sql)
+                .bind(scope.tenant_id)
+                .bind(scope.space_id);
+            for memory_id in chunk {
+                query = query.bind(memory_id);
+            }
+            let rows = query.fetch_all(self.pool()).await?;
+            for row in rows {
+                let detail = record_detail_from_row(row);
+                record_by_uuid.insert(detail.memory_id.clone(), into_canonical_record(detail));
+            }
+        }
+        Ok(memory_ids
+            .iter()
+            .map(|memory_id| record_by_uuid.remove(memory_id))
+            .collect())
     }
 
     async fn load_canonical_record(

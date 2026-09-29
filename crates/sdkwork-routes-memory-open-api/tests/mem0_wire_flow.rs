@@ -152,14 +152,23 @@ async fn mem0_platform_wire_serves_the_official_client_flow() {
     let _env = lock_integration_test_env().await;
     let app = build_app().await;
 
-    // 1. `GET /v1/ping/` — the constructor calls this before anything else and
-    //    reads `org_id`/`project_id`; a non-2xx makes the client raise.
+    // 1. `GET /v1/ping/` — both clients resolve their identity through this
+    //    call and read `org_id`/`project_id`; a non-2xx makes them raise.
     let ping = send(&app, "GET", "/v1/ping/", None, true).await;
     assert_eq!(ping.status, StatusCode::OK, "ping: {:?}", ping.body);
     let ping_body = ping.body.as_ref().expect("ping body");
     assert_eq!(ping_body["org_id"], "100001");
     assert_eq!(ping_body["project_id"], "100001");
     assert!(ping_body["user_email"].is_null());
+    // Pinned at the wire, not only through a client: the JavaScript client's
+    // `ping()` throws unless this literal is exactly `"ok"` (its constructor
+    // then leaves the identity unresolved), and a run that only ever drove the
+    // Python client would never notice its absence.
+    assert_eq!(
+        ping_body["status"], "ok",
+        "the JavaScript MemoryClient requires this literal: {:?}",
+        ping.body
+    );
 
     // 2. `POST /v3/memories/add/`
     let add = send(
@@ -345,6 +354,39 @@ async fn mem0_platform_wire_serves_the_official_client_flow() {
     // interceptor for the caller to be told what was missing.
     assert_eq!(gone.detail(), "memory not found");
 
+    // The history of a deleted memory stays readable: verifying a deletion
+    // through the audit trail is the primary client flow for this endpoint,
+    // and upstream keeps serving it after a delete. Authorization moves to the
+    // space (which survives), so the DELETE event is still on the wire.
+    let deleted_history = send(
+        &app,
+        "GET",
+        &format!("/v1/memories/{memory_id}/history/"),
+        None,
+        true,
+    )
+    .await;
+    assert_eq!(
+        deleted_history.status,
+        StatusCode::OK,
+        "history after delete: {:?}",
+        deleted_history.body
+    );
+    deleted_history.assert_json_media_type("history after delete");
+    let deleted_events: Vec<String> = deleted_history
+        .body
+        .as_ref()
+        .expect("history body")
+        .as_array()
+        .expect("history is a JSON array")
+        .iter()
+        .filter_map(|entry| entry["event"].as_str().map(str::to_owned))
+        .collect();
+    assert!(
+        deleted_events.iter().any(|event| event == "DELETE"),
+        "the deleted memory's history must record the DELETE event, got {deleted_events:?}"
+    );
+
     // 10. `DELETE /v1/memories/`
     let swept = send(&app, "DELETE", "/v1/memories/", None, true).await;
     assert_eq!(swept.status, StatusCode::OK, "sweep: {:?}", swept.body);
@@ -445,6 +487,18 @@ async fn mem0_wire_refuses_untranslatable_parameters_by_name() {
         (
             "DELETE",
             "/v1/memories/?user_id=bob".to_owned(),
+            None,
+            StatusCode::NOT_IMPLEMENTED,
+            "filtered delete_all",
+        ),
+        // The same filter, in the spelling the Python client actually produces:
+        // `delete_all(filters={...})` reaches the wire as one `filters` parameter
+        // holding a `str()` of the dict. Reading only the four top-level names let
+        // this call delete the entire space and answer 200 — the refusal has to
+        // cover every spelling, or the guard it implements does not exist.
+        (
+            "DELETE",
+            "/v1/memories/?filters=%7B%27user_id%27%3A+%27bob%27%7D".to_owned(),
             None,
             StatusCode::NOT_IMPLEMENTED,
             "filtered delete_all",

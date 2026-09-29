@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use rand::Rng;
+use rand::RngExt;
 use sdkwork_database_id::{NodeLease, SnowflakeIdGenerator};
 use sdkwork_id_core::max_snowflake_node_id;
 use sdkwork_memory_contract::{MemoryServiceError, MemoryServiceResult};
@@ -76,7 +76,7 @@ fn resolve_snowflake_node_id() -> u16 {
     }
 
     // Random node_id to avoid collisions between processes on the same host.
-    rand::thread_rng().gen_range(0..=max_snowflake_node_id())
+    rand::rng().random_range(0..=max_snowflake_node_id())
 }
 
 /// Install the development/test fallback node_id **explicitly**.
@@ -292,8 +292,29 @@ pub const MAX_SCOPE_SPACE_IDS: usize = 32;
 /// Default maximum input events per extraction request.
 pub const DEFAULT_MAX_EXTRACTION_INPUT_EVENTS: usize = 1_000;
 
+/// Default byte budget for the total extracted event content fed to one
+/// extraction run (LLM prompt or deterministic candidates).
+///
+/// Without this bound the prompt scales with `DEFAULT_MAX_EXTRACTION_INPUT_EVENTS`
+/// times whatever a single event payload carries (up to the request body limit), so
+/// one tenant-sized extraction job could allocate gigabytes in a worker task. The
+/// budget is a prefix bound: extraction covers input events in request order until
+/// the budget is exhausted, and the result reports how many events were left out
+/// (`skippedEventCount`) instead of silently pretending they were processed.
+pub const DEFAULT_MAX_EXTRACTION_INPUT_BYTES: usize = 2 * 1024 * 1024;
+
 /// Default maximum events exported per job.
 pub const DEFAULT_MAX_EXPORT_EVENTS: usize = 100_000;
+
+/// Default maximum concurrent export runs per process.
+///
+/// An export holds its whole payload in memory (collected rows, encoded bytes,
+/// and — for inline results — the reparsed value), so a handful of concurrent
+/// large exports multiply into gigabytes of resident set even though every
+/// individual run stays under its byte cap. The process-level semaphore caps
+/// that product; extra requests queue on the permit and surface the standard
+/// request deadline instead of unbounded memory.
+pub const DEFAULT_EXPORT_MAX_CONCURRENCY: usize = 2;
 
 /// Maximum memory ids per targeted `scope: "memory"` forget request.
 ///
@@ -320,11 +341,33 @@ pub fn max_extraction_input_events() -> usize {
     )
 }
 
+pub fn max_extraction_input_bytes() -> usize {
+    read_env_usize(
+        "SDKWORK_MEMORY_EXTRACTION_MAX_INPUT_BYTES",
+        DEFAULT_MAX_EXTRACTION_INPUT_BYTES,
+    )
+}
+
 pub fn max_export_events() -> usize {
     read_env_usize(
         "SDKWORK_MEMORY_EXPORT_MAX_EVENTS",
         DEFAULT_MAX_EXPORT_EVENTS,
     )
+}
+
+pub fn export_max_concurrency() -> usize {
+    read_env_usize(
+        "SDKWORK_MEMORY_EXPORT_MAX_CONCURRENCY",
+        DEFAULT_EXPORT_MAX_CONCURRENCY,
+    )
+}
+
+/// Process-level export admission. The semaphore is created once with the
+/// configured permit count; acquiring a permit serializes export runs so the
+/// per-run byte caps cannot multiply across unbounded concurrent requests.
+pub fn export_permits() -> &'static tokio::sync::Semaphore {
+    static PERMITS: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
+    PERMITS.get_or_init(|| tokio::sync::Semaphore::new(export_max_concurrency().max(1)))
 }
 
 pub fn max_provider_health_bindings() -> usize {
@@ -353,7 +396,9 @@ fn cursor_signing_key() -> &'static Vec<u8> {
             Ok(value) if !value.trim().is_empty() => value.into_bytes(),
             _ => {
                 tracing::warn!(
-                    "SDKWORK_MEMORY_CURSOR_SIGNING_KEY is not set; list cursors fall back to                      the built-in signing key. Set a per-deployment key so cursors cannot be                      verified across deployments."
+                    "SDKWORK_MEMORY_CURSOR_SIGNING_KEY is not set; list cursors fall back to \
+                     the built-in signing key. Set a per-deployment key so cursors cannot be \
+                     verified across deployments."
                 );
                 b"sdkwork-memory-cursor-v1".to_vec()
             }
@@ -361,29 +406,48 @@ fn cursor_signing_key() -> &'static Vec<u8> {
     })
 }
 
-/// Rejects a production-like startup whose cursor-signing key is unset: the
-/// built-in fallback keeps tokens well-formed, but a public key gives the MAC
-/// no cross-deployment anti-forgery value, so production must set
-/// `SDKWORK_MEMORY_CURSOR_SIGNING_KEY` explicitly.
+/// Minimum `SDKWORK_MEMORY_CURSOR_SIGNING_KEY` length in production: an HMAC
+/// key is entropy, not a password policy to negotiate, and a short key makes
+/// the token's anti-forgery property brute-forceable.
+const MIN_CURSOR_SIGNING_KEY_BYTES: usize = 32;
+
+/// Rejects a production-like startup whose cursor-signing key is unset or too
+/// short: the built-in fallback keeps tokens well-formed, but a public key
+/// gives the MAC no cross-deployment anti-forgery value, and a short key makes
+/// it brute-forceable, so production must set an explicit key of real length.
+/// Rejects a production-like startup whose cursor-signing key is unset or too
+/// short: the built-in fallback keeps tokens well-formed, but a public key
+/// gives the MAC no cross-deployment anti-forgery value, and a short key makes
+/// it brute-forceable, so production must set an explicit key of real length.
 pub fn validate_runtime_secrets_for_environment() -> Result<(), String> {
-    if is_production_like_environment()
-        && std::env::var("SDKWORK_MEMORY_CURSOR_SIGNING_KEY")
-            .map(|value| value.trim().is_empty())
-            .unwrap_or(true)
-    {
-        return Err(
-            "production Memory runtime requires SDKWORK_MEMORY_CURSOR_SIGNING_KEY: the built-in \
-             cursor-signing fallback is not acceptable for production deployments"
-                .to_string(),
-        );
+    if !is_production_like_environment() {
+        return Ok(());
+    }
+    validate_cursor_signing_key(std::env::var("SDKWORK_MEMORY_CURSOR_SIGNING_KEY").ok())
+}
+
+/// The environment-independent body of the cursor-key admission gate.
+fn validate_cursor_signing_key(key: Option<String>) -> Result<(), String> {
+    let missing = || {
+        "production Memory runtime requires SDKWORK_MEMORY_CURSOR_SIGNING_KEY: the built-in \
+         cursor-signing fallback is not acceptable for production deployments"
+            .to_string()
+    };
+    let key = key.filter(|value| !value.trim().is_empty()).ok_or_else(missing)?;
+    if key.as_bytes().len() < MIN_CURSOR_SIGNING_KEY_BYTES {
+        return Err(format!(
+            "SDKWORK_MEMORY_CURSOR_SIGNING_KEY must be at least {MIN_CURSOR_SIGNING_KEY_BYTES} \
+             bytes in production; a shorter key makes cursor forgery brute-forceable"
+        ));
     }
     Ok(())
 }
 
 fn cursor_mac(raw: &str) -> String {
-    use hmac::Mac;
+    // digest 0.11 moved key initialization onto `KeyInit` (re-exported by hmac).
+    use hmac::{KeyInit, Mac};
     type HmacSha256 = hmac::Hmac<sha2::Sha256>;
-    let mut mac = HmacSha256::new_from_slice(cursor_signing_key())
+    let mut mac = <HmacSha256 as KeyInit>::new_from_slice(cursor_signing_key())
         .expect("HMAC accepts any key length");
     mac.update(raw.as_bytes());
     use base64::Engine as _;
@@ -428,7 +492,7 @@ pub fn decode_list_cursor(cursor: Option<&str>) -> MemoryServiceResult<Option<St
         .decode(data.as_bytes())
         .map_err(|_| malformed())?;
     let raw = String::from_utf8(raw).map_err(|_| malformed())?;
-    if cursor_mac(&raw) != signature {
+    if !sdkwork_utils_rust::secure_compare(&cursor_mac(&raw), signature) {
         return Err(malformed());
     }
     Ok(Some(raw))
@@ -493,5 +557,72 @@ mod tests {
             validated_page_size(Some(0)).unwrap_err().code,
             "invalid_parameter"
         );
+    }
+
+    #[test]
+    fn cursor_tokens_round_trip() {
+        let token = encode_list_cursor("42");
+        assert_eq!(decode_list_cursor(Some(&token)).unwrap().as_deref(), Some("42"));
+        // Absent and blank cursors mean "first page" and pass through.
+        assert_eq!(decode_list_cursor(None).unwrap(), None);
+        assert_eq!(decode_list_cursor(Some("  ")).unwrap(), None);
+    }
+
+    #[test]
+    fn forged_and_malformed_cursors_are_rejected_as_invalid_parameters() {
+        let token = encode_list_cursor("42");
+        let (prefix, rest) = token.split_once('.').expect("token has a prefix");
+        let (data, signature) = rest.rsplit_once('.').expect("token has a signature");
+
+        // A tampered payload keeps the valid signature but must not verify.
+        let tampered_data = if data.starts_with('M') {
+            format!("N{}", &data[1..])
+        } else {
+            format!("M{}", &data[1..])
+        };
+        for forged in [
+            // Bit-flipped payload under the original signature.
+            format!("{prefix}.{tampered_data}.{signature}"),
+            // A valid token for one key re-signed for nothing: truncated MAC.
+            format!("{prefix}.{data}.{}", &signature[..signature.len() - 2]),
+            // Missing pieces and unknown prefixes.
+            data.to_string(),
+            format!("v2.{data}.{signature}"),
+            format!("{prefix}.{data}.{signature}.extra"),
+        ] {
+            let error = decode_list_cursor(Some(&forged)).expect_err(&forged);
+            assert_eq!(
+                error.code, "validation_error",
+                "forgery stays a client error, never a 5xx: {forged}"
+            );
+        }
+    }
+
+    #[test]
+    fn cursor_verification_uses_the_shared_constant_time_compare() {
+        // MAC verification delegates to sdkwork-utils' audited fold rather
+        // than a local reimplementation; pin the delegation contract here so
+        // a timing-sensitive local copy cannot quietly return.
+        assert!(sdkwork_utils_rust::secure_compare("abc", "abc"));
+        assert!(!sdkwork_utils_rust::secure_compare("abc", "abd"));
+        assert!(!sdkwork_utils_rust::secure_compare("abc", "abcd"));
+        assert!(!sdkwork_utils_rust::secure_compare("", "a"));
+        assert!(sdkwork_utils_rust::secure_compare("", ""));
+    }
+
+    #[test]
+    fn production_cursor_key_admission_rejects_missing_short_and_blank_keys() {
+        let missing = validate_cursor_signing_key(None).expect_err("missing");
+        assert!(missing.contains("requires SDKWORK_MEMORY_CURSOR_SIGNING_KEY"));
+        let blank = validate_cursor_signing_key(Some("   ".to_owned())).expect_err("blank");
+        assert!(blank.contains("requires SDKWORK_MEMORY_CURSOR_SIGNING_KEY"));
+        let short = validate_cursor_signing_key(Some("too-short".to_owned())).expect_err("short");
+        assert!(
+            short.contains("at least 32"),
+            "the length gate must name the floor, got: {short}"
+        );
+        // The floor is inclusive: 31 bytes fails, exactly 32 passes.
+        assert!(validate_cursor_signing_key(Some("x".repeat(31))).is_err());
+        assert_eq!(validate_cursor_signing_key(Some("x".repeat(32))), Ok(()));
     }
 }

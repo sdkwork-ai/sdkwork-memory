@@ -5646,6 +5646,54 @@ async fn sqlite_forget_all_records_in_space_purges_soft_deleted_records_and_even
 }
 
 #[tokio::test]
+async fn sqlite_forget_all_records_in_space_sweeps_past_the_page_boundary() {
+    // Regression: the sweep must keep walking when a fetch comes back exactly
+    // page-sized. A `LIMIT page` query without the +1 sentinel reported
+    // `has_more = false` on a full page and silently left every record past the
+    // first page alive while the workflow still reported success.
+    let store = new_contract_store().await;
+    let scope = MemoryScopeContext::for_test(1, 1);
+    let page_size = sdkwork_utils_rust::MAX_LIST_PAGE_SIZE;
+    let total_records = i64::from(page_size) + 5;
+
+    for index in 0..total_records {
+        store
+            .create_record_open_api(
+                &scope,
+                &format!("forget-page-record-{index:04}"),
+                "user",
+                "semantic",
+                None,
+                None,
+                &format!("forget page value {index}"),
+                &format!("The forget page value {index}"),
+                "internal",
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+    }
+
+    let stats = store.forget_all_records_in_space(&scope).await.unwrap();
+    assert_eq!(
+        stats.deleted_records,
+        u32::try_from(total_records).expect("record count fits u32"),
+        "every record past the first page must be purged too"
+    );
+
+    let remaining: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM ai_record WHERE tenant_id = ? AND space_id = ?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.space_id)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(remaining, 0, "the space must be fully purged");
+}
+
+#[tokio::test]
 async fn sqlite_record_update_preserves_object_text_and_refreshes_fts() {
     let store = new_contract_store().await;
     let scope = MemoryScopeContext::for_test(1, 1);

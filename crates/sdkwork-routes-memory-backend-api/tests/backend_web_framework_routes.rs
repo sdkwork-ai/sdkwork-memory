@@ -28,6 +28,17 @@ use tower::util::ServiceExt;
 
 #[tokio::test]
 async fn backend_router_web_framework_rejects_unauthenticated_requests() {
+    // Declared, not inherited. Building the hardened layer requires
+    // `SDKWORK_MEMORY_ENVIRONMENT` to be set explicitly, and
+    // `lock_integration_test_env` is what sets it. This test used to rely on its
+    // sibling test having already called that helper — a *global* `set_var` side
+    // effect — so whether it passed depended on which test the harness scheduled
+    // first: run alone it failed, run after its sibling it passed. Depending on
+    // another test's side effect makes the whole suite non-deterministic, which
+    // is worse than a red test: a repeat regression cannot tell a real
+    // regression from a lost race. Taking the guard here also serialises the two,
+    // so the outcome is the same either way.
+    let _env = lock_integration_test_env().await;
     let app = wrap_router_with_iam_database_web_framework(
         IamWebRequestContextResolver::new(None),
         build_router_with_shared_backend_api(Arc::new(RecordingBackendApi::default())),

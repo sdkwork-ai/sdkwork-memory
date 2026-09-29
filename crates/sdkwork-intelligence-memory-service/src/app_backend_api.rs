@@ -1000,6 +1000,24 @@ impl MemoryAppApi for OpenMemoryService {
                 platform::MAX_SCOPE_SPACE_IDS
             )));
         }
+        // Reject an unsupported format before any payload is collected: the
+        // encode step would otherwise refuse it after the full keyset sweep.
+        match request.format.as_str() {
+            "json" | "jsonl" | "markdown" => {}
+            other => {
+                return Err(MemoryServiceError::validation(format!(
+                    "unsupported export format: {other}"
+                )));
+            }
+        }
+        // Hold a process-level permit across collect/encode/upload so the
+        // per-run byte caps cannot multiply into unbounded resident memory.
+        // The guard borrows the process-lifetime semaphore; dropping it at
+        // function end releases the slot.
+        let _export_permit = platform::export_permits()
+            .acquire()
+            .await
+            .map_err(|_| MemoryServiceError::storage("export admission semaphore closed"))?;
         let open_context = Self::to_open_context(&context);
         let authorizations = access::authorize_actor_for_spaces_access(
             &self.runtime_data_plane,

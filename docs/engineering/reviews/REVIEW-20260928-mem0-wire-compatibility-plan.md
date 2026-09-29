@@ -310,8 +310,12 @@ DELETE /v1/memories/?user_id=bob
 3. ~~**材料化权威与本轮修正后的 DTO 尚未对齐**……~~ **已修，见 §7.7.2。** 材料化器 `tools/materialize_phase1_contracts.mjs` 的 `mem0Schemas()` 是权威来源；改生成器后重跑材料化，`apis/open-api/…` 与 `sdks/sdkwork-memory-sdk/openapi/…` 两份同步更新。
 4. ~~**`sdkwork-web-contract` 的材料化期校验器不认识新字段**：`validate_openapi_routes_context_selectors` / `validate_openapi_document_context_selectors` 不接受 profile，因此仍会拒绝 `user_id` 参数。本仓不跑它们（门禁实测 0），但这是「运行时允许 / 材料化期拒绝」的不对称，应补一个带前缀参数的变体，或让调用方传入。~~
    **已收口，见 §7.8。** 实测确认它**不只是"不跑"**——本仓权威文档喂进去是**真的红**（`OpenAPI path /v1/memories/ declares forbidden context selector query parameter user_id`）。本条为此前唯一的跨仓不对称，现已补上带前缀参数的变体，并在本仓新增契约测试把两侧钉在同一个前缀列表上。
-5. §5 风险 1（路由清单 `prefix` 语义）仍未实测收口；mem0 的 10 个操作也尚未做**逐字段**契约对拍（现有 E2E 覆盖行为，不覆盖字段全集）。
-6. **官方 SDK 仍未覆盖的端点**（`get_memory_export`/`get_summary`/`get_profile`/`get_profile_settings`/`delete_users`，落在 `/v1/exports/`、`/v1/summary/`、`/v2/entities/…`、`/v2/profiles/…`）。本仓未路由这些路径，客户端会拿到 404。**这是尚未实现的兼容面，不是回归出的缺陷**；本轮已按裁定补了**映射到既有能力**的三条（见 §7.8），其余仍取决于产品是否需要。
+5. §5 风险 1（路由清单 `prefix` 语义）仍未实测收口；
+   ~~mem0 的 10 个操作也尚未做**逐字段**契约对拍（现有 E2E 覆盖行为，不覆盖字段全集）。~~
+   **已做，见 §13**（现为 15 条路径 / 19 条 verb-edge）。对拍方式是两个官方客户端**满字段真送达到捕获桩**，
+   翻出 **22 个「客户端可送达而我方静默丢弃」的字段**，其中一条是破坏性的
+   （`delete_all(filters=…)` 清空整个空间，§13.4，已修）；其余 21 条待裁定（§13.5）。
+6. **官方 SDK 仍未覆盖的端点**（`get_memory_export`/`get_summary`/`get_profile`/`get_profile_settings`/`delete_users`，落在 `/v1/exports/`、`/v1/summary/`、`/v2/entities/…`、`/v2/profiles/…`）。本仓未路由这些路径，客户端会拿到 404。**这是尚未实现的兼容面，不是回归出的缺陷**；本轮已按裁定补了**映射到既有能力**的三条（见 §7.8），其余仍取决于产品是否需要。**精确计数（2026-09-28 续二补）：Python 客户端 28 个线上方法中已服务 12 个、未路由 16 个；TS 客户端不新增未路由风险——见 §9.3 / §9.4。**
 7. **框架仓 `sdkwork-routes-web-framework-backend-api` 有一条预存红灯，与本轮改动无关**：`openapi_authority::committed_openapi_authority_matches_runtime_contract` 失败，因为 `apis/backend-api/web-framework/openapi.json` 相对 `build_openapi_document` 已漂移（构建器多出 `deprecated: true` 的 `limit` 查询参数，79 insertions / 7 deletions）。**已用 `git stash` 摘掉本轮 5 个改动文件后复现，证明是 HEAD 既有状态**。修法是重跑 `cargo test -p sdkwork-routes-web-framework-backend-api materialize_openapi_authority_file -- --ignored`；本轮**未擅自改**（属另一条线面的制品，且会污染本轮的提交面）。
 
 ### 7.6 官方 SDK 真跑通（本轮新增；含一处自我更正）
@@ -321,10 +325,22 @@ DELETE /v1/memories/?user_id=bob
 官方 PyPI 包 **`mem0ai==2.2.0`**，经真实 `TcpListener`（`axum::serve`，`127.0.0.1:<ephemeral>`）驱动本仓生产装配，**端到端通过**：
 
 ```
-official mem0ai 2.2.0 drove the platform wire end to end (5 refusal(s) classified)
+official mem0ai 2.2.0 drove the platform wire end to end (6 refusal(s), 5 rejection(s) classified)
 test official_mem0_sdk_drives_the_platform_wire ... ok
 test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 ```
+
+> **本节初写时该行是 `(5 refusal(s) classified)`**——当时驱动只覆盖 5 条拒绝、还没有 batch 那三条拒绝。
+> 现在驱动覆盖 6 条 501 拒绝 + 5 条 4xx 拒绝，下面这个数字是**当前实测**。
+> 顺带修掉一处**会误导后续回归**的计数缺陷：原来的汇总行取的是两个"具名列表"的长度
+> （`observed["refusals"]`=5 / `observed["rejections"]`=3），而 feedback 撤回那条拒绝与
+> 两条 batch 删除后的回读 404 各自记在**别的块**里，于是汇总行**系统性地少报**。
+> 已改为在 `expect_refusal`/`expect_error` **观察点**累加 `refusals_total`/`rejections_total`
+> 并写进驱动 JSON，Rust 侧对 `Some(6)`/`Some(5)` 断言。**变异控制**：把 `refusals_total += 1`
+> 改成 `+= 0` 后该断言立刻变红并打印
+> `six classified 501 refusals: five in the filter/paging list plus the feedback withdrawal`；
+> 已用 `cp` 字节备份还原。**教训：验收汇总不能用"某个列表的长度"当总数——列表是按原因分组的，
+> 分组数不等于总数。**
 
 覆盖的调用链（全部由 `MemoryClient` 自己构造请求、自己解析响应、自己抛异常）：
 
@@ -553,7 +569,7 @@ PROBE_RESULT: REJECTED: OpenAPI path `/v1/memories/` declares forbidden context 
 | 项 | 命令 | 结果 |
 | --- | --- | --- |
 | memory 工作区测试 | `cargo test --workspace` | **`CARGO_EXIT=0`**；含 `mem0_wire_flow` 6/6、`mem0_wire_context_selector_contract` 4/4、`mem0_official_sdk_flow` 1 ignored（设计如此），全仓 0 failed |
-| 官方 SDK 验收 | `--ignored` 单跑 | **1 passed**，10 条调用链 + 5 条 501 拒绝 + 3 条 4xx 拒绝全绿 |
+| 官方 SDK 验收 | `--ignored` 单跑 | **1 passed**，13 条 verb-edge 调用链 + 6 条 501 拒绝 + 5 条 4xx 拒绝全绿 |
 | 契约测试 | `openapi_phase1_contract` / `openapi_body_schema_parity` / `route_manifest_openapi_parity` / `open_api_prefix_contract` / `runtime_plugin_layout_contract` | **5/5 exit 0** |
 | 门禁 | `_sdkwork:check` 的 15 条 + `check:cors-standard` | **16/16 exit 0**（`crate-inventory` 实测扫描 20 个一级目录 / 20 manifest / 20 member，**不是假零**） |
 | 框架工作区测试 | `cargo test --workspace`（框架仓） | 仅 1 条红：见 §7.5 第 7 条（**预存**，已用 stash 归因） |
@@ -562,3 +578,859 @@ PROBE_RESULT: REJECTED: OpenAPI path `/v1/memories/` declares forbidden context 
 `external_prefix_suspends_the_route_context_selector_rule`、`external_prefix_suspends_the_document_context_selector_rule`
 （36 passed / 0 failed）。后者同时是**变异控制**：同一份文档不带声明必须红，且混装文档里 SDKWork 自有路径上的
 同名参数**仍然**是违规。
+
+---
+
+## 9. 官方 SDK 双客户端面覆盖对拍（2026-09-28 续二）
+
+§7.6/§8.2 的验收只跑通了 **Python** 官方客户端。但裁定原文是「完整兼容 mem0 的 **api 和 sdk**」，
+所以本节回答剩下的那个问题：**JS/TS 官方 SDK 有没有 Python 覆盖不到的线上差异？**
+
+**结论先行：没有。** 两个客户端对所有共有操作使用**完全相同的路径与动词**；TS 只多出一条上游自己标了
+`@deprecated` 的路径（`deleteUser`），并且 TS **缺** `get_summary` 与 `chat`（后者本来就是本地抛错）。
+因此 §7.6 那次 Python 真跑通对**共享线面**具有代表性，不是「只验了一半」。
+
+### 9.1 枚举命令（可复跑，不依赖网络）
+
+上游两份客户端源码都在 gitignore 的 `external/mem0/`，所以这是纯静态取证：
+
+```sh
+# TS 客户端路径
+grep -oE "/v[0-9][a-zA-Z0-9/_?=&{}.\$]*" \
+  external/mem0/mem0-ts/src/client/mem0.ts | sed 's/\${[^}]*}/{}/g' | sort -u
+# Python 客户端路径
+grep -rhoE "/v[0-9][a-zA-Z0-9/_?=&{}.\$\"\`']*" \
+  external/mem0/mem0/client/ | sed 's/["`'"'"']//g; s/\${[^}]*}/{}/g' | sort -u
+# 公开方法（归一成 snake_case 后逐名对拍）
+grep -oE "async [a-zA-Z_]+\(" external/mem0/mem0-ts/src/client/mem0.ts
+grep -oE "^    def [a-zA-Z_]+\(" external/mem0/mem0/client/main.py
+# 我方真源是 paths.rs + mem0_routes()，不是本文档
+sed -n '/pub fn mem0_routes/,/^}/p' crates/sdkwork-routes-memory-open-api/src/mem0/mod.rs
+```
+
+⚠️ **坑**：`grep -oE "[\"'\`]/v[0-9]…"` 只捞到 **1** 条。因为 TS 客户端的路径写在
+`` `${this.host}/v3/…` `` 模板串里，`/v` 前面不是引号。**枚举客户端路径时不能假设路径紧跟在引号后**——
+这个错误会让人误判「TS 只用一个版本化路径」。
+
+### 9.2 我方实际**实现**的 13 条 verb-edge（真源 `mem0_routes()`）
+
+| 路径 | 动词 | mem0 语义 |
+| --- | --- | --- |
+| `/v1/ping/` | GET | `ping`（**TS 独有**方法；Python 只在构造函数里隐式打） |
+| `/v1/entities/` | GET | `users` |
+| `/v1/memories/` | DELETE | `delete_all` |
+| `/v1/memories/{memory_id}/` | GET / PUT / DELETE | `get` / `update` / `delete` |
+| `/v1/memories/{memory_id}/history/` | GET | `history` |
+| `/v1/feedback/` | POST | `feedback` |
+| `/v1/batch/` | PUT / DELETE | `batch_update` / `batch_delete` |
+| `/v3/memories/` | POST | `get_all`（**POST**，不是 GET） |
+| `/v3/memories/add/` | POST | `add` |
+| `/v3/memories/search/` | POST | `search` |
+
+10 条路径、13 条 verb-edge。验收驱动**逐条都打到了**：`ping` 靠 `MemoryClient(api_key=…, host=…)`
+构造函数发起（构造函数不是 2xx 就抛），其余 12 条是显式方法调用——
+`grep -oE "client\.[a-z_]+\(" acceptance.py` 正好给出 12 个不同方法 + 隐式 ping = 13，与 verb-edge 数一致。
+
+#### 9.2.1 `/v2/` 的 6 条 verb-edge：**只拒绝，不实现**（§12 落地）
+
+| 路径（上游形状逐字） | 动词 | 客户端方法 | 拒绝理由（handler 内的原话，已实测回传） |
+| --- | --- | --- | --- |
+| `/v2/entities/{entity_type}/{entity_id}/` | DELETE | `delete_users` | 实体作用域擦除；本服务**没有**实体删除（canonical 实体路由是 read/patch） |
+| `/v2/entities/{entity_type}/{entity_id}/profile/` | GET | `get_profile` | profile 是 mem0 平台**派生**并存储的文本，本服务不生成也不存 |
+| `/v2/profiles/jobs/` | POST | `generate_profile` `sample_profiles` | 不生成 profile，作业无事可做 |
+| `/v2/profiles/jobs/{job_id}/` | GET | `get_profile_job` | 作业从未创建，id 无状态可报 |
+| `/v2/profiles/settings/` | GET | `get_profile_settings` | 项目级配置属 mem0 平台账号面，不归本服务 |
+| `/v2/profiles/settings/` | POST | `update_profile_settings` | 同上；接受写入等于报告一个**哪都没生效**的配置变更 |
+
+**为何是这 6 条、不是上游 `/v2/` 全空间**：本面的设计原则是「镜像官方客户端真正发起的调用」，
+不是「镜像上游 OpenAPI 的每一条」。这 6 条正是**两个官方客户端可达**的 `/v2/` 形状。
+`/v2/memories/`、`/v2/memories/search/`（上游声明的 v2 版列表/检索）官方客户端**不发**，
+故不注册——它们仍在已声明的 `/v2/` 前缀之下，因此依旧得到 mem0 形状的 `404`，
+只是没有具名理由（实测见 §12.5）。
+
+**运行期总账**：`mem0_routes()` 现在 15 条路径 / **19 条 verb-edge** = 13 实现 + 6 拒绝。
+
+### 9.3 覆盖账（Python 客户端 28 个线上方法）
+
+| 归类 | 数 | 明细 |
+| --- | --- | --- |
+| **已服务**（真实现） | **12** | `add` `get` `get_all` `update` `delete` `delete_all` `history` `search` `users` `feedback` `batch_update` `batch_delete` |
+| **显式拒绝**（具名 501） | **7** | profiles(6) `generate_profile` `get_profile` `get_profile_job` `get_profile_settings` `update_profile_settings` `sample_profiles`；`delete_users`。**§12 落地** |
+| 未路由 | **9** | exports(2) `create_memory_export` `get_memory_export`；`get_summary`（此 3 条在 `/v1/` 之下 ⇒ mem0 形状 404）；webhooks(4) `create_webhook` `get_webhooks` `update_webhook` `delete_webhook`；projects(2) `get_project` `update_project`（此 6 条在 `/api/v1/` ⇒ **未框化 401**，§12.5(c) 已按裁定登记） |
+
+12 + 7 + 9 = 28。
+
+另有两个 Python 方法**根本不产生线上调用**，因此**不算缺口**（用源码举证，不是推测）：
+
+- `chat()` → `raise NotImplementedError("Chat is not implemented yet")`。上游自己就没实现，属**客户端本地守卫**。
+- `reset()` → 方法体是 `self.delete_users()` + 遥测。它是**组合**而非线上操作，覆盖度跟随 `delete_users`。
+
+**本条表的沿革（避免与 §9.3 旧读数冲突）**：§9.3 最初记的是「已服务 12 / 未路由 16」。
+§12 把其中 **7 条从「未路由」提升为「显式拒绝」** —— 它们此前会拿到 **401 + 整段 JSON**（连 404 都不是），
+现在拿到具名 501。这不是「多实现了 7 个功能」，而是**把一个误导性的失败换成一个诚实的失败**：
+「未路由」这一栏里混着两种完全不同的东西（mem0 形状 404 / 未框化 401），本表按后者重新切开。
+剩余 9 条属产品裁定范围（§7.5 第 6 条），且分成两族（本服务尚未实现的 3 条 / 不归本服务的账号面 6 条）。
+
+### 9.4 TS 与 Python 的差异只有两处，都不构成新增风险
+
+| 差异 | 方向 | 判定 |
+| --- | --- | --- |
+| `deleteUser` → `DELETE /v1/entities/{entity_type}/{entity_id}/` | **TS 独有** | 上游源码自标 `@deprecated`（改用 `deleteUsers`），且属 §7.5 第 6 条已登记未路由面。**不为它单独开面。** |
+| `get_summary` / `chat` | **Python 独有** | `chat` 是本地抛错；`get_summary` 与 TS 无关。TS 侧不存在这条缺口。 |
+
+对每条共有方法，TS 的 `host` 与动词都逐条核对过（`add`/`getAll`/`search`/`history`/`deleteAll`/`deleteUsers`）：
+`/v3/memories/add/` POST、`/v3/memories/` POST、`/v3/memories/search/` POST、
+`/v1/memories/{id}/history/` GET、`/v1/memories/?…` DELETE 与 §9.2 真源**逐字一致**。
+
+### 9.5 本轮附带修复：验收驱动的解释器发现（否则「反复回归」不可复跑）
+
+`--ignored` 的官方 SDK 验收在本轮**第一次跑直接失败**，但它失败的原因不是被验收的东西：
+
+```text
+no interpreter could `import mem0`; tried python (exit exit code: 1), python3 (exit …), py (program not found)
+```
+
+根因：`find_python_with_mem0()` 只按 **PATH 上的裸名字**探测，而 `mem0ai` 按工作区
+运行环境隔离规则装在**隔离环境**里。于是「上一轮验证通过的环境」与「这一轮 PATH 上的环境」一旦不同，
+门禁就**静默失去可复跑性**——测试还在、`--ignored` 还在，但再也跑不起来。
+
+修法（只改 `tests/mem0_official_sdk_flow.rs`，+46/−8）：发现顺序改为
+`MEM0_E2E_PYTHON` → 已激活的 `VIRTUAL_ENV` → 仓库根 `.venv`（Windows `Scripts/python.exe` /
+POSIX `bin/python` 两种布局）→ 裸 `python`/`python3`/`py`，**仍然逐条靠 `import mem0` 实测**，
+不是按名字猜。仓库根用 `Path::ancestors().nth(2)` 而非 `join("..")`，让未命中时报出的候选路径可读
+（否则打印 `crates\x\..\..\.venv\Scripts\python.exe`）。
+
+验证（三条，都不是"看着对"）：
+
+| 断言 | 命令/条件 | 结果 |
+| --- | --- | --- |
+| 走**新增的 venv 路径**能发现 | `env -u MEM0_E2E_PYTHON VIRTUAL_ENV=…/envs/default cargo test … -- --ignored` | **1 passed**（4.06s，6 拒绝 + 5 4xx 分类） |
+| 无可用解释器时**仍然大声失败且列全候选** | `env -u MEM0_E2E_PYTHON -u VIRTUAL_ENV …` | exit **101**，消息列出 `.venv\Scripts\python.exe`、`.venv\bin\python`、`python`、`python3`、`py` 五个候选 |
+| 候选路径**不带 `..` 残留** | 同上，看消息文本 | `D:\sdkwork-space\sdkwork-memory\.venv\Scripts\python.exe` |
+
+**教训（可复用）**：「按可执行文件名探测依赖」在依赖装在隔离环境时必然退化；凡是跨会话复跑的验收，
+解释器/运行时发现必须**包含隔离环境约定位置**，并且失败时的候选清单要能直接告诉人或 agent 该设哪个环境变量。
+
+---
+
+## 10. 第二条腿：JavaScript 官方客户端**真跑通**（2026-09-28 续三）
+
+### 10.1 为什么静态对拍不够
+
+§9 用源码对拍论证了 TS 客户端「不新增未路由风险」——那证明的是**路径与动词一致**，
+证明不了**客户端会接受我们的响应形状**。把 `mem0ai`（npm，实测 **3.3.1**）真接上去跑，
+立刻翻出静态对拍看不见的东西：一处**产品缺陷**和三处**必须声明、不能抹平的客户端差异**。
+
+### 10.2 🔴 A. `GET /v1/ping/` 缺 `status: "ok"`（产品缺陷，已修）
+
+- **实测证据**：装包 `dist/index.mjs` 可 grep 到 `status !== "ok"`；`memory.ts` 的 `ping()`：
+  ```
+  if (response.status !== "ok") { throw new APIError(response.message || "API Key is invalid"); }
+  ```
+- **为什么此前没发现**：Python 客户端的 `_validate_api_key` 只要求 `data.get("org_id") and data.get("project_id")`
+  ——**对 `status` 完全不关心**。所以「只跑 Python」这条线面**永远**测不出这个缺口。
+- **⚠️ 机制更正（2026-09-28 续四核源码后推翻先前措辞）**：先前文档与本仓注释写作
+  「JS 客户端**连构造都过不去**」——**不准确**。实测 `mem0.ts` L249-277：`_initializeClient()`
+  把 `ping()` 的异常 **`catch` 掉只 `console.error`、不 rethrow**；`constructor` 只在
+  **空 apiKey** 时抛。真正的后果是**三层**，逐层都有不同可见度：
+
+  | 层 | 行为 | 可见度 |
+  | --- | --- | --- |
+  | `new MemoryClient(...)` | **不抛**，只打一条 init 错误日志 | 最隐蔽：构造"成功" |
+  | `await client.ping()` | **抛** `APIError("API Key is invalid")` | 直接调它才看得见 |
+  | 身份解析 | `organizationId`/`projectId` **留空**（`_resolveIdentity` 因此不缓存这次结果） | 使 `getProject`/`updateProject` 报 *"organizationId and projectId must be set"* |
+  | 记忆类方法 | **照常发出**（源码注释：*"Memory requests never wait on this"*） | 所以只跑 add/search 的驱动**也不会失败** |
+
+  ⇒ 教训：**"客户端拒了"这句话必须落到具体是哪一层拒**；把"构造成功但身份没解析"写成
+  "构造不出来"，会让读者以为任何调用都会挂，从而**低估**这个字段到底影响什么。
+  已把该判断**做成断言**而不是注释：JS 驱动新增
+  `check("the client resolved its identity from the ping body", client.organizationId != null && client.projectId != null)`
+  ——字段的效力现在由**客户端自身状态**证明。
+- **修法**：`Mem0PingResponse` 增加 `status: &'static str`（值 `"ok"`）→ handlers 赋 `"ok"` →
+  生成器 `mem0Schemas()` 补上该字段 → **重新材料化**。
+- **爆炸半径已证明**：`git diff --stat` 显示两份权威**各 +4 行**，只有这一个字段：
+  ```
+  apis/open-api/memory-open-api.openapi.json                   | 4 ++++
+  sdks/sdkwork-memory-sdk/openapi/memory-open-api.openapi.json | 4 ++++
+  ```
+- **三处钉住**（不是只改实现）：
+  1. `mem0_wire_flow.rs` 加线面断言（不经过任何客户端）；
+  2. **两个驱动都额外裸读取** `GET /v1/ping/` 原始 body——Python 客户端不读该字段，
+     只靠它自己的观测**无法**证明契约满足，必须直接看响应；
+  3. 共享断言加 `ping.status == "ok"`，两个客户端一起受约束。
+- **变异控制（两条，第二条是用来隔离的）**：
+  1. `"ok"` → `"banana"` ⇒ 线面测试红（打印 `status: String("banana")`）+ JS 验收红（0.49s 内失败）。
+     ⚠️ 但先变红的是**raw-body 那条断言**，不是 identity 断言——所以这一条**证明不了**
+     identity 断言有效，它只证明"有人在守这个字面量"。
+  2. **隔离变异**：让 ping 仍回 `status:"ok"`、但把 `org_id`/`project_id` 置空
+     （= "status 对而身份没解析"这个真实场景）⇒ **唯一**失败的是
+     `FAIL the client resolved its identity from the ping body {"organizationId":null,"projectId":null}`。
+     ⇒ 这才是 identity 断言**非空**的证明，也精确对应了这个字段**真实影响什么**。
+  两条均 `cp` 字节备份还原，`sha256` 与改前一致（`634ada4eabbc94f0`）。
+
+### 10.3 三处客户端差异（**声明**而不是宽容）
+
+| # | 差异 | 实测 | 处理 |
+| --- | --- | --- | --- |
+| B | **响应键被 camelCase** | `_fetchWithErrorHandling` = `snakeToCamelKeys(raw)` | JS 驱动映射**回** snake_case，保持**一份观测契约** |
+| C | **错误信息是原始 body** | JS `message` = `{"detail":"memory not found"}`；Python `message` = `memory not found` | 共享断言由 `==` 改为**包含**本线面措辞；**精确形式钉在各自客户端测试**（Python 钉 bare 形式） |
+| D | **`batchUpdate` 打不了 metadata** | JS 把每条映射成 `{memory_id, text}`，**丢弃其它字段** | metadata 断言从共享函数**移入 Python 测试**；JS 测试断言该字段**不存在**，作为已记录的能力上限 |
+| E | **feedback 枚举守卫方向相反** | Python 本地 `ValueError`（不发请求）；JS **没有守卫** ⇒ 非法值**到达线上** | 各客户端断言各自的行为：Python 断言本地守卫，JS 断言**服务端 400 拒绝** |
+
+- **type 与 `HTTP_<status>` 两边完全一致**（实测：404→`MemoryNotFoundError`、400→`ValidationError`、
+  501→`MemoryError`；`errorCode`/`error_code` 仅命名风格不同）⇒ 这一层是**真正的共享契约**。
+- E 是**意外收获**：JS 没有本地守卫，于是这次真跑通覆盖了 **服务端闭集校验**——
+  而 §7.6 的 Python 跑通**明确声明不覆盖**它（当时只在手写请求测试里钉过）。两个客户端互补。
+
+### 10.4 验收侧结构改动：一份期望，两个客户端
+
+新增 `tests/mem0_official_sdk_support/mod.rs`，把原先散在 Python 测试里的约 20 条断言收敛为
+`assert_wire_observations(result, stderr, label, expect)`。各客户端用 `ClientExpectations` **声明**
+自己的拒绝/拒绝集合与总数，因此：
+
+- 客户端差异是**声明出来的**，不是被"宽容断言"抹平的；
+- 「两个客户端满足同一组期望」从**口头承诺**变成**结构事实**（同一个函数、同一份期望表）；
+- 新增客户端只需写「驱动 + 差异声明」，不需要复制断言逻辑。
+
+Python 测试瘦身为「驱动 + 客户端特有精度断言」，新的 `mem0_official_js_sdk_flow.rs` 同构。
+
+### 10.5 顺带修掉一处**预存 flake**（与本轮无关，但会让「反复回归」不可信）
+
+`backend_router_web_framework_rejects_unauthenticated_requests` **依赖兄弟测试的全局副作用**：
+它自己**没有**调用 `lock_integration_test_env()`，而那是唯一设置 `SDKWORK_MEMORY_ENVIRONMENT`
+的地方（该变量不设就会 panic 拒绝启动）。于是结果取决于 libtest 先调度哪个用例。取证：
+
+| 实验 | 结果 |
+| --- | --- |
+| 单跑该用例（`--exact`） | **FAILED** —— `SDKWORK_MEMORY_ENVIRONMENT must be set explicitly…` |
+| 整二进制单线程（兄弟用例先跑，先 `set_var`） | **passed** |
+
+⇒ 典型**顺序依赖 flake**。**它比红灯更坏**：反复回归无法区分「真回归」和「输了一次竞态」。
+修法：该用例自己取 `lock_integration_test_env()` 守卫——既**声明前置**又**串行化**两者。
+修后：单跑过、并行过、`--test-threads=4` 连跑 3 次过。
+
+#### 10.5.1 修复后补的**直接归因**（不是"应该好了"，是"单独跑现在真的过"）
+
+| 证据 | 结果 |
+| --- | --- |
+| 该用例**单独跑**（`-p sdkwork-routes-memory-backend-api --test backend_web_framework_routes <name>`） | **`1 passed`**（修复前此项必 FAILED） |
+| 该用例在全量日志中的状态 | `test backend_router_web_framework_rejects_unauthenticated_requests ... ok`（`ws-final2.log` L1567） |
+| 全量 | `CARGO_TEST_WORKSPACE_EXIT=0`、`FAILED` 计数 **0**、**802 passed / 0 failed** |
+
+#### 10.5.2 ⚠️ 那次红灯的读数「710 passed / 1 failed」**不能**用来和 802 对比
+
+同一份日志做全局累计重建后：该用例所在二进制是**第 71 / 102 个**，**截至它结束全局累计恰好 711**
+（= 710 passed + 1 failed）——与红灯读数**逐字吻合**。结论：
+
+> 那不是"范围更小的套件"，而是 **`cargo test` 默认 fail-fast**：第一个失败的测试二进制之后，
+> **其后 31 个二进制、91 个测试从未执行**。
+
+⇒ 教训升级：**红灯的 `n passed` 是两个变量的乘积（真失败 + fail-fast 截断），不能当作覆盖率读数。**
+把"红轮的 710"与"绿轮的 802"并列会得到"补了 92 个测试"的错觉——实际它们一直在，只是红轮根本没跑到。
+**要范围可比，就一律 `--no-fail-fast`**；否则红轮的数字只配用来定位，不配用来对比。
+
+### 10.6 本轮回归（改动后）
+
+| 项 | 命令 | 结果 |
+| --- | --- | --- |
+| 全工作区测试 | `cargo test --workspace` | **`CARGO_TEST_WORKSPACE_EXIT=0`**、**802 passed / 0 failed**、`FAILED` 计数 0（日志 `%TEMP%/ws-final2.log`；83 个测试二进制 + 19 个 doc-test） |
+| 契约测试 | `_sdkwork:test` 里全部 **15** 个 `node --test` | **15/15 exit 0**（含 `parity`／`prefix`／`SPI`／插件布局／`database-framework`／SDK ownership／crate-inventory 自测；上一版此处误记 11，实际条数按 `package.json` 的 `_sdkwork:test` 计） |
+| 门禁 | `_sdkwork:check` 全 15 条 + `check:cors-standard` | **16/16 exit 0**（直调同一批检查器，覆盖等价；见 §10.6.1） |
+| Python 官方 SDK 验收 | `MEM0_E2E_PYTHON=<有 mem0ai 的解释器> cargo test -p sdkwork-routes-memory-open-api --test mem0_official_sdk_flow -- --ignored --nocapture` | **1 passed**（6 拒绝 + 5 4xx 分类）⚠️ **必须带该环境变量**，见 §10.6.2 |
+| **JS 官方 SDK 验收** | `cargo test -p sdkwork-routes-memory-open-api --test mem0_official_js_sdk_flow -- --ignored` | **1 passed**（6 拒绝 + **6** 4xx 分类：多出的那条正是 E 的服务端枚举拒绝；无需环境变量，自解析） |
+| 线面流 | `mem0_wire_flow` | **6/6** |
+| 豁免两半 | `mem0_wire_context_selector_contract` | **4/4** |
+
+#### 10.6.1 门禁为何是"直调"而不是 `pnpm check`
+
+本工作树 `node_modules` 不存在 ⇒ `pnpm check` / `pnpm verify` 第一步即
+`'sdkwork-app' 不是内部或外部命令`。故**逐条直接调用同一批检查器**（`package.json` 的
+`_sdkwork:check` 展开），覆盖面等价：
+
+- 用 **`D:/sdkwork-space/sdkwork-memory` 正斜杠 Windows 路径**传 `--root` / `--workspace`。
+  用 Git Bash 的 `/d/sdkwork-space/...` 会被 node 解析成 `D:\d\sdkwork-space\...`，
+  **门禁照样 exit 0 但报 `crates scanned: 0` 的假读数**——绿得毫无意义。
+- `topology:validate` 需兄弟仓 `sdkwork-app-topology`；`check:*` 里的
+  `db:validate` / `db:pool:validate` 分别是 `check-database-framework-standard.mjs` /
+  `check-process-shared-database-pool.mjs`。
+- 恢复完整 `pnpm check` / `pnpm verify` 链，需先 `pnpm install`。
+
+#### 10.6.2 ⚠️ 两条验收的**调用契约不对称**（Python 要环境变量，JS 自解析）
+
+本机实测（裸 shell，未激活任何 venv）：
+
+| 客户端 | 需要环境变量 | 裸跑结果 |
+| --- | --- | --- |
+| JS | **否**（`require.resolve("mem0ai")` + `process.execPath` 自推导 node workspace） | `1 passed` |
+| **Python** | **`MEM0_E2E_PYTHON`** | **exit 101**：`no interpreter could \`import mem0\`` |
+
+Python 侧候选全落空的原因不是探测写坏了，而是**依赖本来就装在隔离环境里**：
+
+| 候选 | 实际情况 |
+| --- | --- |
+| `python` / `python3`（PATH） | 命中 managed **base** 解释器 `…/binaries/python/versions/3.13.12/python.exe` —— 按本机隔离规则**不该**有包 ⇒ `ModuleNotFoundError: No module named 'mem0'` |
+| `VIRTUAL_ENV` | 未设置（仓外无激活的 venv） |
+| 仓库根 `.venv` | **不存在** ⇒ `os error 3` |
+
+真正装了 `mem0ai==2.2.0` 的是 **`C:\Users\Charlesluo\.workbuddy\binaries\python\envs\default`**
+（隔离 venv）。`MEM0_E2E_PYTHON` 指向它之后：
+
+```
+PY_SDK_EXIT=0
+ping: {'org_id': '100001', 'project_id': '100001', 'user_email': None, 'status': 'ok'}
+  ok   ping carries the status literal the JavaScript client requires
+official mem0ai 2.2.0 (Python) drove the platform wire end to end (6 refusal(s), 5 rejection(s) classified)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.39s
+```
+
+**这不改代码**（把 agent 侧二进制目录硬编进产品仓的测试是错的），**改的是记录方式**：
+
+> 上一版这里只写了「1 passed」，**没写它依赖 `MEM0_E2E_PYTHON`** ⇒ 一条**不可复现的读数**。
+> 凡是验收读数，**必须连同调用契约一起记**（哪个环境变量、指向什么、为什么需要）。
+> 否则下一个人照文档敲命令得到 exit 101，会误判成"兼容性坏了"。
+
+⇒ 通用判据：验收脚本的依赖若允许装在**隔离环境**，那么
+① 探测要覆盖隔离环境的**约定位置**（`VIRTUAL_ENV` / 仓根 `.venv`）；
+② 兜底闸门是**显式环境变量**，且失败信息必须**直接点名该设哪个变量**（本仓已做到）；
+③ 文档里的读数要带**完整调用命令行**，不能只写"passed"。
+
+#### 10.6.3 顺带查出的**无门禁项**：`docs/INDEX.yaml` 登记缺口（**未改，待裁定**）
+
+顺 §10.6.2 的流程核对文档登记时发现：
+
+| 事实 | 证据 |
+| --- | --- |
+| `docs/engineering/reviews/` 下有 **4** 份 `REVIEW-*` | `ls` 回显 |
+| `docs/INDEX.yaml` 只登记了 **1** 份 | 仅 `REVIEW-20260923-memory-commercial-readiness-audit.md`（L43-47） |
+| `reviews/README.md` 的 `## Records` 也只列 **1** 份 | 该 README L11-14 |
+| **零门禁读它** | 全仓 `grep -rln "INDEX.yaml"`（除 `target/`、`node_modules/`）**零命中**；15/15 契约测试在此状态下全绿 |
+
+规格侧口径是 **SHOULD 不是 MUST**：`DOCUMENTATION_SPEC.md:57`「`docs/INDEX.yaml` `SHOULD` register Canon paths,
+Working document ids …」、`:305`「exists **or** the repository documents why it is not yet adopted」。
+本地 `reviews/README.md:5-7` 则把这条读成硬要求：「a superseding review is a new `REVIEW-*` document
+**registered in `docs/INDEX.yaml`**」。
+
+⚠️ **同处还有一处分歧要一并说清**：该 README 明写 review 记录是 **point-in-time、
+must not be rewritten**，而本文档已按 §8 / §9 / §10 三轮在同一份文档里续写。
+按该 README 的字面口径，§9/§10 本应是**新文档**；本仓实际沿用的「一份滚动 REVIEW + 编号续篇」
+是此前会话既成的事实做法。
+
+⇒ **本轮不改**（`INDEX.yaml` 属登记类文件，按本仓约定**先问再改**；且其中 2 份是此前会话的产物）。
+待裁定项：① 是否把缺的 3 份补进 `INDEX.yaml` + `README.md`；② 是否给这条 SHOULD 配一条门禁
+（现状是**没人守**）；③ 滚动续写要不要拆成独立文档。
+
+**教训（可复用）**：
+1. **「另一个官方客户端」不是形式主义**——它是唯一能发现「某客户端特有的响应形状要求」的手段。
+   静态对拍能证明路径一致，**证明不了**客户端会接受响应。
+2. **客户端差异要声明，不要宽容**：宽容断言会把真分歧藏起来；声明 + 各自断言能保精度又能表达差异。
+3. **顺序依赖的测试比红灯更坏**：它让反复回归无法分辨真回归与竞态。见到「单跑红、整跑绿（或反之）」，
+   先查它是否依赖了别的用例的全局副作用。
+4. **红轮的 `n passed` 不是覆盖率读数**：`cargo test` 默认 fail-fast，第一个失败的目标之后全部不跑。
+   拿红轮的 710 与绿轮的 802 并列，会误判为"补了 92 个测试"。要横向对比就加 `--no-fail-fast`。
+5. **门禁绿的前提是它真的扫到了东西**：`exit 0` 搭配 `crates scanned: 0` 是**假绿**。
+   计数为 0 时，先去对照仓验证计数逻辑，再下结论。
+6. **验收读数必须连同调用契约一起记**：只写"1 passed"而不写"要设 `MEM0_E2E_PYTHON`"，
+   等于交付了一条**不可复现**的读数。下一个人裸跑得到 exit 101，会误判成"兼容性退化了"。
+   依赖允许装进隔离环境时，环境变量是**契约的一部分**，不是可选参数。
+
+### 10.7 覆盖率声明**从源码重算**（§9.3/§9.4 的"12 已服务 / 16 未路由"不再靠记忆）
+
+§9 的两个数字此前只存在于散文里：**没有任何东西重算它们**。改客户端或改路由都不会让它变红，
+而它却是评审里回答「mem0 兼容到什么程度」时被引用的那个数。本轮补上重算，结论是**数字成立**。
+
+**工具**：`tools/audit-mem0-client-coverage.mjs`
+
+```sh
+node tools/audit-mem0-client-coverage.mjs              # 采样并比对记录值
+node tools/audit-mem0-client-coverage.mjs --self-test  # 抽取规则的正反例
+```
+
+**为什么是采样器而不是门禁**：客户端 vendored 在 **gitignore 的 `external/mem0/`**。
+门禁必须能在全新签出上通过，而这条不能——参照树可能合法缺失。故它**报告漂移而不改写基线**，
+且退出码把"干净"与"根本没采到"分开：
+
+| 退出码 | 含义 |
+| --- | --- |
+| `0` | 账目与记录值一致 |
+| `1` | 漂移（客户端调用 / 路由 / 分类变了） |
+| `2` | 用法错 |
+| **`3`** | **未 vendoring，什么都没采到** —— **必须不等于 `0`** |
+
+**重算结果（本机实测，与本文件 §9.3/§9.4 一致）**：
+
+| 客户端 | 已服务 | 未路由 | 不可静态判定 | 无自身请求 |
+| --- | --- | --- | --- | --- |
+| Python（`MemoryClient`） | **12** | **16** | 0 | `chat`、`reset` |
+| TypeScript | **13** | **15** | `getProfileJob` | `constructor` |
+
+**重算顺带确认/新增的四条事实**（此前散文没写全）：
+
+1. **Python 包里是**两个**客户端类**，`MemoryClient` 与 `AsyncMemoryClient`，**28 端点 1:1 镜像**
+   （逐个 `method + verb + path` 相等，已做成采样器的不变量 `async-mirrors-sync`）。
+   ⇒ 记"Python 28 个方法"时应当同时说明这是**两个类共用同一线面**，否则读者会以为只有一套。
+2. **TS 服务 13 而 Python 服务 12，差的那条是 `ping`**：Python 的 ping 在**私有**
+   `_validate_api_key` 里（构造期调用），不落在公开方法计数上。⇒ 两者**并不矛盾**，
+   但必须写明，否则会被读成"Python 不支持 ping"。
+3. **TS 的未路由面 = Python 的 16 − `get_summary` + 上游已 `@deprecated` 的 `deleteUser`**，
+   共 15 + 1（`getProfileJob` 不可静态判定）。这与 §9.4 的结论一致。
+4. **`update_project` 用的是 `PATCH`**（两侧都是）。本仓线面未声明 `PATCH`，
+   因此在分类上属未路由；但它也提醒：**客户端并不只用四种动词**，
+   只按 GET/POST/PUT/DELETE 记账会把它误记成 `GET`。
+
+**两类客户端内部响应读取，全仓只有 2 处 —— `ping` 那类缺陷的搜索空间到此封闭**：
+
+| 处 | 读取 | 本仓是否满足 |
+| --- | --- | --- |
+| `ping()`（仅 JS） | `status === "ok"`、`orgId`/`projectId`/`userEmail` | ✅（§10.2） |
+| `deleteUsers()`（**两侧都有**） | `entities.results[].type`、`.name` | ✅ `Mem0EntityList.results[].{type,name}` |
+
+其余方法一律 `return response` 透传（由驱动决定断言），**不再有第三个隐藏读取点**。
+⇒ 这比"再跑一遍流程"更有价值：它把"还有没有 `ping` 那种缺陷"从**抽样**变成了**穷举**。
+
+**变异控制（证明它会红，而不是恒绿）**：
+
+| 变异 | 期望 | 实测 |
+| --- | --- | --- |
+| 改 `paths.rs` 的 `MEM0_SEARCH` 路径 | exit 1 且点名 `search` | **exit 1**，两侧各报 `no longer served: search` / `newly unrouted: search` |
+| 去掉 `MEM0_MEMORY` 的 `PUT` 声明 | exit 1 且点名 `update` | **exit 1**，两侧报 `update` |
+| 藏掉 `main.py`（未 vendoring） | **exit 3**（≠0） | **exit 3**，并打印缺哪个文件 |
+
+两个被变异文件均按 `cp` 字节备份还原，`sha256` 与改前**逐一致**。
+
+**自测（20 条正反例）** —— 抽取口径本身是这套东西最容易说谎的地方，**本轮已三次说谎**：
+
+| 抽错形态 | 后果 | 现在的守卫 |
+| --- | --- | --- |
+| 用"含小写字母"判模板 | `/v1/ping/` 也是小写 ⇒ **所有路由被跳过** | 只认残留的 `${` |
+| 关键字表里放了 `delete` | TS 的 `delete()` 是**方法名** ⇒ 丢掉一条已服务路由 | 只列真能出现在 `name(` 形态的关键字 |
+| `isServed` 对"路径对但动词未声明"返回真值 | 调用方一律当真 ⇒ 动词不符也算 served | 改结构化返回 `{served, route, detail}` |
+
+第三条是**自测抓出来的**（`--self-test` 首跑即红两条），不是事后补的说明——
+正是"抽取规则必须先自检再报数"这条纪律的价值所在。
+
+**未接线（待裁定）**：本工具**不在** `_sdkwork:check` 链里（参照树 gitignore，进去会假红）。
+若希望它被 CI 守住，正确形态是**采样器 + 一条契约测试**（锁抽取规则与退出码语义）；
+但新增契约测试文件会牵动 `REAL_CONTRACT_FILES` / `REAL_CONTRACT_TESTS` / 基线 `testInventory`
+等**六处**声明值（本仓既有绊线），属结构改动，**本轮未做**。
+
+## 11. 第四条腿：客户端可达路径的**框（framing）**覆盖审计（2026-09-28 续四）
+
+> ⚠️ **本节记录的是「续四」当时的缺陷现场，`/v2/` 那一列的读数已被 §12 修掉。**
+> 保留原样是有意的：§12 的修法只有在看懂本节「同一个未注册状态、前缀内外形状不同」之后才成立。
+> 要引用当前状态请看 **§12.5**（线面探针 10/10）与 **§12.4**（采样器读数）。
+
+§10.7 查清了「哪些方法被服务」，但没问一个更底层的问题：**客户端打到一条未声明的路径前缀时，
+收到的报文是什么形状？** 这一节用「curl 探针 + 官方客户端真跑」回答它，并翻出一条新缺陷。
+
+### 11.1 `/v2/…` 与 `/api/v1/…` 两个族**逃出 mem0 桥**
+
+| 族 | 客户端方法（两侧） | 在声明前缀内？ | 实测响应 |
+| --- | --- | --- | --- |
+| `/v1/…`、`/v3/…` | 13 条已服务 verb-edge | ✅ | mem0 形状 |
+| `/v2/entities/…`、`/v2/profiles/…` | `delete_users` / `get_profile`（Python）、`deleteUsers` / `getProfile`（JS） | ❌ | **401 + `application/problem+json`** |
+| `/api/v1/orgs/…`、`/api/v1/webhooks/…` | `get_project` / `update_project` / 四个 webhook 方法 | ❌ | 同上（mem0 平台账号面） |
+
+curl 探针（直打线面，带**有效**凭据）：
+
+| 请求 | 状态 | content-type | 报文（截断） |
+| --- | --- | --- | --- |
+| `GET /v1/ping/` | 200 | `application/json` | `{"org_id":"100001",…,"status":"ok"}` |
+| `GET /v1/summary/`（未注册，**前缀内**） | 404 | `application/json` | `{"code":40401,"detail":"Not found",…}` |
+| `POST /v1/exports/`（未注册，前缀内） | 404 | `application/json` | 同上 |
+| **`DELETE /v2/entities/user/probe-u/`** | **401** | **`application/problem+json`** | `{"code":40101,"detail":"requests on unclassified API surfaces require explicit public_path registration","failedStage":"request-context-resolution",…}` |
+
+⇒ **同一个「未注册」状态，前缀内是干净的 404、前缀外是带内部词汇的 401。**
+
+### 11.2 真客户端实测：错误消息**降级成整段 JSON**
+
+装好的官方 Python 客户端（`mem0ai` 2.2.0）打进这两条路径：
+
+| 调用 | 路径状态 | 异常 | 消息 |
+| --- | --- | --- | --- |
+| `delete_users(user_id=…)` | 未注册 | `AuthenticationError` | **整段问题文档 JSON** |
+| `get_profile("probe-u")` | 未注册 | `AuthenticationError` | 同上 |
+| `get_all(page=2)` ← **对照（已注册）** | 注册 | `MemoryError` | 干净散文：`page-based pagination is not supported on this surface: …` |
+| `get("nosuchid")` ← **对照（已注册）** | 注册 | `MemoryNotFoundError` | `memory not found` |
+
+根因是两层叠加，**不在** handler：
+
+1. `mem0/client/utils.py:39` 用 `content-type.startswith("application/json")` 判断要不要把消息换成
+   `detail`，而 `application/problem+json` **不满足该前缀** ⇒ 返回原始体（第 38 行无条件取 `response.text`）
+   ⇒ 异常消息 = 整段 JSON。
+   ⚠️ **顺带更正一处我们先前的推断**：本仓 `mem0/error.rs` 的注释写过「content type 不对 ⇒
+   Python 那些 handler 会报 `Error: None`」。实测**不成立** —— `_validate_api_key`（`main.py:279`）
+   走 `e.response.json()`，**不看** content-type；`utils.py` 那条也保留原始报文。
+   正确后果是「**消息变成整段 JSON**」，不是 None。
+2. 该路径不在 `MEM0_PATH_PREFIXES = ["/v1/", "/v3/"]` 里 ⇒
+   - 框架分类器判 `WebApiSurface::Unknown`（`sdkwork-web-core/src/surface.rs::classify_api_surface`）；
+   - `interceptors.rs` 对 Unknown 直接 `missing_credentials(...)` ⇒ **401 Authentication required**，
+     而调用方**是带凭据的**（同会话里 `ping` 是 200）⇒ **语义错位**，把人引去查密钥；
+   - 该拒绝发生在两道 mem0 桥**之前**（`mem0_credential_bridge` 与 `mem0_problem_document_bridge`
+     都按 `paths::is_mem0_compat_path()` 判定，见 `mem0/mod.rs`）⇒ 内部媒体类型原样出线。
+     `mem0/mod.rs` 的模块文档其实**已经预言**了这个后果（"a problem document reaches the caller as raw
+     text and its `detail` is never read"），只是没意识到 `/v2/` 根本不在桥的覆盖范围内。
+
+### 11.3 为什么**不能**只加一行前缀（本轮最有价值的结论）
+
+直觉修法是把 `/v2/` 加进 `MEM0_PATH_PREFIXES`。**它会被本仓自己的契约测试挡住** ——
+`tests/mem0_wire_context_selector_contract.rs::the_declared_prefixes_cover_every_upstream_path_in_the_authority`
+的最后一段断言：
+
+> Every declared prefix must actually carry something. A stale declaration would
+> silently exempt a path space nobody serves.
+
+即**「声明了却不服务的路径空间」被显式禁止**。
+
+**这一条是实测的，不是只读断言**：把 `/v2` 加进常量后跑
+`cargo test -p sdkwork-routes-memory-open-api --test mem0_wire_context_selector_contract --
+the_declared_prefixes_cover_every_upstream_path_in_the_authority` ⇒ `FAILED`（exit 101），
+诊断逐字为 `` `/v2` is declared as an external protocol prefix but no path in the authority uses it ``；
+还原后 sha256 逐字节一致（`78950307e95fc0cd`）、`git diff` 为空。
+
+合法修法只能是在 `/v2/` 下**服务点什么**
+（最低限度：按既有 501 拒绝模式注册为显式拒绝）—— **属契约面 / 产品范围决定**。
+
+两条候选：
+
+| 方案 | 动作 | 代价 | 收益 |
+| --- | --- | --- | --- |
+| **A 注册为显式拒绝** | 把客户端可达的 `/v2/` 形状注册为路由，回 `Mem0Error::unsupported`（501） | 操作数 13 → 19；两个 `openapi.json` 重新材料化；覆盖率基线与 §9.2 的 verb-edge 表同步 | 前缀声明变合法 ⇒ 401→501、媒体类型回到 `application/json`、消息重新可读，且失败原因是诚实的 |
+| **B 维持现状并登记** | 不改契约，只把差距做成机器可见的不变量（本轮已落地，见 11.4） | 无 | 差距不会静默扩大；但调用方仍拿到 401 + 整段 JSON |
+
+> **裁定（2026-09-28）**：取 **方案 A**，且**只针对 `/v2/`**。
+> `/api/v1/…` 判定为 **mem0 平台账号面（项目/组织/webhook 管理），不归本服务**，
+> 因此**不声明该前缀**、维持现状并登记（实测对照见 §12.5）。
+> 方案 A 的落地与全部证据见 **§12**。
+> 采样器**暂不接入 CI**（同一次裁定）：它是采样器不是门禁，理由见文件头（`external/mem0` 被 gitignore）。
+
+### 11.4 本轮已落地的那半：把「框覆盖」做成不变量
+
+> ⚠️ **本节数字是「续四」当时的读数**。§12 已把方案 A 落地，采样器与读数都变了
+> （自测 25 → **30** 条、`outside` **12 → 6**）。要引用当前值请看 **§12.4**。
+
+`tools/audit-mem0-client-coverage.mjs` 新增 **framing** 维度（同一批调用上的第二轴）：
+
+- **前缀从 `paths.rs` 派生**（新增 `readDeclaredPrefixes()`）。此前文件里那份手抄的
+  `DECLARED_PREFIXES = ["/v1/", "/v3/"]` 是**死常量**——只出现在定义处，无人消费；
+  而它偏偏是决定"桥跑不跑"的那个集合 ⇒ 手抄一份等于把读数押在会过期的东西上。
+- 每个调用按 `isUnderAnyPrefix(path, prefixes)` 判 `bridged` / `outside`，**`outside` 集合被登记**
+  （Python **12** 条、TS **11** 条；Python 多出的那条是 `GET /v2/profiles/jobs/{id}/`）。
+  **新增** any outside 路径 ⇒ exit 1。
+- 自测 **20 → 25 条**，新增 5 条前缀用例，含两条关键反例：
+  `/api/v1/webhooks/…` 不得被当成 `/v1/` 之下（否则平台账号面会被误报成已桥接），
+  `/v10/…` 不得被当成 `/v1/`（前缀必须锚在开头）。
+- **变异自证**：把 `/v2/` 加进 `MEM0_PATH_PREFIXES`
+  ⇒ `outside` **12 → 6**、采样器 **exit 1** 并点名 6 条 Python / 5 条 TS 路径；
+  还原后 sha256 逐字节一致（`78950307e95fc0cd`）、`git diff` 为空、采样器复绿。
+- 附：本线面**缺一个 413 分支**的观察 —— 11 MiB 报文并未触发体积限制，而是走到 JSON 反序列化
+  报 `400 … missing field \`messages\``（dev 环境下如此）。客户端把 413 映射成
+  `MemoryQuotaExceededError`，但本harness 下该分支不可达，故未登记为缺口。
+
+⚠️ **同一个动作会被两处同时拦**：契约测试拦的是「声明了不服务的路径」（结构性），
+采样器拦的是「框覆盖变了」（读数性）。理由不同、都必要 —— 与 §8.3「两半」是同一条道理。
+
+## 12. 第五条腿：方案 A 落地 —— `/v2/` 注册为**显式 501 拒绝**（2026-09-28 续五）
+
+### 12.1 改了什么（runtime 3 处 / 契约 1 处 / 采样器 1 处）
+
+| 文件 | 改动 |
+| --- | --- |
+| `crates/.../src/paths.rs` | `MEM0_PATH_PREFIXES` **2 → 3**（加 `/v2/`）；新增 5 个 `MEM0_V2_*` 常量 + `MEM0_REFUSED_PATHS`（**以常量标识符而非字符串字面量成列**，避免两份真源）；+2 条单元测试（前缀按值钉死、每条拒绝路径必须在前缀之下且以 `/` 结尾） |
+| `crates/.../src/mem0/handlers.rs` | +6 个拒绝 handler，各自 `Mem0Error::unsupported(operation, detail)`；**每个都不读 body、不读参数**——答案与请求无关，解析它反而会暗示存在「部分兑现」 |
+| `crates/.../src/mem0/mod.rs` | `mem0_routes()` 挂载 6 条；模块文档说明 `/v2/` 是「声明但不实现」的那半 |
+| `tools/materialize_phase1_contracts.mjs` | `mem0Operation` 新增 `refusal: true`；`MEM0_OPERATION_METADATA` +6 条；`mem0Paths()` +6 条 `addPath`（含 path 参数声明）；顶部线面清单补 `/v2/` 段 |
+| `tools/audit-mem0-client-coverage.mjs` | 新增 `refused` 桶与 `pathMatchesRoute`（见 §12.4），前缀集成为**被登记的期望**，新增 `/v2/` 覆盖不变量 |
+
+**物化读数**：open-api 路由 **40 → 46**；`apis/open-api/memory-open-api.openapi.json`
+sha256 `af316fea2b15651a…` → `aadc47770bebb283…`；**连续两次物化逐字节一致**（`sha256sum -c` 三条产物全 OK）。
+
+### 12.2 六条拒绝的语义，与一处元数据裁定
+
+六条理由都能在 canonical 面找到支撑，且**没有一条是「本可以但懒得做」**：
+
+- `DELETE /v2/entities/…` → canonical 实体路由**只有 read/patch，没有 delete**（`commercial_routes.rs:18`）。
+  客户端语义是「擦除作用域连同其记忆」，本面无法诚实兑现 —— 删了记忆留作用域、或什么都没删却报成功，
+  都与「擦除发生了」不可区分。
+- `GET /v2/entities/user/{id}/profile/` → profile 是 mem0 平台**派生并存储**的文本；本服务存 record / retrieval / context pack，
+  把原始记录挂在 `profile` 键下会把**源记录presented成派生文本**。
+- profiles 三条 + settings 两条 → 项目级配置属 mem0 平台账号面（与 `/api/v1/orgs|webhooks` 同族），本服务不是它的所有者。
+
+⚠️ **元数据裁定（须复核）**：这 6 条的 `permission`/`auditEvent` 一律复用**已存在的**
+`memory.open.capabilities.read`（`mem0.ping` 用的同一对），`resource: capabilities`。
+两条理由：**不复刻不存在的词表**（API key 拿不到的权限会导致永远 403，而不是 501），
+且**审计事件必须为真** —— 若按「它们本会产生的效果」登记（如实体删除记 `memory.open.entity.updated`），
+审计流里会留下一个本面**明确拒绝做出的**变更。代价是 DELETE 挂着读权限：
+这条路由什么都不会删，它的语义是「探测本面能力」。**若评审认为应按资源族授权（`entities.write`/`read`），这是一处可改的裁定，不是缺陷。**
+
+### 12.3 契约面形状：拒绝型操作**没有 2xx**
+
+`refusal: true` 让该操作的 `responses` **只含 `mem0ErrorResponses()`**（400/401/404/409/429/500/501），
+不发布任何成功响应 —— 发布 `200` 等于承诺一个永远不会发生的响应。生成结果实测：
+
+```text
+DELETE /v2/entities/{entity_type}/{entity_id}/   operationId: mem0.entity.delete
+GET    /v2/entities/{entity_type}/{entity_id}/profile/  mem0.entity.profile
+POST   /v2/profiles/jobs/                        mem0.profile.job.create
+GET    /v2/profiles/jobs/{job_id}/               mem0.profile.job.retrieve
+GET    /v2/profiles/settings/                    mem0.profile.settings.retrieve
+POST   /v2/profiles/settings/                    mem0.profile.settings.update
+→ responses: 400,401,404,409,429,500,501 | wire: external | proto: mem0-platform
+```
+
+不写 `requestBody`：处理器不读 body，建模一个永不检查的请求体等于暗示存在部分兑现。
+（`verify_openapi_operation_ids.ps1` 里「mutating operation has no requestBody」「400/404 必须带 `application/problem+json`」
+两条规则**对 external 协议操作显式 `continue`**，故不冲突 —— 是实测跑过之后确认的，不是读代码推的。）
+
+### 12.4 采样器：新增 `refused` 桶，并**修掉一个潜伏的路径匹配缺陷**
+
+1. **`refused` 是独立桶**（`served`/`refused`/`unrouted`/`unparsed`/`inert`）。理由：拒绝型路由**也是本仓声明的路由**，
+   只问「路由存不存在」的分类器会把 501 边界归进「已实现」栏 —— 这是本轴能产出的最误导的读数。
+   方法级归属带**带外报告**：一个方法的多次调用若落到不同处置，记入 `mixed` 并**上报**（不是静默按优先级吞掉）。
+2. 🔴 **`pathMatchesRoute` 修掉一处潜伏缺陷**：原实现是**归一化后的字符串相等**
+   （路由 `{...}` → `{id}`）。Python 客户端把实体类型**硬编码**成 `/v2/entities/user/{id}/profile/`，
+   而上游声明的是 `/v2/entities/{entity_type}/{entity_id}/profile/` —— 同一条路由，**永远不同一个字符串**。
+   改前该调用被读成「落在任何路由之外」（即「本面什么都没声明」，而它其实回的是具名 501）。
+   现按**路由器的段/参数语义**比较（`{param}` 匹配任意单段，其余必须相等）。这个缺陷是**这次改动暴露的**，
+   与 `/v2/` 无关却影响所有读数 —— 属于「顺带修掉的既有不准确」。
+3. **前缀集成为被登记的期望**（`EXPECTED.prefixes`）：它决定每个调用的框，改了就是漂移，即便没有调用移动过。
+4. **新增 `/v2/` 覆盖不变量**（主流程 + 自测两处）：`/v2/` 下的每条路由**必须**出现在 `MEM0_REFUSED_PATHS` 里。
+   缺一条，分类器就会把它算作 `served` —— 这个不变量就是为那个读数准备的。
+
+**当前读数（真跑）**：
+
+```text
+routes served (from paths.rs): 15        ← 10 实现 + 5 拒绝路径
+python      served=12 refused=7 unrouted=9
+typescript  served=13 refused=6 unrouted=9
+declared prefixes (from paths.rs): /v1/ /v2/ /v3/
+refusal routes (from paths.rs): 5
+refused shapes reached by a client: 6
+outside every prefix (unbridged framing): 6      ← 改前 12
+→ account matches the recorded expectation (exit 0)
+```
+
+`outside` 从 **12 收敛到 6**，且**剩下 6 条全部是 `/api/v1/…` 平台账号面**（§12.5 已按裁定登记为不归本服务）。
+自测 **25 → 30 条**（新增 6 条拒绝分类用例 + 5 条路径匹配用例），另含 2 条结构性不变量。
+
+**变异控制（3 项，全部 exit 1 且逐字诊断，还原均字节一致）**：
+
+| 变异 | 结果 |
+| --- | --- |
+| M1 `MEM0_REFUSED_PATHS` 去掉一条 | `newly served: get_profile_settings, update_profile_settings` + `/v2/ routes not declared as refusals: MEM0_V2_PROFILE_SETTINGS` + 自测 `MEM0_REFUSED_PATHS holds 4 paths but 5 /v2/ routes exist` |
+| M2 `MEM0_PATH_PREFIXES` 去掉 `/v2/` | `declared prefixes dropped: /v2/` + `newly outside every declared prefix: …`（6 条 Python / 5 条 TS 逐条点名） |
+| M3 拒绝路由的动词表收窄 | `no longer refused by name: update_profile_settings` + `newly unrouted: update_profile_settings` |
+
+M1 的诊断尤其值得记：**去掉一条拒绝声明后，那两条方法立刻被读成 `newly served`** ——
+这正是「只问路由存不存在」会犯的错，也正是新增不变量存在的理由。
+
+### 12.5 实测证据（三个独立层面）
+
+**(a) 线面探针（真 socket，10/10）** —— 覆盖 6 条拒绝 + 未注册 `/v2/` 路径 + 无凭证 + 对照：
+
+| 探针 | 结果 |
+| --- | --- |
+| 6 条 `/v2/` 拒绝形状 | **501** + `application/json` + 各自具名 `detail` |
+| `GET /v2/nothing/here/`（已声明前缀下未注册） | **404** + `application/json`（mem0 形状，无具名理由） |
+| `GET /v2/profiles/settings/` 无凭证 | **401** + `application/json`（mem0 形状，不再是 problem document） |
+| 对照 `GET /api/v1/webhooks/projects/p1/` | **401** + `application/problem+json`（**维持原样**，见下） |
+| 对照 `GET /v1/ping/` | 200，`{"org_id":…,"project_id":…,"status":"ok"}`（§10.2 的 TS 修复未回退） |
+
+**(b) 官方客户端真跑（Python `mem0ai` 2.2.0，7/7）** —— 改前 vs 改后的调用方可见差异：
+
+| 方法 | 改前（§11.2 实测） | 改后（本轮实测） |
+| --- | --- | --- |
+| `get_profile` / `get_profile_settings` / `update_profile_settings` / `generate_profile` / `get_profile_job` / `delete_users` | `AuthenticationError`，消息是**整段 problem-document JSON** | **`MemoryError`**，消息就是 handler 的理由（如 `entity profile retrieval is not supported on this surface: …`） |
+
+6 条全部由**官方客户端自己**发出（`client.get_profile(...)` 等），断言的是**异常类型 + 消息内容**，不是状态码。
+
+**(c) `/api/v1/…` 对照（诚实登记，不修）**：`client.get_project()` 仍抛
+`AuthenticationError`，消息仍是整段 JSON（`{"code":40101,"detail":"requests on unclassified API surfaces require explicit public_path registration",…}`）。
+这是**裁定的结果**：该族是 mem0 平台账号面（项目/组织/webhook 管理），不归本服务，
+不为它声明 `/api/v1/` 前缀（声明了就得在下面服务点什么，而本面对该族没有任何操作）。
+所以这一族**仍是未框化的 401**，且被采样器**逐条登记**（`EXPECTED.*.unbridged`）——差距不会静默扩大，
+但它是一条**已知且有意保留**的边界。
+
+### 12.6 回归总账（改动后）
+
+| 层面 | 结果 |
+| --- | --- |
+| 契约/路由 Rust 测试 | `mem0_wire_context_selector_contract` 4 + `open_api_routes` 3 + `open_openapi_routes` 1 + `route_manifest_contract` 1 = **9 passed, 0 failed** |
+| 官方 SDK 验收（Python） | `mem0ai 2.2.0` drove the platform wire end to end（6 refusal / 5 rejection）**ok** |
+| 官方 SDK 验收（JS） | `mem0ai 3.3.1` drove the platform wire end to end（6 refusal / 6 rejection）**ok** |
+| 门禁（逐条取退出码） | **17/17 exit 0**：app-composition、architecture-alignment、crate-inventory-standard、repository-docs、pagination、api-envelope、api-operation-patterns、sdk-standard、topology:validate、db:validate、6 个 contracts、`verify_openapi_operation_ids.ps1` |
+| 采样器 | 自测 30 条 pass；主流程 exit 0；3 项变异全红且逐字诊断 |
+| 物化幂等 | 连续两次逐字节一致（3 个产物 `sha256sum -c` 全 OK） |
+
+⚠️ 关键点：改前**被本仓契约测试明确拒绝**的那个动作（`/v2` 声明了却不服务），
+改后 `the_declared_prefixes_cover_every_upstream_path_in_the_authority` **通过** ——
+即「合法修法」确实被这一次改动满足了，而不是被绕过。
+
+### 12.7 本轮未做
+
+1. **代码未提交**（改动面见 §13.6 的门禁行与本仓 `git status`）；工作树里还有另一会话改的 2 个文件，不能 `git add -A`。
+2. 采样器**未接 CI**（本次裁定）：理由与文件头一致，`external/mem0` 被 gitignore，
+   门禁必须能在干净检出上通过；接法若是「CI 里先 vendor 再跑」则可行，属独立决定。
+3. `/api/v1/…` 账号面**仍不服务、不声明**（裁定）。
+4. 六条拒绝的**审计/权限元数据裁定**（§12.2 末）等待评审确认。
+5. `/v2/memories/`、`/v2/memories/search/` 未注册为拒绝（官方客户端不发它们），
+   因此它们回已声明前缀下的 mem0 形状 404 —— 如果将来有客户端版本开始发 v2 列表/检索，
+   采样器会以「newly outside/refused 变化」暴露它，而不是静默 404。
+
+## 13. 第六条腿：逐字段契约对拍 —— 客户端**真送达到**的字段 vs 我方声明（2026-09-28 续六）
+
+§7.5 第 5 条从第二轮挂到现在：「mem0 的操作尚未做**逐字段**契约对拍（现有 E2E 覆盖行为，不覆盖字段全集）」。
+这一段把它做完 —— 而且**不是**靠读源码推断，是让两个官方客户端把**每个声明过的 option 字段都填上**，
+打到捕获桩上，再读原始报文。
+
+### 13.1 方法：捕获桩 + 双客户端满字段驱动
+
+静态解析客户端不可靠：TS 侧路径写在 `${this.host}/…` 模板串里且响应经 `snakeToCamelKeys` 改写，
+Python 侧 `_prepare_payload` 把 `**kwargs` 整体灌进 body。所以：
+
+- 起一个**捕获桩**（`ThreadingHTTPServer`，记录 `(method, path, query, body)`，回一个宽松的 2xx）；
+- 两个官方客户端指过去（`MemoryClient(api_key=…, host=…)` / `new MemoryClient({apiKey, host})`）；
+- **把每个声明字段都填上哨兵值**；
+- 桩对 `GET /v1/ping/` 必须回 `{"status":"ok"}` —— JS 客户端 `ping()` 硬要求它（§10.2）。
+
+两端各 13 次调用，覆盖所有带请求体的已服务 verb-edge。**记录值由驱动产出，不手抄。**
+
+三个可复跑件就放在官方 SDK 验收旁边（不接 CI，理由同 §12.7 第 2 条：`external/mem0` 被 gitignore）：
+
+```sh
+# 1. 捕获桩
+python crates/sdkwork-routes-memory-open-api/tests/mem0_official_sdk/field_capture_stub.py 6321 /tmp/capture.jsonl
+# 2. Python 客户端满字段驱动（需装了 mem0ai 的解释器，同 acceptance.py 的发现契约）
+MEM0_BASE_URL=http://127.0.0.1:6321 MEM0_API_KEY=probe \
+  python crates/sdkwork-routes-memory-open-api/tests/mem0_official_sdk/field_coverage.py
+# 3. JS 客户端满字段驱动（ESM 不吃 NODE_PATH，故用 MEM0_E2E_SDK_ENTRY 指到已安装包）
+MEM0_BASE_URL=http://127.0.0.1:6321 MEM0_API_KEY=probe \
+MEM0_E2E_SDK_ENTRY=file:///<...>/node_modules/mem0ai/dist/index.mjs \
+  node crates/sdkwork-routes-memory-open-api/tests/mem0_official_sdk/field_coverage.mjs
+```
+
+本轮实测：两端各 13 条报文落盘（合计 26 条）。
+
+### 13.2 实测：两端实际送达的字段（原样）
+
+| 调用 | 到达的报文（Python `mem0ai 2.2.0` / JS `mem0ai 3.3.1`） |
+| --- | --- |
+| `add` | `POST /v3/memories/add/`，body：`messages, user_id, agent_id, app_id, run_id, `**`filters`（仅 Py）**`, metadata, infer, custom_categories, custom_instructions, agent_custom_instructions, timestamp, expiration_date, structured_data_schema` |
+| `get_all` | `POST /v3/memories/?page=2&page_size=5`，body：`filters, start_date, end_date, categories, show_expired, latest_only` |
+| `search` | `POST /v3/memories/search/`，body：`query, `**`output_format:"v1.1"`（仅 JS，恒定送）**`, filters, metadata, top_k, rerank, threshold, fields, categories, show_expired, reference_date, latest_only, keyword_search, `**`source`（仅 JS）** |
+| `update` | `PUT /v1/memories/{id}/`，body：`text, metadata, timestamp, expiration_date` |
+| `delete` | `DELETE /v1/memories/{id}/?delete_linked=true` |
+| `delete_all` | `DELETE /v1/memories/?user_id=…`（JS）/ `?filters={'user_id': …}`（**Python，见 §13.4**） |
+| `feedback` | body：`memory_id, feedback, feedback_reason` |
+| `batch_update` | `PUT /v1/batch/`，条目 `{memory_id, text}`（JS）/ **原样透传**（Py：可带 `metadata`/`timestamp`/`expiration_date`） |
+| `batch_delete` | `DELETE /v1/batch/`，条目 `{memory_id}` |
+| `users` | `GET /v1/entities/?page=&page_size=`（仅 JS） |
+
+两端差异**声明而不抹平**：
+
+1. JS `search` **恒定**追加 `output_format: "v1.1"`（Python 不送）—— 我方已声明并接受（§12.3 同款处理）。
+2. JS 多送 `source`（`SearchMemoryOptions.source`，上游注释说未知值会被后端归到 `OTHERS`）。
+3. JS `getAll` 走 `camelToSnakeKeys(rest)`，但 **`filters` 是单独展开的、键原样透传**
+   —— 调用方写 `{userId: …}` 送上来的就真是 `userId`。**上游同样是透传，所以这不是我方的缺口**，
+   只记入「过滤器键的拼写由调用方决定，文档拼写是 `user_id`，我方按 `user_id` 读」。
+4. JS 的 `DeleteAllMemoryOptions` 只有 `EntityOptions`，**没有 `filters`** ⇒ §13.4 那条它够不到。
+5. Python 的 `delete_all(filters=…)` 把 dict 整个交给 `httpx`，wire 值是 **`str()` 出来的 Python dict**
+   （`{'user_id': 'alice'}`），**不是 JSON**。
+
+### 13.3 对账：我方声明 vs 客户端送达
+
+| 操作 | 客户端送达 | 我方声明 | 静默丢弃 |
+| --- | --- | --- | --- |
+| `POST /v3/memories/add/` | 14 | 7 | **7**：`filters, custom_categories, custom_instructions, agent_custom_instructions, timestamp, expiration_date, structured_data_schema` |
+| `POST /v3/memories/search/` | 14 | 12 | **7**：`metadata, fields, categories, reference_date, latest_only, keyword_search, source` |
+| `POST /v3/memories/` | 6 + 2 query | 5 + 2 query | **5**：`start_date, end_date, categories, show_expired, latest_only` |
+| `PUT /v1/memories/{id}/` | 4 | 4 | — ✅ |
+| `DELETE /v1/memories/{id}/` | `delete_linked` | 同 | — ✅ |
+| `DELETE /v1/memories/` | 4 名 + `filters` | 4 名 | **1 —— 破坏性，见 §13.4** |
+| `GET /v1/entities/` | `page, page_size` | **无** | **2**（且 `page_size` 运行时其实认，契约没声明） |
+| `POST /v1/feedback/` | 3 | 3 | — ✅ |
+| `PUT /v1/batch/` 条目 | 2（JS）/ 任意（Py 透传） | 3 | 条目多余键（Py 可塞任意键） |
+| `DELETE /v1/batch/` 条目 | 1 | 1 | — ✅ |
+
+**合计 22 个「客户端可送达而我方静默丢弃」的字段**（另加 batch 条目的透传类）。
+根因不是个别疏漏：`serde` 默认**不拒绝未知字段**，而三个请求 DTO 只声明了「我方已实现」的那部分 ——
+于是一个**未被声明的**参数既不会报错、也不会生效。
+
+### 13.4 🔴 本轮最重的发现：`delete_all(filters=…)` 把**整个空间**删掉，还回 200
+
+客户端文档（`DeleteAllMemoryOptions`）写明过滤放进 `filters`；`delete_all` 把它整个交给 `httpx`，
+wire 上是**一个名叫 `filters` 的查询参数**。而我方 `Mem0DeleteAllParams` 只读
+`user_id`/`agent_id`/`run_id`/`app_id` 四个**名字**的查询参数 —— `filters` **根本不在读取范围内**，
+请求于是被当作「无过滤」⇒ 走**空间级全删**。
+
+修前实测（真 socket，两条分属 alice / bob 的数据）：
+
+| 请求 | 结果 |
+| --- | --- |
+| `DELETE /v1/memories/?user_id=alice`（**声明拼写**，对照） | **501** 具名拒绝 —— 守卫本身是对的 |
+| `DELETE /v1/memories/?filters={'user_id': 'alice'}`（**客户端真实拼写**） | **200** `{"message":"2 memories deleted successfully"}` |
+| 之后 listing | `count = 0` —— **alice 与 bob 的记忆都没了** |
+
+即 `client.delete_all(filters={"user_id": "alice"})` —— 官方 Python SDK 里带类型、文档化的那个调用 ——
+会清空整个空间并报成功。处理器自己的注释写的正是相反意图
+（“Ignoring an entity filter would delete far more than the caller asked for, so any filter is refused”），
+守卫只是**没覆盖第五种拼写**。
+
+**修法（本轮已落地）**
+
+1. `Mem0DeleteAllParams` 新增 `filters: Option<String>` 与 `requested_filter()`（返回「哪个参数、什么值」）。
+   `filters` 按**存在性**判定：它可能是 Python repr 而非 JSON，所以只问「有没有东西」。
+2. `is_empty_filter_literal` 把 `{}` / `{ }` / `[]` / 空串读作**没有过滤** —— 那正是调用方提的要求，
+   拒绝它才是**假拒绝**（实测 `?filters={}` 仍 200 并正常全删）。
+3. 拒绝消息现在**回显收到的值**（截断 200 字符），运维能看见被丢弃的是什么。
+4. 生成器为该操作声明 `filters` 查询参数（`type: string`）—— **声明才让拒绝可达**；
+   `verify_openapi_operation_ids.ps1` 对外部协议操作先 `continue`，所以无 body 的形状合法。
+
+修后实测：
+
+| 请求 | 结果 |
+| --- | --- |
+| `?filters={'user_id': 'alice'}` | **501**，消息回显 `` received `{'user_id': 'alice'}` `` |
+| 之后 listing | `count = 2` —— **两条都还在** |
+| `?filters={}` | **200**，正常全删（无假拒绝） |
+
+> 「是否改为真正按过滤器逐条删」是产品决定；本轮按既有口径**拒绝**而非实现（见 §13.5 第 6 项）。
+
+### 13.5 其余 21 个字段：需要裁定（本轮未动）
+
+判据：**canonical 面里有没有对应能力**。有 ⇒ 应当**实现**；没有 ⇒ 应当**具名拒绝**
+（与 `Mem0UpdateRequest` 对 `timestamp`/`expiration_date` 的既有做法一致，`dto.rs:101`）。
+**不论哪一选，都不应继续静默丢弃。**
+
+| # | 字段 | 建议 |
+| --- | --- | --- |
+| 1 | `add.filters` | **实现**。Python 文档明说 v3 的身份要放 `filters`（`types.py:6`）；只读顶层会让按文档写的调用**写进无归属的记录**，之后 `search(filters=…)` 再也找不到它 |
+| 2 | `add.expiration_date` | **实现**或拒绝（canonical 已有 `expiration_date`，`expires_at` 也已端到端接线） |
+| 3 | `add.timestamp` | 同 #2；canonical 能否接受调用方时间需确认 |
+| 4 | `add.custom_instructions` / `agent_custom_instructions` | **拒绝**：提取提示词属插件/配置面，不是逐请求开关 |
+| 5 | `add.custom_categories` / `structured_data_schema` | **拒绝**：同上，属项目级配置 |
+| 6 | `search.metadata` | **实现**（元数据前置过滤）或拒绝 |
+| 7 | `search.categories` / `list.categories` | **实现**（canonical 有 categories）或拒绝 |
+| 8 | `search.latest_only` / `list.latest_only` | **实现**（canonical 有版本/链接语义）或拒绝 |
+| 9 | `search.keyword_search` | **实现**：canonical 已有 BM25 关键词分支 |
+| 10 | `search.reference_date` | **拒绝**（相对时间语义未定义）或实现 |
+| 11 | `search.fields` | **拒绝**：投影会改变响应契约 |
+| 12 | `search.source` | **接受并忽略**（上游也只当遥测提示）—— 但要在契约里写明 |
+| 13 | `list.start_date` / `end_date` | **拒绝**：与已拒绝的 `filters` 同因（canonical listing 无元数据过滤） |
+| 14 | `list.show_expired` | **实现**，或与 `search.show_expired`（已实现）口径对齐 |
+| 15 | `entities.page` | **拒绝**：与 `list.page` 已拒绝同因（游标式列表） |
+| 16 | `entities.page_size` | **补声明** —— 运行时其实认（`handlers.rs:637`），契约没写，属纯契约补齐 |
+| 17 | `batch` 条目任意键（Python 透传） | **拒绝**未知条目键，或在契约里显式声明 `additionalProperties` |
+
+### 13.6 本轮回归（全部本机实测）
+
+| 层面 | 结果 |
+| --- | --- |
+| Rust（该 crate 全目标） | **20 passed / 0 failed**（lib 单测 20，含新增 5 条 `mem0::dto::tests`）+ 集成 4 / 6 / 2 / 3 / 1 / 2 / 1 全绿 |
+| 官方 SDK 验收（Python `mem0ai 2.2.0`） | **1 passed**；**7 refusals** / 5 rejections；新增「拒绝必须点名 `filters`」断言通过 |
+| 官方 SDK 验收（JS `mem0ai 3.3.1`） | **1 passed**；6 refusals / 6 rejections（不变 —— 它的 `DeleteAllMemoryOptions` 没有 `filters`，够不到这条） |
+| 覆盖率采样器 | 自测 30 条 pass；主流程 exit 0；读数不变（12/7/9、13/6/9） |
+| 门禁（逐条取退出码） | **20/20 exit 0**：14 个 `pnpm run` 检查器 + 5 个契约 node 测试 + `verify_openapi_operation_ids.ps1`（比 §12.6 记的 17 条更全：本轮把 `check:release-readiness`、`check:pnpm-script-standard`、`check:agent-workflow-standard`、`check:cors-standard` 也逐条跑了） |
+| 物化幂等 | 只改动 open-api 三件产物；`app-api` / `backend-api` 产物逐字节未变 |
+
+> 本节按 §12.4 的方式留了**可复跑**的驱动：捕获桩 + 双客户端满字段驱动。
+> 与 §12.4 的采样器一样，它是**审计工具而非 CI 门禁**（`external/mem0` 被 gitignore）。

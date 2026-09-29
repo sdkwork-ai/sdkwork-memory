@@ -104,6 +104,118 @@ pub struct NativeSqlMemoryStore {
     id_generator: SnowflakeIdGenerator,
 }
 
+/// `?, ?, ...` for an IN list with `count` bound parameters.
+pub(crate) fn sql_placeholders(count: usize) -> String {
+    std::iter::repeat("?")
+        .take(count)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Embedded PostgreSQL compatibility bootstrap. The consolidated baseline folds every
+/// post-GA migration (each block carries a `-- source:` marker), so one entry covers
+/// the dialect; the initialization guard keys on this list's final entry.
+const POSTGRES_EMBEDDED_PHASE1_MIGRATIONS: &[(&str, &str)] = &[(
+    "baseline",
+    include_str!("../../../database/ddl/baseline/postgres/0001_memory_baseline.sql"),
+)];
+
+/// Embedded SQLite compatibility bootstrap, applied in order. Appending a migration
+/// here automatically advances the initialization guard, which derives its key from
+/// this list's final entry instead of repeating the version by hand.
+const SQLITE_EMBEDDED_PHASE1_MIGRATIONS: &[(&str, &str)] = &[
+    (
+        "0001",
+        include_str!("../../../tests/fixtures/database/sqlite/migrations/0001_memory_schema.up.sql"),
+    ),
+    (
+        "0002",
+        include_str!("../../../tests/fixtures/database/sqlite/migrations/0002_memory_indexes.up.sql"),
+    ),
+    (
+        "0003",
+        include_str!(
+            "../../../tests/fixtures/database/sqlite/migrations/0003_memory_tenant_preference.up.sql"
+        ),
+    ),
+    (
+        "0004",
+        include_str!("../../../tests/fixtures/database/sqlite/migrations/0004_memory_learning_job.up.sql"),
+    ),
+    (
+        "0005",
+        include_str!(
+            "../../../tests/fixtures/database/sqlite/migrations/0005_memory_record_fulltext_search.up.sql"
+        ),
+    ),
+    (
+        "0006",
+        include_str!(
+            "../../../tests/fixtures/database/sqlite/migrations/0006_memory_eval_run_extend.up.sql"
+        ),
+    ),
+    (
+        "0007",
+        include_str!(
+            "../../../tests/fixtures/database/sqlite/migrations/0007_memory_commercial_management.up.sql"
+        ),
+    ),
+    (
+        "0008",
+        include_str!(
+            "../../../tests/fixtures/database/sqlite/migrations/0008_memory_fts_predicate.up.sql"
+        ),
+    ),
+    (
+        "0009",
+        include_str!(
+            "../../../tests/fixtures/database/sqlite/migrations/0009_memory_outbox_delivery_lease.up.sql"
+        ),
+    ),
+    (
+        "0010",
+        include_str!(
+            "../../../tests/fixtures/database/sqlite/migrations/0010_memory_job_execution_lease.up.sql"
+        ),
+    ),
+    (
+        "0011",
+        include_str!(
+            "../../../tests/fixtures/database/sqlite/migrations/0011_memory_job_attempt_accounting.up.sql"
+        ),
+    ),
+    (
+        "0012",
+        include_str!(
+            "../../../tests/fixtures/database/sqlite/migrations/0012_memory_list_indexes.up.sql"
+        ),
+    ),
+    (
+        "0013",
+        include_str!(
+            "../../../tests/fixtures/database/sqlite/migrations/0013_memory_feedback.up.sql"
+        ),
+    ),
+    (
+        "0014",
+        include_str!(
+            "../../../tests/fixtures/database/sqlite/migrations/0014_claim_order_and_keyset_indexes.up.sql"
+        ),
+    ),
+    (
+        "0015",
+        include_str!(
+            "../../../tests/fixtures/database/sqlite/migrations/0015_job_retry_backoff.up.sql"
+        ),
+    ),
+    (
+        "0016",
+        include_str!(
+            "../../../tests/fixtures/database/sqlite/migrations/0016_hard_delete_cleanup_indexes.up.sql"
+        ),
+    ),
+];
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct NativeSqlHardDeleteRecordOutcome {
     pub deleted: bool,
@@ -292,11 +404,18 @@ impl NativeSqlMemoryStore {
 
     async fn schema_is_initialized(&self) -> Result<bool, NativeSqlStoreError> {
         // The check key must equal the final entry of the dialect's MIGRATIONS list so a
-        // completed compatibility bootstrap is never replayed on startup.
+        // completed compatibility bootstrap is never replayed on startup. Deriving the key
+        // from the list itself keeps the guard from drifting behind the migrations.
         let latest_version = match self.dialect() {
-            MemorySqlDialect::Sqlite => "0013",
-            MemorySqlDialect::Postgres => "baseline",
-        };
+            MemorySqlDialect::Sqlite => SQLITE_EMBEDDED_PHASE1_MIGRATIONS
+                .last()
+                .map(|(version, _)| *version),
+            MemorySqlDialect::Postgres => POSTGRES_EMBEDDED_PHASE1_MIGRATIONS
+                .last()
+                .map(|(version, _)| *version),
+        }
+        // Both embedded lists are non-empty constants.
+        .expect("embedded migration list is never empty");
         match sqlx::query_scalar::<_, i32>(
             "SELECT 1 FROM ops_memory_schema_version WHERE version = ? LIMIT 1",
         )
@@ -313,12 +432,9 @@ impl NativeSqlMemoryStore {
     async fn apply_postgres_phase1_migration(&self) -> Result<(), NativeSqlStoreError> {
         // Initialization state: the application-root module keeps the full DDL snapshot in the
         // consolidated baseline (database/ddl/baseline/postgres/0001_memory_baseline.sql);
-        // migrations/ is reserved for post-GA changes and is intentionally empty.
-        const MIGRATIONS: &[(&str, &str)] = &[(
-            "baseline",
-            include_str!("../../../database/ddl/baseline/postgres/0001_memory_baseline.sql"),
-        )];
-        self.apply_embedded_sql_migrations(MIGRATIONS).await
+        // migrations/ is reserved for post-GA changes and the baseline folds them with
+        // `-- source:` markers.
+        self.apply_embedded_sql_migrations(POSTGRES_EMBEDDED_PHASE1_MIGRATIONS).await
     }
 
     async fn apply_embedded_sql_migrations(
@@ -917,13 +1033,13 @@ impl NativeSqlMemoryStore {
                   AND r.space_id = ?
                   AND r.status <> 'deleted'
                   AND r.uuid > ?
-                  AND (r.canonical_text LIKE ? ESCAPE '\'
-                       OR r.object_text LIKE ? ESCAPE '\'
-                       OR COALESCE(r.subject, '') LIKE ? ESCAPE '\')
+                  AND (lower(r.canonical_text) LIKE lower(?) ESCAPE '\'
+                       OR lower(r.object_text) LIKE lower(?) ESCAPE '\'
+                       OR lower(COALESCE(r.subject, '')) LIKE lower(?) ESCAPE '\')
                 {RECORD_SENSITIVITY_FILTER_SQL}{expiration_predicate}
                 ORDER BY r.uuid ASC
                 LIMIT ?
-                "#
+                "#,
             ))
             .bind(scope.tenant_id)
             .bind(scope.space_id)
@@ -1124,10 +1240,10 @@ impl NativeSqlMemoryStore {
             WHERE r.tenant_id = ?
               AND r.space_id = ?
               AND r.status <> 'deleted'
-              AND (r.canonical_text LIKE ? ESCAPE '\'
-                   OR r.object_text LIKE ? ESCAPE '\'
-                   OR COALESCE(r.subject, '') LIKE ? ESCAPE '\'
-                   OR COALESCE(r.predicate, '') LIKE ? ESCAPE '\')
+              AND (lower(r.canonical_text) LIKE lower(?) ESCAPE '\'
+                   OR lower(r.object_text) LIKE lower(?) ESCAPE '\'
+                   OR lower(COALESCE(r.subject, '')) LIKE lower(?) ESCAPE '\'
+                   OR lower(COALESCE(r.predicate, '')) LIKE lower(?) ESCAPE '\')
             "#,
         );
         let filter_predicate = crate::filter_pushdown::translate_metadata_filter(
@@ -1189,7 +1305,7 @@ impl NativeSqlMemoryStore {
             FROM ai_event
             WHERE tenant_id = ?
               AND space_id = ?
-              AND payload_json LIKE ? ESCAPE '\'
+              AND lower(payload_json) LIKE lower(?) ESCAPE '\'
             ORDER BY created_at DESC
             LIMIT ?
             "#,
@@ -1257,7 +1373,7 @@ impl NativeSqlMemoryStore {
               AND event.space_id = ?
               AND record.space_id = ?
               AND record.status <> 'deleted'
-              AND event.payload_json LIKE ? ESCAPE '\'
+              AND lower(event.payload_json) LIKE lower(?) ESCAPE '\'
             "#,
         );
         Self::append_sensitivity_filter(&mut sql, "record");
@@ -1447,7 +1563,7 @@ impl NativeSqlMemoryStore {
             Some(user_id) => ("user", Some(user_id.to_string())),
             None => ("system", None),
         };
-        sqlx::query(
+        let insert_result = sqlx::query(
             r#"
             INSERT INTO ai_event (
               id,
@@ -1477,11 +1593,35 @@ impl NativeSqlMemoryStore {
         .bind(actor_type)
         .bind(actor_id.as_deref())
         .bind(now_text())
-        .bind(payload_json)
-        .bind(payload_hash)
+        .bind(payload_json.as_str())
+        .bind(payload_hash.as_str())
         .bind(now_text())
         .execute(&self.pool)
-        .await?;
+        .await;
+        // A concurrent replica can win the insert between the pre-check and
+        // this statement; re-derive the idempotent verdict from the stored row
+        // exactly like `append_open_api_event` instead of surfacing a raw
+        // constraint error.
+        if let Err(error) = insert_result {
+            if !is_unique_violation(&error) {
+                return Err(error.into());
+            }
+            match self.retrieve_event_idempotency_state(scope, event_id).await? {
+                Some(existing)
+                    if existing.space_id == scope.space_id
+                        && existing.payload_json == payload_json
+                        && existing.payload_hash == payload_hash =>
+                {
+                    return Ok(());
+                }
+                _ => {
+                    return Err(NativeSqlStoreError::EventConflict {
+                        tenant_id: scope.tenant_id,
+                        event_id: event_id.to_string(),
+                    });
+                }
+            }
+        }
 
         Ok(())
     }
@@ -2808,43 +2948,6 @@ impl NativeSqlMemoryStore {
         Ok(row.map(|row| row.get("metadata_json")))
     }
 
-    pub async fn list_admin_config_entities(
-        &self,
-        tenant_id: i64,
-        resource_type: &str,
-        page_size: i32,
-    ) -> Result<Vec<(String, String)>, NativeSqlStoreError> {
-        let rows = sqlx::query(
-            r#"
-            SELECT resource_id, metadata_json
-            FROM ai_audit_log AS current
-            WHERE tenant_id = ?
-              AND resource_type = ?
-              AND action = 'admin.config.save'
-              AND created_at = (
-                SELECT MAX(created_at)
-                FROM ai_audit_log AS latest
-                WHERE latest.tenant_id = current.tenant_id
-                  AND latest.resource_type = current.resource_type
-                  AND latest.resource_id = current.resource_id
-                  AND latest.action = 'admin.config.save'
-              )
-            ORDER BY created_at DESC
-            LIMIT ?
-            "#,
-        )
-        .bind(tenant_id)
-        .bind(resource_type)
-        .bind(clamp_list_page_size(page_size))
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(rows
-            .into_iter()
-            .map(|row| (row.get("resource_id"), row.get("metadata_json")))
-            .collect())
-    }
-
     pub async fn retrieve_audit(
         &self,
         scope: &MemoryScopeContext,
@@ -3420,28 +3523,61 @@ impl NativeSqlMemoryStore {
         }
 
         let timestamp = now_text();
-        let result = sqlx::query(
-            r#"
-            UPDATE ai_record
-            SET status = 'deleted',
-                updated_at = ?,
-                version = version + 1
+        // Bounded batches instead of one scope-wide UPDATE: a large space's
+        // expired set would otherwise pin every matching row for the whole
+        // statement. Each batch enumerates ids first and updates by that list
+        // with the predicate re-attached, so a record re-touched between the
+        // two statements keeps its state, and the sweep always progresses
+        // because every updated row leaves the candidate set.
+        const PURGE_BATCH: i64 = 500;
+        let mut purged = 0_u64;
+        let select_sql = r#"
+            SELECT id FROM ai_record
             WHERE tenant_id = ? AND space_id = ? AND status <> 'deleted'
               AND expires_at IS NOT NULL AND expires_at < ?
-            "#,
-        )
-        .bind(&timestamp)
-        .bind(scope.tenant_id)
-        .bind(scope.space_id)
-        .bind(&timestamp)
-        .execute(&self.pool)
-        .await?;
-        Ok(u32::try_from(result.rows_affected()).unwrap_or(0))
+            ORDER BY id ASC
+            LIMIT ?
+        "#;
+        loop {
+            let ids: Vec<i64> = sqlx::query_scalar(select_sql)
+                .bind(scope.tenant_id)
+                .bind(scope.space_id)
+                .bind(&timestamp)
+                .bind(PURGE_BATCH)
+                .fetch_all(&self.pool)
+                .await?;
+            if ids.is_empty() {
+                break;
+            }
+            let mut update = sqlx::query(&format!(
+                r#"
+                UPDATE ai_record
+                SET status = 'deleted',
+                    updated_at = ?,
+                    version = version + 1
+                WHERE tenant_id = ? AND space_id = ? AND status <> 'deleted'
+                  AND expires_at IS NOT NULL AND expires_at < ?
+                  AND id IN ({})
+                "#,
+                sql_placeholders(ids.len())
+            ))
+            .bind(&timestamp)
+            .bind(scope.tenant_id)
+            .bind(scope.space_id)
+            .bind(&timestamp);
+            for id in &ids {
+                update = update.bind(id);
+            }
+            purged += update.execute(&self.pool).await?.rows_affected();
+        }
+        Ok(u32::try_from(purged).unwrap_or(0))
     }
 
     /// Marks a delivered event published. The lease triple is compared in the
     /// WHERE clause (cluster takeover fencing): a worker whose lease expired
-    /// and was taken over cannot acknowledge an event it no longer owns.
+    /// and was taken over cannot acknowledge an event it no longer owns, and
+    /// the fence miss is reported as `None` instead of re-reading the row the
+    /// new owner now holds.
     pub async fn mark_outbox_published(
         &self,
         scope: &MemoryScopeContext,
@@ -3450,7 +3586,7 @@ impl NativeSqlMemoryStore {
         lease_token: &str,
     ) -> Result<Option<NativeSqlMemoryOutboxEvent>, NativeSqlStoreError> {
         let timestamp = now_text();
-        sqlx::query(
+        let updated = sqlx::query(
             r#"
             UPDATE ai_outbox_event
             SET publish_state = 'published',
@@ -3471,6 +3607,10 @@ impl NativeSqlMemoryStore {
         .execute(&self.pool)
         .await?;
 
+        if updated.rows_affected() == 0 {
+            return Ok(None);
+        }
+
         self.retrieve_outbox_event(scope, outbox_id).await
     }
 
@@ -3484,7 +3624,7 @@ impl NativeSqlMemoryStore {
         lease_token: &str,
     ) -> Result<Option<NativeSqlMemoryOutboxEvent>, NativeSqlStoreError> {
         let timestamp = now_text();
-        sqlx::query(
+        let updated = sqlx::query(
             r#"
             UPDATE ai_outbox_event
             SET publish_state = 'failed',
@@ -3502,6 +3642,10 @@ impl NativeSqlMemoryStore {
         .bind(&timestamp)
         .execute(&self.pool)
         .await?;
+
+        if updated.rows_affected() == 0 {
+            return Ok(None);
+        }
 
         self.retrieve_outbox_event(scope, outbox_id).await
     }
@@ -3645,9 +3789,33 @@ impl NativeSqlMemoryStore {
         &self,
         max_retries: u32,
     ) -> Result<crate::learning_jobs::StaleRequeueCounts, NativeSqlStoreError> {
+        const SWEEP_BATCH: i64 = 500;
         let timestamp = now_text();
         let max_retries = i64::from(max_retries);
-        let dead = sqlx::query(
+        let mut counts = crate::learning_jobs::StaleRequeueCounts::default();
+        // Bounded batches instead of one unbounded UPDATE: after a prolonged
+        // publisher outage the stale set can span every tenant, and a single
+        // lock-acquiring statement over all of it would pin rows for the whole
+        // sweep. Each batch enumerates ids first and updates by that list with
+        // the stale predicate re-attached, so an event whose lease is renewed
+        // between the two statements keeps its fresh lease untouched.
+        let dead_candidates = r#"
+            SELECT id FROM ai_outbox_event
+            WHERE publish_state = 'processing'
+              AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
+              AND retry_count + 1 >= ?
+            ORDER BY id ASC
+            LIMIT ?
+        "#;
+        let requeue_candidates = r#"
+            SELECT id FROM ai_outbox_event
+            WHERE publish_state = 'processing'
+              AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
+              AND retry_count + 1 < ?
+            ORDER BY id ASC
+            LIMIT ?
+        "#;
+        let dead_update = format!(
             r#"
             UPDATE ai_outbox_event
             SET publish_state = 'failed',
@@ -3659,14 +3827,11 @@ impl NativeSqlMemoryStore {
             WHERE publish_state = 'processing'
               AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
               AND retry_count + 1 >= ?
+              AND id IN ({})
             "#,
-        )
-        .bind(&timestamp)
-        .bind(&timestamp)
-        .bind(max_retries)
-        .execute(&self.pool)
-        .await?;
-        let requeued = sqlx::query(
+            sql_placeholders(SWEEP_BATCH as usize)
+        );
+        let requeue_update = format!(
             r#"
             UPDATE ai_outbox_event
             SET publish_state = 'pending',
@@ -3678,17 +3843,50 @@ impl NativeSqlMemoryStore {
             WHERE publish_state = 'processing'
               AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
               AND retry_count + 1 < ?
+              AND id IN ({})
             "#,
-        )
-        .bind(&timestamp)
-        .bind(&timestamp)
-        .bind(max_retries)
-        .execute(&self.pool)
-        .await?;
-        Ok(crate::learning_jobs::StaleRequeueCounts {
-            requeued: requeued.rows_affected(),
-            dead: dead.rows_affected(),
-        })
+            sql_placeholders(SWEEP_BATCH as usize)
+        );
+        loop {
+            let dead_ids: Vec<i64> = sqlx::query_scalar(dead_candidates)
+                .bind(&timestamp)
+                .bind(max_retries)
+                .bind(SWEEP_BATCH)
+                .fetch_all(&self.pool)
+                .await?;
+            let requeue_ids: Vec<i64> = sqlx::query_scalar(requeue_candidates)
+                .bind(&timestamp)
+                .bind(max_retries)
+                .bind(SWEEP_BATCH)
+                .fetch_all(&self.pool)
+                .await?;
+            if dead_ids.is_empty() && requeue_ids.is_empty() {
+                break;
+            }
+
+            if !dead_ids.is_empty() {
+                let mut dead = sqlx::query(&dead_update)
+                    .bind(&timestamp)
+                    .bind(&timestamp)
+                    .bind(max_retries);
+                for id in &dead_ids {
+                    dead = dead.bind(id);
+                }
+                counts.dead += dead.execute(&self.pool).await?.rows_affected();
+            }
+
+            if !requeue_ids.is_empty() {
+                let mut requeued = sqlx::query(&requeue_update)
+                    .bind(&timestamp)
+                    .bind(&timestamp)
+                    .bind(max_retries);
+                for id in &requeue_ids {
+                    requeued = requeued.bind(id);
+                }
+                counts.requeued += requeued.execute(&self.pool).await?.rows_affected();
+            }
+        }
+        Ok(counts)
     }
 
     pub async fn renew_outbox_delivery_lease(
@@ -4268,93 +4466,7 @@ impl NativeSqlMemoryStore {
     }
 
     async fn apply_sqlite_phase1_migration(&self) -> Result<(), NativeSqlStoreError> {
-        const MIGRATIONS: &[(&str, &str)] = &[
-            (
-                "0001",
-                include_str!("../../../tests/fixtures/database/sqlite/migrations/0001_memory_schema.up.sql"),
-            ),
-            (
-                "0002",
-                include_str!("../../../tests/fixtures/database/sqlite/migrations/0002_memory_indexes.up.sql"),
-            ),
-            (
-                "0003",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0003_memory_tenant_preference.up.sql"
-                ),
-            ),
-            (
-                "0004",
-                include_str!("../../../tests/fixtures/database/sqlite/migrations/0004_memory_learning_job.up.sql"),
-            ),
-            (
-                "0005",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0005_memory_record_fulltext_search.up.sql"
-                ),
-            ),
-            (
-                "0006",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0006_memory_eval_run_extend.up.sql"
-                ),
-            ),
-            (
-                "0007",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0007_memory_commercial_management.up.sql"
-                ),
-            ),
-            (
-                "0008",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0008_memory_fts_predicate.up.sql"
-                ),
-            ),
-            (
-                "0009",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0009_memory_outbox_delivery_lease.up.sql"
-                ),
-            ),
-            (
-                "0010",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0010_memory_job_execution_lease.up.sql"
-                ),
-            ),
-            (
-                "0011",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0011_memory_job_attempt_accounting.up.sql"
-                ),
-            ),
-            (
-                "0012",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0012_memory_list_indexes.up.sql"
-                ),
-            ),
-            (
-                "0013",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0013_memory_feedback.up.sql"
-                ),
-            ),
-            (
-                "0014",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0014_claim_order_and_keyset_indexes.up.sql"
-                ),
-            ),
-            (
-                "0015",
-                include_str!(
-                    "../../../tests/fixtures/database/sqlite/migrations/0015_job_retry_backoff.up.sql"
-                ),
-            ),
-        ];
-        self.apply_embedded_sql_migrations(MIGRATIONS).await
+        self.apply_embedded_sql_migrations(SQLITE_EMBEDDED_PHASE1_MIGRATIONS).await
     }
 
     async fn retrieve_event_idempotency_state(
@@ -4536,7 +4648,7 @@ impl NativeSqlMemoryStore {
             retrievers_json: row.get("retrievers_json"),
             latency_ms: row.get("latency_ms"),
             result_count: row.get("result_count"),
-            degraded: self.decode_bool(&row, "degraded"),
+            degraded: self.decode_bool(&row, "degraded")?,
             metadata_json: row.get("metadata_json"),
             hits,
             context_pack,
@@ -4610,12 +4722,16 @@ impl NativeSqlMemoryStore {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(row.map(|row| MemoryContextPackSnapshot {
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let snapshot = MemoryContextPackSnapshot {
             context_pack_id: row.get("uuid"),
             pack_json: row.get("pack_json"),
             estimated_tokens: row.get("estimated_tokens"),
-            truncated: self.decode_bool(&row, "truncated"),
-        }))
+            truncated: self.decode_bool(&row, "truncated")?,
+        };
+        Ok(Some(snapshot))
     }
 
     pub async fn list_retrieval_traces_for_tenant(
@@ -4671,18 +4787,20 @@ impl NativeSqlMemoryStore {
             .await?
         };
 
-        Ok(rows
-            .into_iter()
-            .map(|row| NativeSqlRetrievalTraceSummaryRow {
-                trace_id: row.get("uuid"),
-                space_id: row.get("space_id"),
-                query_text: row.get("query_text"),
-                query_hash: row.get("query_hash"),
-                result_count: row.get("result_count"),
-                degraded: self.decode_bool(&row, "degraded"),
-                created_at: row.get("created_at"),
+        rows.into_iter()
+            .map(|row| {
+                let degraded = self.decode_bool(&row, "degraded")?;
+                Ok(NativeSqlRetrievalTraceSummaryRow {
+                    trace_id: row.get("uuid"),
+                    space_id: row.get("space_id"),
+                    query_text: row.get("query_text"),
+                    query_hash: row.get("query_hash"),
+                    result_count: row.get("result_count"),
+                    degraded,
+                    created_at: row.get("created_at"),
+                })
             })
-            .collect())
+            .collect()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -4759,16 +4877,20 @@ impl NativeSqlMemoryStore {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(row.map(|row| NativeSqlContextPackRow {
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let pack = NativeSqlContextPackRow {
             context_pack_id: row.get("uuid"),
             query_text: row.get("query_text"),
             pack_json: row.get("pack_json"),
             estimated_tokens: row.get("estimated_tokens"),
-            truncated: self.decode_bool(&row, "truncated"),
+            truncated: self.decode_bool(&row, "truncated")?,
             created_at: row.get("created_at"),
             retrieval_trace_id: row.get("retrieval_trace_id"),
             space_id: row.get("space_id"),
-        }))
+        };
+        Ok(Some(pack))
     }
 
     async fn lookup_retrieval_trace_row_id_for_tenant(
@@ -4852,6 +4974,38 @@ impl NativeSqlMemoryStore {
         };
 
         Ok(rows.into_iter().map(space_row_from_sql).collect())
+    }
+
+    /// Exact one-row lookup of a principal's space of one `space_type`, served
+    /// as an index seek on `uk_ai_space_owner_type (tenant_id,
+    /// owner_subject_type, owner_subject_id, space_type)`. Correct for a
+    /// principal owning any number of spaces, which a paged scan is not.
+    pub async fn find_space_id_by_owner_and_type(
+        &self,
+        tenant_id: i64,
+        owner_subject_type: &str,
+        owner_subject_id: &str,
+        space_type: &str,
+    ) -> Result<Option<i64>, NativeSqlStoreError> {
+        let space_id = sqlx::query_scalar::<_, i64>(
+            r#"
+            SELECT id
+            FROM ai_space
+            WHERE tenant_id = ?
+              AND owner_subject_type = ?
+              AND owner_subject_id = ?
+              AND space_type = ?
+              AND lifecycle_status <> 'deleted'
+            LIMIT 1
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(owner_subject_type)
+        .bind(owner_subject_id)
+        .bind(space_type)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(space_id)
     }
 
     pub async fn retrieve_space_for_tenant(
@@ -5240,8 +5394,8 @@ impl NativeSqlMemoryStore {
               AND (? IS NULL OR habit.stage = ?)
               AND (
                 ? IS NULL
-                OR habit.description LIKE ? ESCAPE '\'
-                OR habit.habit_key LIKE ? ESCAPE '\'
+                OR lower(habit.description) LIKE lower(?) ESCAPE '\'
+                OR lower(habit.habit_key) LIKE lower(?) ESCAPE '\'
               )
               AND habit.uuid > ?
             ORDER BY habit.uuid ASC
@@ -5728,6 +5882,16 @@ impl MemoryRecordStorePort for NativeSqlMemoryStore {
         query: RetrieveCanonicalMemoryQuery,
     ) -> MemorySpiResult<Option<MemoryCanonicalRecord>> {
         self.retrieve_canonical_memory(&query.scope, &query.memory_id)
+            .await
+            .map_err(|err| port_error("MemoryRecordStorePort", err))
+    }
+
+    async fn retrieve_canonical_batch(
+        &self,
+        scope: MemoryScopeContext,
+        memory_ids: Vec<String>,
+    ) -> MemorySpiResult<Vec<Option<MemoryCanonicalRecord>>> {
+        self.retrieve_canonical_memories_batch(&scope, &memory_ids)
             .await
             .map_err(|err| port_error("MemoryRecordStorePort", err))
     }
@@ -6737,23 +6901,27 @@ fn retrieval_trace_select_sql() -> &'static str {
 }
 
 impl NativeSqlMemoryStore {
-    fn decode_bool(&self, row: &sqlx::any::AnyRow, column: &str) -> bool {
+    /// Decodes a boolean column, failing loudly on schema/type drift.
+    ///
+    /// A decode failure means the column is not the BOOLEAN (or 0/1 integer)
+    /// the writer produced — defaulting would silently flip
+    /// degraded/truncated flags, so the drift propagates as a storage error
+    /// (masked to a fixed detail at the API boundary) after the error log.
+    fn decode_bool(&self, row: &sqlx::any::AnyRow, column: &str) -> Result<bool, NativeSqlStoreError> {
         match self.dialect {
-            MemorySqlDialect::Sqlite => sqlite_int_to_bool(row.get(column)),
+            MemorySqlDialect::Sqlite => Ok(sqlite_int_to_bool(row.get(column))),
             MemorySqlDialect::Postgres => row
                 .try_get::<bool, _>(column)
                 .or_else(|_| row.try_get::<i64, _>(column).map(sqlite_int_to_bool))
-                .unwrap_or_else(|error| {
-                    // A decode failure here means schema/type drift (e.g. the
-                    // column is read back as TEXT). Defaulting to `false`
-                    // would silently flip degraded/truncated flags; surface
-                    // the drift loudly instead.
+                .map_err(|error| {
                     tracing::error!(
                         column = %column,
                         decode_error = %error,
-                        "boolean column failed to decode on PostgreSQL; defaulting to false — schema drift suspected"
+                        "boolean column failed to decode on PostgreSQL; schema drift suspected"
                     );
-                    false
+                    NativeSqlStoreError::InvariantViolation {
+                        message: format!("boolean column `{column}` failed to decode on PostgreSQL"),
+                    }
                 }),
         }
     }
@@ -6932,6 +7100,48 @@ pub(crate) fn split_sql_statements(sql: &str) -> Vec<String> {
     }
 
     statements
+}
+
+#[cfg(test)]
+mod embedded_migration_guard_tests {
+    use super::*;
+
+    // The initialization guard derives its key from the final list entry; these tests
+    // pin the structural invariants so a hand-pinned guard key can never return.
+    #[test]
+    fn sqlite_guard_key_tracks_the_final_migration_entry() {
+        let (last_version, last_sql) = SQLITE_EMBEDDED_PHASE1_MIGRATIONS
+            .last()
+            .expect("sqlite embedded migration list is never empty");
+        // Deliberately pinned: adding a fixture migration updates the list and
+        // this expectation together, so the guard can never silently trail.
+        assert_eq!(*last_version, "0016");
+        assert!(!last_sql.is_empty());
+    }
+
+    #[test]
+    fn postgres_guard_key_tracks_the_final_migration_entry() {
+        let (last_version, last_sql) = POSTGRES_EMBEDDED_PHASE1_MIGRATIONS
+            .last()
+            .expect("postgres embedded migration list is never empty");
+        assert_eq!(*last_version, "baseline");
+        assert!(!last_sql.is_empty());
+    }
+
+    #[test]
+    fn sqlite_migration_versions_are_strictly_increasing_and_unique() {
+        let mut previous: Option<&str> = None;
+        for (version, _) in SQLITE_EMBEDDED_PHASE1_MIGRATIONS {
+            assert_eq!(version.len(), 4, "versions are zero-padded four digits");
+            if let Some(previous) = previous {
+                assert!(
+                    *version > previous,
+                    "versions must strictly increase: {previous} then {version}"
+                );
+            }
+            previous = Some(version);
+        }
+    }
 }
 
 #[cfg(test)]

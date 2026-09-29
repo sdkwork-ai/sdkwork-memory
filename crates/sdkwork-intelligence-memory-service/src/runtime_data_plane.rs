@@ -249,6 +249,20 @@ impl MemoryRuntimeDataPlane {
             .map_err(map_memory_spi_error)
     }
 
+    /// Bulk rehydration for retrieval: one store round trip per scope instead
+    /// of one per candidate, so a full candidate pool cannot pin the pool with
+    /// hundreds of concurrent point queries.
+    pub async fn retrieve_canonical_memories_batch(
+        &self,
+        scope: sdkwork_memory_spi::MemoryScopeContext,
+        memory_ids: Vec<String>,
+    ) -> MemoryServiceResult<Vec<Option<MemoryCanonicalRecord>>> {
+        self.require_record_store()?
+            .retrieve_canonical_batch(scope, memory_ids)
+            .await
+            .map_err(map_memory_spi_error)
+    }
+
     pub async fn update_canonical_memory_atomic(
         &self,
         command: UpdateCanonicalMemoryCommand,

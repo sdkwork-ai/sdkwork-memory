@@ -8,6 +8,14 @@ license.workspace = true
 
 [lints]
 workspace = true
+
+# SQLite rides the sqlx Any driver and is a client-local/desktop engine
+# only; server stores run on PostgreSQL. Opt-in keeps libsqlite3-sys out of
+# server assemblies that embed this plugin.
+[features]
+default = []
+sqlite = ["sqlx/sqlite"]
+
 [dependencies]
 async-trait.workspace = true
 futures = "0.3"

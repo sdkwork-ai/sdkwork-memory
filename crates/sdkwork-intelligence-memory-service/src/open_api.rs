@@ -882,9 +882,21 @@ impl OpenMemoryService {
         let scope = Self::scope(&context, request.space_id)?;
         let mut created_candidates = 0_u32;
         let mut missing_events = 0_u32;
+        let mut skipped_events = 0_u32;
         let mut contents: Vec<(u64, String)> = Vec::new();
+        // Prefix byte budget over the extracted event content: extraction covers
+        // input events in request order until the budget is exhausted. The result
+        // reports the remainder as `skippedEventCount` so a truncated run is
+        // observable instead of an unbounded prompt hiding the truncation.
+        let max_input_bytes = platform::max_extraction_input_bytes();
+        let mut input_bytes = 0_u64;
+        let mut budget_exhausted = false;
 
         for event_id in &request.input_events {
+            if budget_exhausted {
+                skipped_events += 1;
+                continue;
+            }
             if let Some(payload) = self
                 .store
                 .retrieve_event_payload(&scope, &event_id.to_string())
@@ -902,6 +914,13 @@ impl OpenMemoryService {
                     })?
                     .to_string();
                 assert_memory_text_is_safe(&[("proposedText", &proposed)])?;
+                let proposed_bytes = proposed.len() as u64;
+                if input_bytes + proposed_bytes > max_input_bytes as u64 {
+                    budget_exhausted = true;
+                    skipped_events += 1;
+                    continue;
+                }
+                input_bytes += proposed_bytes;
                 contents.push((*event_id, proposed));
             } else {
                 missing_events += 1;
@@ -1016,6 +1035,7 @@ impl OpenMemoryService {
             return Ok(serde_json::json!({
                 "candidateCount": created_candidates,
                 "missingEventCount": missing_events,
+                "skippedEventCount": skipped_events,
                 "extractionMode": "additive_llm",
                 "refusedCount": report.refused.len(),
                 "truncatedCount": report.truncated,
@@ -1048,6 +1068,7 @@ impl OpenMemoryService {
         Ok(serde_json::json!({
             "candidateCount": created_candidates,
             "missingEventCount": missing_events,
+            "skippedEventCount": skipped_events,
             "extractionMode": request
                 .extraction_mode
                 .unwrap_or_else(|| "deterministic".to_string()),
@@ -1686,24 +1707,19 @@ impl MemoryOpenApi for OpenMemoryService {
                         .iter()
                         .map(|candidate| candidate.memory_id.clone()),
                 )
-                .collect::<std::collections::BTreeSet<_>>();
-            let rehydrate_futures = candidate_ids.into_iter().map(|memory_id| {
-                let scope = scope.clone();
-                async move {
-                    let canonical = self
-                        .runtime_data_plane
-                        .retrieve_canonical_memory(RetrieveCanonicalMemoryQuery {
-                            scope,
-                            memory_id: memory_id.clone(),
-                        })
-                        .await?;
-                    Ok::<_, MemoryServiceError>((memory_id, canonical))
-                }
-            });
-            let rehydrated = futures::future::join_all(rehydrate_futures).await;
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>();
+            // Rehydrate the whole candidate pool with one bulk read per space:
+            // per-candidate point queries fan out into hundreds of concurrent
+            // round trips under the pool and dominate retrieval latency.
+            let rehydrated_records = self
+                .runtime_data_plane
+                .retrieve_canonical_memories_batch(scope.clone(), candidate_ids.clone())
+                .await?;
             let mut canonical_by_id = std::collections::BTreeMap::new();
-            for result in rehydrated {
-                let (memory_id, Some(canonical)) = result? else {
+            for (memory_id, canonical) in candidate_ids.into_iter().zip(rehydrated_records) {
+                let Some(canonical) = canonical else {
                     continue;
                 };
                 if canonical.space_id != scope.space_id {
