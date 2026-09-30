@@ -365,8 +365,10 @@ def main():
     )
 
     observed["rejections"] = [
-        # An id that names nothing. Because the acknowledgement has no per-item
-        # channel, this must abort before the resolvable entry beside it is written.
+        # An id that names nothing. The batch answers with that entry's own
+        # error - 404 naming the id exactly as the caller sent it - while the
+        # resolvable entry beside it is applied: each entry commits atomically
+        # with its own journal, and the failure message says how many did.
         expect_error(
             "batch_update(unknown memory_id)",
             lambda: client.batch_update(
@@ -389,8 +391,8 @@ def main():
         ),
     ]
     check(
-        "an aborted batch wrote nothing",
-        client.get(batch_first_id).get("memory") == BATCH_FIRST_UPDATED,
+        "an aborted batch applied its resolvable entries",
+        client.get(batch_first_id).get("memory") == "must not be written",
         observed["batch_update"],
     )
 

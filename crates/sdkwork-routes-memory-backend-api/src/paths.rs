@@ -58,3 +58,6 @@ pub const POLICY_ASSIGNMENT: &str =
 pub const COMMERCIAL_READINESS: &str = "/backend/v3/api/memory/commercial_readiness";
 pub const COMMERCIAL_READINESS_REBUILD: &str =
     "/backend/v3/api/memory/commercial_readiness/rebuild";
+
+// Usage metering facts.
+pub const USAGE: &str = "/backend/v3/api/memory/usage";

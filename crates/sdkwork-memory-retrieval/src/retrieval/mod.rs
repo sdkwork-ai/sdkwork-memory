@@ -6,6 +6,8 @@ use serde_json::Value;
 use sdkwork_memory_contract::MemoryRecord;
 use sdkwork_utils_rust::is_blank;
 
+use crate::text::{flush_cjk_run, is_cjk};
+
 const RRF_RANK_CONSTANT: f64 = 60.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -376,8 +378,14 @@ pub fn time_recency_score(created_at: &str) -> f64 {
     let Some(timestamp) = parsed else {
         return 0.0;
     };
-    let age_hours = (sdkwork_utils_rust::now() - timestamp).num_hours().max(0) as f64;
-    recency_score_for_age_hours(age_hours)
+    let age_hours = (sdkwork_utils_rust::now() - timestamp).num_hours();
+    if age_hours < 0 {
+        // A future created_at is bad data, not fresher-than-now; scoring it
+        // full-confidence would let a corrupted timestamp pin a memory at the
+        // top of every time-ranked list forever.
+        return 0.0;
+    }
+    recency_score_for_age_hours(age_hours as f64)
 }
 
 fn recency_score_for_age_hours(age_hours: f64) -> f64 {
@@ -388,15 +396,6 @@ fn recency_score_for_age_hours(age_hours: f64) -> f64 {
 
 pub fn event_match_score(query: &str, payload_text: &str) -> f64 {
     keyword_match_score(query, payload_text)
-}
-
-fn is_cjk(ch: char) -> bool {
-    matches!(ch,
-        '\u{3400}'..='\u{4DBF}'
-        | '\u{4E00}'..='\u{9FFF}'
-        | '\u{F900}'..='\u{FAFF}'
-        | '\u{2F800}'..='\u{2FA1F}'
-    )
 }
 
 fn tokenise_query(text: &str) -> Vec<String> {
@@ -437,23 +436,6 @@ fn tokenise_query(text: &str) -> Vec<String> {
         .filter(|token| !token.is_empty())
         .map(ToOwned::to_owned)
         .collect()
-}
-
-/// Emits a CJK run as adjacent character pairs (bigrams). Unigram scoring let
-/// any document sharing one common character earn a full token's worth of
-/// overlap, so short Chinese queries pulled in floods of near-zero-evidence
-/// matches; a bigram only matches where the two characters are adjacent,
-/// which is real lexical evidence. A lone CJK character has no pair and is
-/// emitted as itself so single-character queries still score.
-fn flush_cjk_run(run: &mut Vec<char>, tokens: &mut Vec<String>) {
-    if run.len() == 1 {
-        tokens.push(run.pop().expect("non-empty by the length check").to_string());
-        return;
-    }
-    for pair in run.windows(2) {
-        tokens.push(pair.iter().collect());
-    }
-    run.clear();
 }
 
 fn token_overlap_score(haystack: &str, tokens: &[String]) -> f64 {
@@ -965,6 +947,12 @@ mod tests {
         assert!((recency_score_for_age_hours(24.0 * 7.0) - 0.5).abs() < 1e-9);
         assert!(recency_score_for_age_hours(24.0) > 0.9);
         assert_eq!(time_recency_score("invalid"), 0.0);
+    }
+
+    #[test]
+    fn future_timestamps_score_zero_recency() {
+        assert_eq!(time_recency_score("2124-01-01T00:00:00Z"), 0.0);
+        assert_eq!(time_recency_score("9999-12-31T23:59:59Z"), 0.0);
     }
 
     #[test]

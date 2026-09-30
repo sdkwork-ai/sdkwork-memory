@@ -20,7 +20,7 @@ const families = [
   {
     root: "sdkwork-memory-app-sdk",
     owner: "sdkwork-memory",
-    authority: "sdkwork-memory.app",
+    authority: "sdkwork-memory-app-api",
     input: "openapi/memory-app-api.openapi.json",
     manifest: "sdk-manifest.json",
     forbiddenPathPrefixes: ["/backend/v3/api/", "/mem/v3/api/"],
@@ -28,7 +28,7 @@ const families = [
   {
     root: "sdkwork-memory-backend-sdk",
     owner: "sdkwork-memory",
-    authority: "sdkwork-memory.backend",
+    authority: "sdkwork-memory-backend-api",
     input: "openapi/memory-backend-api.openapi.json",
     manifest: "sdk-manifest.json",
     forbiddenPathPrefixes: ["/app/v3/api/", "/mem/v3/api/"],

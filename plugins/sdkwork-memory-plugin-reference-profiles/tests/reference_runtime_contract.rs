@@ -260,6 +260,7 @@ async fn reference_runtime_round_trips_learning_and_trace_ports_by_scope() {
             proposed_payload_json: Some(r#"{"preference":"concise"}"#.to_string()),
             evidence_json: Some(r#"{"source":"event"}"#.to_string()),
             confidence: 0.91,
+            learning_job_uuid: None,
         },
     )
     .await
@@ -275,6 +276,7 @@ async fn reference_runtime_round_trips_learning_and_trace_ports_by_scope() {
             proposed_payload_json: None,
             evidence_json: None,
             confidence: 0.51,
+            learning_job_uuid: None,
         },
     )
     .await
@@ -720,6 +722,7 @@ async fn reference_candidate_promotion_is_quota_atomic_and_retry_idempotent() {
                 proposed_payload_json: None,
                 evidence_json: None,
                 confidence: 0.9,
+            learning_job_uuid: None,
             },
         )
         .await
@@ -879,6 +882,7 @@ async fn reference_candidate_detail_preserves_timestamps_target_and_tenant_scope
             proposed_payload_json: Some(r#"{"preference":"detail"}"#.to_string()),
             evidence_json: Some(r#"{"eventId":"event-detail"}"#.to_string()),
             confidence: 0.93,
+            learning_job_uuid: None,
         },
     )
     .await
@@ -977,6 +981,7 @@ async fn reference_candidate_detail_preserves_timestamps_target_and_tenant_scope
             proposed_payload_json: None,
             evidence_json: None,
             confidence: 0.1,
+            learning_job_uuid: None,
         },
     )
     .await
@@ -1058,6 +1063,7 @@ async fn reference_candidate_detail_fails_closed_when_id_is_ambiguous_across_spa
                 proposed_payload_json: None,
                 evidence_json: None,
                 confidence: 0.8,
+            learning_job_uuid: None,
             },
         )
         .await

@@ -1,6 +1,6 @@
 export interface MemoryCapabilityBindingRequest {
   capabilityCode: string;
-  targetType: 'subject' | 'space' | 'binding' | 'memory';
+  targetType: 'subject' | 'space';
   targetId: string;
   mode: 'allow' | 'deny' | 'conditional';
   priority?: number;

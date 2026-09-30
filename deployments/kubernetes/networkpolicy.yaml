@@ -6,7 +6,8 @@
 #
 # Ingress: only the ingress-nginx controller may reach the gateway on 8080
 # (deployment.yaml exposes containerPort 8080; service.yaml fronted by
-# ingress.yaml with ingressClassName: nginx).
+# ingress.yaml with ingressClassName: nginx), plus Prometheus scrapes from the
+# monitoring namespace (servicemonitor.yaml targets /metrics on the same port).
 #
 # Egress (minimum required by the env declared in deployment.yaml):
 #   - DNS (53/TCP+UDP) to kube-dns — service discovery for every dependency
@@ -17,7 +18,8 @@
 #   - OTLP 4318 — pairs with OTEL_EXPORTER_OTLP_ENDPOINT
 #     (otel-collector.observability:4318); remove with the env if tracing is off
 #
-# NOT allowed by this policy (add explicit egress rules when enabled):
+# NOT allowed by this policy: apply
+# deployments/kubernetes/networkpolicy-egress-optional.yaml when you enable
 #   - SDKWORK_MEMORY_OUTBOX_DELIVERY_URL (mode=http) — arbitrary external HTTP
 #   - Drive S3 export endpoints (sdkwork-memory-drive secret)
 ---
@@ -47,6 +49,20 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: ingress-nginx
+      ports:
+        - port: 8080
+          protocol: TCP
+    # Prometheus scrapes (servicemonitor.yaml -> /metrics on containerPort
+    # 8080). The label below is the common prometheus-operator convention;
+    # adjust podSelector/namespaceSelector to your cluster's monitoring
+    # namespace and scrape pod labels.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
       ports:
         - port: 8080
           protocol: TCP

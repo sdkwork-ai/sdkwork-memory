@@ -26,6 +26,12 @@ const AUTH_CRITICAL_OPERATION_IDS = new Set([
   "retentionJobs.create",
   "migrationJobs.create",
   "indexes.rebuild",
+  // The mem0 compatibility wire's bulk erase is the same destructive,
+  // privacy-relevant class as `memories.delete`: it empties the caller's whole
+  // compatibility space in one unauthenticated-mistake-sized call, so it rides
+  // the same auth-critical rate-limit tier instead of the open-API mutating
+  // default.
+  "mem0.memory.removeAll",
 ]);
 
 // Vendor compatibility wire protocol (sdkwork-specs/API_SPEC.md section 4.5.2).
@@ -917,13 +923,13 @@ powershell -ExecutionPolicy Bypass -File tools/verify_phase1.ps1
           sdkFamily: "sdkwork-memory-sdk"
         },
         {
-          name: "sdkwork-memory.app",
+          name: "sdkwork-memory-app-api",
           prefix: "/app/v3/api",
           authorityOpenApi: "sdks/sdkwork-memory-app-sdk/openapi/memory-app-api.openapi.json",
           sdkFamily: "sdkwork-memory-app-sdk"
         },
         {
-          name: "sdkwork-memory.backend",
+          name: "sdkwork-memory-backend-api",
           prefix: "/backend/v3/api",
           authorityOpenApi: "sdks/sdkwork-memory-backend-sdk/openapi/memory-backend-api.openapi.json",
           sdkFamily: "sdkwork-memory-backend-sdk"
@@ -1221,8 +1227,8 @@ This directory owns SDKWork Memory SDK families and authority OpenAPI documents.
 SDK families:
 
 - \`sdkwork-memory-sdk\` for \`sdkwork-memory-open-api\` and \`${memoryOpenApiPrefix}\`
-- \`sdkwork-memory-app-sdk\` for \`sdkwork-memory.app\` and \`/app/v3/api\`
-- \`sdkwork-memory-backend-sdk\` for \`sdkwork-memory.backend\` and \`/backend/v3/api\`
+- \`sdkwork-memory-app-sdk\` for \`sdkwork-memory-app-api\` and \`/app/v3/api\`
+- \`sdkwork-memory-backend-sdk\` for \`sdkwork-memory-backend-api\` and \`/backend/v3/api\`
 
 Protected Open API clients use \`X-API-Key\` through generated SDK credential providers. They must not join app/backend token-manager client lists.
 
@@ -1241,7 +1247,7 @@ RPC SDK families are deferred until high-throughput backend/native RPC integrati
     surface: "app",
     prefix: "/app/v3/api",
     title: "SDKWork Memory App API SDK",
-    authority: "sdkwork-memory.app",
+    authority: "sdkwork-memory-app-api",
     openapiFile: "memory-app-api.openapi.json",
     client: "SdkworkMemoryAppClient",
     dependencies: appSdkDependencies
@@ -1250,7 +1256,7 @@ RPC SDK families are deferred until high-throughput backend/native RPC integrati
     surface: "backend",
     prefix: "/backend/v3/api",
     title: "SDKWork Memory Backend API SDK",
-    authority: "sdkwork-memory.backend",
+    authority: "sdkwork-memory-backend-api",
     openapiFile: "memory-backend-api.openapi.json",
     client: "SdkworkMemoryBackendClient",
     dependencies: backendSdkDependencies
@@ -2030,6 +2036,40 @@ function cursorListParams(extra = []) {
   ];
 }
 
+// PAGINATION_SPEC section 4 requires every list/search operation to document
+// its sort keys, default sort, pagination mode, and maximum practical volume
+// class (P0/P1/P2 per PERFORMANCE_SPEC). Every SDKWork-owned list operation is
+// generated through `operation()`, so the standard sentence is attached there
+// from this template instead of hand-copied per operation. Sort keys are
+// transcribed from the native-SQL store's actual `ORDER BY` clauses
+// (plugins/sdkwork-memory-plugin-native-sql); where no single named key is
+// verifiable the sentence says "keyset-stable order" rather than naming a
+// column the store does not order by.
+const LIST_SORT_KEYS = new Map([
+  ["memories.list", "uuid ascending (default sort)"],
+  ["events.list", "uuid ascending (default sort)"],
+  ["candidates.list", "uuid ascending (default sort)"],
+  ["habits.list", "uuid ascending (default sort)"],
+  ["entities.list", "uuid ascending (default sort)"],
+  ["edges.list", "uuid ascending (default sort)"],
+  ["auditLogs.list", "uuid ascending (default sort)"],
+  ["subjects.list", "uuid ascending (default sort)"],
+  ["bindings.list", "uuid ascending (default sort)"],
+  ["capabilityBindings.list", "uuid ascending (default sort)"],
+  ["policies.list", "uuid ascending (default sort)"],
+  ["policyAssignments.list", "uuid ascending (default sort)"],
+  ["usage.list", "day, metric ascending (default sort)"],
+]);
+
+function listOperationStandardDescription(operationId) {
+  const sortKey = LIST_SORT_KEYS.get(operationId) ?? "a keyset-stable order";
+  return (
+    `Lists in pagination mode \`cursor\` over ${sortKey}. ` +
+    "Default page size 20; maximum 200. " +
+    "Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
+  );
+}
+
 function idempotencyParam() {
   return {
     name: "Idempotency-Key",
@@ -2052,7 +2092,7 @@ function resolveApiSurface({ authority, authMode, apiSurface }) {
   if (authMode === "api-key") {
     return "open-api";
   }
-  if (authority === "sdkwork-memory.backend") {
+  if (authority === "sdkwork-memory-backend-api") {
     return "backend-api";
   }
   return "app-api";
@@ -2075,6 +2115,7 @@ function operation({
   authMode = "dual-token",
   apiSurface,
   rateLimitTier = null,
+  description = null,
 }) {
   const resolvedApiSurface = resolveApiSurface({ authority, authMode, apiSurface });
   const resolvedRateLimitTier = resolveRateLimitTier({
@@ -2112,6 +2153,25 @@ function operation({
   };
   if (resolvedRateLimitTier) {
     op["x-sdkwork-rate-limit-tier"] = resolvedRateLimitTier;
+  }
+  // PAGINATION_SPEC section 3 makes the pagination mode part of the contract
+  // and `MUST` be documented per operation; the list standard sentence is
+  // appended here so no owned list operation can ship without it. Vendor
+  // compatibility wire operations are exempt: they mirror the upstream wire's
+  // own vocabulary instead of the SDKWork list contract.
+  const isListOperation =
+    typeof responseSchema === "string"
+    && responseSchema.endsWith("List")
+    && !isExternalProtocolOperation(op);
+  const descriptionParts = [];
+  if (description) {
+    descriptionParts.push(description);
+  }
+  if (isListOperation) {
+    descriptionParts.push(listOperationStandardDescription(operationId));
+  }
+  if (descriptionParts.length > 0) {
+    op.description = descriptionParts.join(" ");
   }
   if (requestSchema) {
     op.requestBody = {
@@ -2374,14 +2434,19 @@ function baseSchemas() {
       type: "object",
       required: ["query", "spaceIds", "topK", "contextBudgetTokens"],
       properties: {
-        query: { type: "string" },
+        query: {
+          type: "string",
+          maxLength: 8192,
+          description:
+            "Natural-language query text. Requests past 8192 characters are rejected as invalid parameters."
+        },
         spaceIds: { type: "array", items: idSchema, maxItems: MAX_SCOPE_SPACE_IDS },
         actorId: nullableString,
         retrievalProfileId: nullableIdSchema,
         memoryTypes: { anyOf: [{ type: "array", items: memoryType }, { type: "null" }] },
         filters: nullableJsonObject,
         topK: { type: "integer", format: "int32", minimum: 1, maximum: 100 },
-        contextBudgetTokens: { type: "integer", format: "int32", minimum: 1 },
+        contextBudgetTokens: { type: "integer", format: "int32", minimum: 1, maximum: 100000 },
         showExpired: { type: "boolean" },
         threshold: { anyOf: [{ type: "number" }, { type: "null" }] },
         explain: { type: "boolean" },
@@ -2937,7 +3002,12 @@ function baseSchemas() {
       required: ["capabilityCode", "targetType", "targetId", "mode"],
       properties: {
         capabilityCode: { type: "string" },
-        targetType: { type: "string", enum: ["subject", "space", "binding", "memory"] },
+        // Phase-1 runtime enforcement covers space- and subject-scoped
+        // bindings; `binding`/`memory` targets are rejected at create with a
+        // typed validation error (REVIEW-20260930 decision D2), so the
+        // published request contract declares only the enforced set. The
+        // response DTO keeps the wider enum for historical rows.
+        targetType: { type: "string", enum: ["subject", "space"] },
         targetId: idSchema,
         mode: { type: "string", enum: ["allow", "deny", "conditional"] },
         priority: { type: "integer", format: "int32" },
@@ -2975,7 +3045,14 @@ function baseSchemas() {
       required: ["targetType", "targetId"],
       properties: {
         targetType: { type: "string", enum: ["subject", "space", "binding", "memory"] },
-        targetId: idSchema
+        targetId: idSchema,
+        // The resolved binding set is a cursor-mode page, not an unbounded
+        // array: `pageSize` names the JSON body spelling of the shared page
+        // size contract (PAGINATION_SPEC section 2 reserves `pageSize` for
+        // request bodies), with the same default/maximum as every list
+        // operation.
+        cursor: { type: "string", description: CURSOR_PARAM_DOC },
+        pageSize: pageSizeSchema()
       }
     },
     MemoryEntity: {
@@ -3174,7 +3251,18 @@ function baseSchemas() {
       properties: {
         implementationProfileId: nullableIdSchema
       }
-    }
+    },
+    MemoryUsageEntry: {
+      type: "object",
+      required: ["day", "metric", "delta", "updatedAt"],
+      properties: {
+        day: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "UTC calendar day (YYYY-MM-DD) the charge belongs to." },
+        metric: { type: "string" },
+        delta: { type: "integer", description: "Cumulative signed charge for the day (record.delete accumulates negative deltas)." },
+        updatedAt: instant
+      }
+    },
+    MemoryUsageList: pageSchema("MemoryUsageEntry")
   };
 }
 
@@ -3515,8 +3603,18 @@ function mem0Schemas() {
         query: { type: "string" },
         filters: { type: ["object", "null"], additionalProperties: true },
         metadata: { description: "Exact-match metadata conditions, merged into the filter conjunction.", type: ["object", "null"], additionalProperties: true },
-        top_k: { type: ["integer", "null"] },
-        threshold: { type: ["number", "null"] },
+        top_k: {
+          type: ["integer", "null"],
+          minimum: 1,
+          maximum: 100,
+          description: "Maximum hits requested. Values outside 1..100 are rejected as invalid parameters."
+        },
+        threshold: {
+          type: ["number", "null"],
+          minimum: 0,
+          maximum: 1,
+          description: "Minimum fused score for a hit, on the 0..1 confidence scale."
+        },
         explain: { type: ["boolean", "null"] },
         rerank: { type: ["boolean", "null"] },
         output_format: { type: ["string", "null"] },
@@ -3735,7 +3833,13 @@ function mem0Paths(paths) {
       // whose mere presence is a filter. Declaring it is what makes the refusal
       // reachable, and the refusal is what stops a scoped delete from becoming an
       // unscoped one.
-      { name: "filters", in: "query", required: false, schema: { type: "string" } }
+      { name: "filters", in: "query", required: false, schema: { type: "string" } },
+      // Upstream (external/mem0/docs/openapi.json, memories_delete_all) also puts
+      // org/project routing hints on the wire. The official clients may send
+      // them; this surface ignores everything but the API key's tenant, so the
+      // honest declaration is accepted-and-ignored rather than undeclared.
+      { name: "org_id", in: "query", required: false, schema: { type: "string", description: "Accepted and ignored (upstream org routing hint; this surface scopes every request by the API key's tenant)." } },
+      { name: "project_id", in: "query", required: false, schema: { type: "string", description: "Accepted and ignored (upstream project routing hint; this surface scopes every request by the API key's tenant)." } }
     ]
   }));
 
@@ -4088,7 +4192,7 @@ function writeOpenApi() {
 
 function writeAppOpenApi() {
   const paths = {};
-  const authority = "sdkwork-memory.app";
+  const authority = "sdkwork-memory-app-api";
   const P = "/app/v3/api/memory";
   addPath(paths, `${P}/spaces`, "get", operation({ method: "get", authority, operationId: "spaces.list", permission: "memory.spaces.read", auditEvent: "memory.space.list", queryParams: cursorListParams(), responseSchema: "MemorySpaceList" }));
   addPath(paths, `${P}/spaces`, "post", operation({ method: "post", authority, operationId: "spaces.create", permission: "memory.spaces.write", auditEvent: "memory.space.created", requestSchema: "MemorySpaceRequest", responseSchema: "MemorySpace", idempotent: true }));
@@ -4154,7 +4258,7 @@ addPath(paths, `${P}/memories/delete_all`, "post", operation({ method: "post", a
 
 function writeBackendOpenApi() {
   const paths = {};
-  const authority = "sdkwork-memory.backend";
+  const authority = "sdkwork-memory-backend-api";
   const P = "/backend/v3/api/memory";
   addPath(paths, `${P}/spaces`, "get", operation({ method: "get", authority, operationId: "spaces.list", permission: "memory.backend.spaces.read", auditEvent: "memory.backend.space.list", queryParams: cursorListParams(), responseSchema: "MemorySpaceList" }));
   addPath(paths, `${P}/spaces/{spaceId}`, "get", operation({ method: "get", authority, operationId: "spaces.retrieve", permission: "memory.backend.spaces.read", auditEvent: "memory.backend.space.read", pathParams: [pathParam("spaceId")], responseSchema: "MemorySpace" }));
@@ -4218,7 +4322,7 @@ function writeBackendOpenApi() {
   addPath(paths, `${P}/capability_bindings`, "post", operation({ method: "post", authority, operationId: "capabilityBindings.create", permission: "memory.backend.capabilityBindings.write", auditEvent: "memory.backend.capability_binding.created", requestSchema: "MemoryCapabilityBindingRequest", responseSchema: "MemoryCapabilityBinding", idempotent: true }));
   addPath(paths, `${P}/capability_bindings/{capabilityBindingId}`, "get", operation({ method: "get", authority, operationId: "capabilityBindings.retrieve", permission: "memory.backend.capabilityBindings.read", auditEvent: "memory.backend.capability_binding.read", pathParams: [pathParam("capabilityBindingId")], responseSchema: "MemoryCapabilityBinding" }));
   addPath(paths, `${P}/capability_bindings/{capabilityBindingId}`, "delete", operation({ method: "delete", authority, operationId: "capabilityBindings.delete", permission: "memory.backend.capabilityBindings.write", auditEvent: "memory.backend.capability_binding.deleted", pathParams: [pathParam("capabilityBindingId")], responseSchema: "MemoryCapabilityBinding", status: "204" }));
-  addPath(paths, `${P}/capabilities/resolve`, "post", operation({ method: "post", authority, operationId: "capabilities.resolve", permission: "memory.backend.capabilityBindings.read", auditEvent: "memory.backend.capabilities.resolved", requestSchema: "MemoryResolveCapabilitiesRequest", responseSchema: "MemoryResolvedCapabilityListResponse", status: "200", idempotent: true }));
+  addPath(paths, `${P}/capabilities/resolve`, "post", operation({ method: "post", authority, operationId: "capabilities.resolve", permission: "memory.backend.capabilityBindings.read", auditEvent: "memory.backend.capabilities.resolved", requestSchema: "MemoryResolveCapabilitiesRequest", responseSchema: "MemoryResolvedCapabilityListResponse", status: "200", idempotent: true, description: "Resolves the capability bindings effective for a target. The resolved set is paged in pagination mode `cursor` (PAGINATION_SPEC section 3): pass `data.pageInfo.nextCursor` from the previous response as the request's `cursor` and omit it for the first page. Default page size 20; maximum 200." }));
 
   // Commercial graph, policy, and readiness management.
   addPath(paths, `${P}/entities`, "get", operation({ method: "get", authority, operationId: "entities.list", permission: "memory.backend.entities.read", auditEvent: "memory.backend.entity.list", queryParams: cursorListParams([{ name: "space_id", in: "query", required: false, schema: idSchema }, { name: "entity_type", in: "query", required: false, schema: { type: "string" } }, { name: "status", in: "query", required: false, schema: { type: "string" } }]), responseSchema: "MemoryEntityList" }));
@@ -4242,6 +4346,7 @@ function writeBackendOpenApi() {
   addPath(paths, `${P}/policy_assignments/{policyAssignmentId}`, "delete", operation({ method: "delete", authority, operationId: "policyAssignments.delete", permission: "memory.backend.policies.write", auditEvent: "memory.backend.policy_assignment.deleted", pathParams: [pathParam("policyAssignmentId")], responseSchema: "MemoryPolicyAssignment", status: "204" }));
   addPath(paths, `${P}/commercial_readiness`, "get", operation({ method: "get", authority, operationId: "commercialReadiness.retrieve", permission: "memory.backend.commercialReadiness.read", auditEvent: "memory.backend.commercial_readiness.read", responseSchema: "MemoryCommercialReadiness" }));
   addPath(paths, `${P}/commercial_readiness/rebuild`, "post", operation({ method: "post", authority, operationId: "commercialReadiness.rebuild", permission: "memory.backend.commercialReadiness.write", auditEvent: "memory.commercial_readiness.rebuilt", requestSchema: "MemoryCommercialReadinessRequest", responseSchema: "MemoryCommercialReadiness", status: "200", idempotent: true }));
+  addPath(paths, `${P}/usage`, "get", operation({ method: "get", authority, operationId: "usage.list", permission: "memory.backend.usage.read", auditEvent: "memory.backend.usage.list", queryParams: cursorListParams(), responseSchema: "MemoryUsageList" }));
 
   writeAlignedOpenApi("sdks/sdkwork-memory-backend-sdk/openapi/memory-backend-api.openapi.json", createOpenApi({
     title: "SDKWork Memory Backend API",
@@ -4275,7 +4380,7 @@ const routeSurfaceProfiles = [
     crateDir: "crates/sdkwork-routes-memory-app-api",
     crateImport: "sdkwork_routes_memory_app_api",
     manifestFn: "app_route_manifest",
-    apiAuthority: "sdkwork-memory.app",
+    apiAuthority: "sdkwork-memory-app-api",
     sdkFamily: "sdkwork-memory-app-sdk",
     prefix: "/app/v3/api",
     routeManifestDir: "sdks/_route-manifests/app-api",
@@ -4289,7 +4394,7 @@ const routeSurfaceProfiles = [
     crateDir: "crates/sdkwork-routes-memory-backend-api",
     crateImport: "sdkwork_routes_memory_backend_api",
     manifestFn: "backend_route_manifest",
-    apiAuthority: "sdkwork-memory.backend",
+    apiAuthority: "sdkwork-memory-backend-api",
     sdkFamily: "sdkwork-memory-backend-sdk",
     prefix: "/backend/v3/api",
     routeManifestDir: "sdks/_route-manifests/backend-api",
@@ -4572,8 +4677,8 @@ if ($null -eq $rootSpec.contracts.dependencyApiSurfaces) {
 
 foreach ($family in @(
     @{ Path = "sdks/sdkwork-memory-sdk"; Authority = "sdkwork-memory-open-api"; Prefix = "${memoryOpenApiPrefix}"; Spec = "openapi/memory-open-api.openapi.json"; Client = "SdkworkMemoryOpenClient" },
-    @{ Path = "sdks/sdkwork-memory-app-sdk"; Authority = "sdkwork-memory.app"; Prefix = "/app/v3/api"; Spec = "openapi/memory-app-api.openapi.json"; Client = "SdkworkMemoryAppClient" },
-    @{ Path = "sdks/sdkwork-memory-backend-sdk"; Authority = "sdkwork-memory.backend"; Prefix = "/backend/v3/api"; Spec = "openapi/memory-backend-api.openapi.json"; Client = "SdkworkMemoryBackendClient" }
+    @{ Path = "sdks/sdkwork-memory-app-sdk"; Authority = "sdkwork-memory-app-api"; Prefix = "/app/v3/api"; Spec = "openapi/memory-app-api.openapi.json"; Client = "SdkworkMemoryAppClient" },
+    @{ Path = "sdks/sdkwork-memory-backend-sdk"; Authority = "sdkwork-memory-backend-api"; Prefix = "/backend/v3/api"; Spec = "openapi/memory-backend-api.openapi.json"; Client = "SdkworkMemoryBackendClient" }
 )) {
     $manifest = Read-JsonFile (Join-Path $family.Path "sdk-manifest.json")
     $component = Read-JsonFile (Join-Path $family.Path "specs/component.spec.json")
@@ -4769,7 +4874,7 @@ function Verify-OpenApi {
 $appOpenApiCheck = @{
     Path = "sdks/sdkwork-memory-app-sdk/openapi/memory-app-api.openapi.json"
     Prefix = "/app/v3/api"
-    Authority = "sdkwork-memory.app"
+    Authority = "sdkwork-memory-app-api"
     SdkFamily = "sdkwork-memory-app-sdk"
     AuthMode = "dual-token"
     ExpectedApiSurface = "app-api"
@@ -4825,7 +4930,7 @@ Verify-OpenApi @openApiCheck
 $backendOpenApiCheck = @{
     Path = "sdks/sdkwork-memory-backend-sdk/openapi/memory-backend-api.openapi.json"
     Prefix = "/backend/v3/api"
-    Authority = "sdkwork-memory.backend"
+    Authority = "sdkwork-memory-backend-api"
     SdkFamily = "sdkwork-memory-backend-sdk"
     AuthMode = "dual-token"
     ExpectedApiSurface = "backend-api"

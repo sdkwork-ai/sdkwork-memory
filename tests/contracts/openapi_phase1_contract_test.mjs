@@ -64,8 +64,14 @@ for (const [pathKey, pathItem] of Object.entries(open.paths)) {
     if (!operation) {
       continue;
     }
-    const expectedTier =
-      operation.operationId === "memories.delete" ? "authCritical" : "openApiDefault";
+    // The auth-critical tier is reserved for the destructive/privacy-critical
+    // set the materializer assigns via AUTH_CRITICAL_OPERATION_IDS; on this
+    // surface that is the canonical bulk delete plus the mem0 compatibility
+    // wire's whole-space erase, which is the same destructive class.
+    const authCritical =
+      operation.operationId === "memories.delete" ||
+      operation.operationId === "mem0.memory.removeAll";
+    const expectedTier = authCritical ? "authCritical" : "openApiDefault";
     assert.equal(
       operation["x-sdkwork-rate-limit-tier"],
       expectedTier,
@@ -77,5 +83,15 @@ for (const [pathKey, pathItem] of Object.entries(open.paths)) {
 const deleteOp = operations.find((operation) => operation.operationId === "memories.delete");
 assert.ok(deleteOp);
 assert.equal(deleteOp["x-sdkwork-rate-limit-tier"], "authCritical");
+
+const mem0RemoveAllOp = operations.find(
+  (operation) => operation.operationId === "mem0.memory.removeAll",
+);
+assert.ok(mem0RemoveAllOp, "mem0 compatibility wire must declare mem0.memory.removeAll");
+assert.equal(
+  mem0RemoveAllOp["x-sdkwork-rate-limit-tier"],
+  "authCritical",
+  "the mem0 whole-space erase rides the auth-critical tier like memories.delete",
+);
 
 console.log("OpenAPI phase1 contract test passed");

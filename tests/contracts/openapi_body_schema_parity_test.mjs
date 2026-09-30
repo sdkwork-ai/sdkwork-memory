@@ -7,6 +7,12 @@
 // closes it: for every OpenAPI component whose name matches a
 // `#[serde(rename_all = "camelCase")]` struct in the contract crate, the
 // property set and the required set must equal the DTO's serde field set.
+//
+// Component names may legitimately drift from the handler-bound struct name
+// (the OpenAPI models the request, the handler binds a differently named
+// query type). Those pairs are pinned in COMPONENT_DTO_ALIASES so they are
+// compared under their real names instead of being silently skipped; every
+// aliased entry must resolve on both sides.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -16,6 +22,15 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const contractSrcDir = path.join(root, "crates/sdkwork-memory-contract/src");
+
+// OpenAPI component name -> contract crate struct name. Each entry exists
+// because the authority names the wire model differently than the Rust type
+// the handler deserializes into; without the alias the pair silently skipped
+// comparison (the name lookup missed), which is exactly how
+// MemoryResolveCapabilitiesRequest drifted from ResolveCapabilitiesQuery.
+const COMPONENT_DTO_ALIASES = new Map([
+  ["MemoryResolveCapabilitiesRequest", "ResolveCapabilitiesQuery"],
+]);
 
 function snakeToCamel(name) {
   return name.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
@@ -51,6 +66,10 @@ function parseContractStructs() {
       for (const fieldMatch of body.matchAll(fieldRegex)) {
         const [, attrs, fieldName, fieldType] = fieldMatch;
         const attrText = attrs ?? "";
+        // `skip_deserializing` fields (e.g. tenant_id injected from the
+        // request context) never cross the wire as input, so they belong in
+        // neither the DTO property set nor the required set.
+        if (/skip_deserializing/.test(attrText)) continue;
         const rename = attrText.match(/rename\s*=\s*"([^"]+)"/)?.[1];
         const wireName = rename ?? snakeToCamel(fieldName);
         const optional =
@@ -94,16 +113,34 @@ test("contract DTO structs are discovered", () => {
   assert.ok(structs.size > 40, `expected a real DTO inventory, found ${structs.size}`);
 });
 
+test("every component-to-DTO alias resolves on both sides", () => {
+  const structs = parseContractStructs();
+  for (const [component, dtoName] of COMPONENT_DTO_ALIASES) {
+    assert.ok(
+      structs.has(dtoName),
+      `alias target ${dtoName} (for component ${component}) not found in sdkwork-memory-contract`,
+    );
+  }
+});
+
 for (const openApiFile of openApiFiles) {
   test(`OpenAPI component schemas match contract DTOs: ${openApiFile}`, () => {
     const components = loadOpenApiComponents(openApiFile);
     const structs = parseContractStructs();
     const problems = [];
+    const skipped = [];
 
     for (const [schemaName, schema] of Object.entries(components)) {
       if (ignoredComponents.has(schemaName)) continue;
-      const dto = structs.get(schemaName);
-      if (!dto) continue;
+      const dtoName = COMPONENT_DTO_ALIASES.get(schemaName) ?? schemaName;
+      const dto = structs.get(dtoName);
+      if (!dto) {
+        // No same-named struct and no alias: skipped by design. The skipped
+        // inventory is printed so a future name drift (a component that stops
+        // matching its DTO) is visible in gate output instead of silent.
+        if (schema.type === "object" && schema.properties) skipped.push(schemaName);
+        continue;
+      }
       if (schema.type !== "object" || !schema.properties) continue;
 
       const schemaProps = new Set(Object.keys(schema.properties));
@@ -128,6 +165,13 @@ for (const openApiFile of openApiFiles) {
           problems.push(`${schemaName}: "${prop}" is optional in the DTO but required in OpenAPI`);
         }
       }
+    }
+
+    if (skipped.length > 0) {
+      console.log(
+        `${openApiFile}: ${skipped.length} object components have no same-named DTO or alias and are not compared:\n` +
+          skipped.map((name) => `  - ${name}`).join("\n"),
+      );
     }
 
     assert.equal(

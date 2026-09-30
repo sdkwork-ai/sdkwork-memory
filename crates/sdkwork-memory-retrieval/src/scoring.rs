@@ -496,6 +496,25 @@ mod tests {
     fn empty_candidate_set_yields_no_hits() {
         assert!(score_and_rank(&[], &HybridSignals::default(), 0.1, 10, true).is_empty());
     }
+
+    #[test]
+    fn a_chinese_query_earns_keyword_signal_through_the_additive_pipeline() {
+        // Bigram segmentation must make the additive keyword signal symmetric
+        // with the RRF tokenizer: the query bigrams all occur in the document,
+        // so BM25 — and with it the fused score — stays strictly positive even
+        // with no vector evidence.
+        let candidates = [AdditiveScoreInput {
+            memory_id: "zh",
+            canonical_text: "用户偏好简洁",
+            semantic_score: 0.0,
+        }];
+        let hits =
+            score_candidates_additive("用户偏好", &candidates, &BTreeMap::new(), 0.0, 10, true);
+        assert_eq!(hits.len(), 1);
+        let details = hits[0].details.as_ref().expect("explain requested");
+        assert!(details.bm25_score > 0.0, "got {}", details.bm25_score);
+        assert!(hits[0].score > 0.0);
+    }
 }
 
 /// One candidate for [`score_candidates_additive`]: the identifier, the text

@@ -3,7 +3,7 @@
   "sdkName": "sdkwork-memory-backend-sdk",
   "packageName": "@sdkwork/memory-backend-sdk",
   "sdkOwner": "sdkwork-memory",
-  "apiAuthority": "sdkwork-memory.backend",
+  "apiAuthority": "sdkwork-memory-backend-api",
   "sdkFamily": "sdkwork-memory-backend-sdk",
   "sdkType": "backend",
   "sdkSurface": "backend",
@@ -105,7 +105,7 @@
       "generatedPath": "sdkwork-memory-backend-sdk-typescript/generated/server-openapi",
       "manifestPath": "sdkwork-memory-backend-sdk-typescript/generated/server-openapi/package.json",
       "version": "0.1.0",
-      "description": "Generator-owned TypeScript transport SDK for sdkwork-memory.backend.",
+      "description": "Generator-owned TypeScript transport SDK for sdkwork-memory-backend-api.",
       "consumerSurface": {
         "primaryClient": "SdkworkMemoryBackendClient",
         "apiPrefix": "/backend/v3/api"

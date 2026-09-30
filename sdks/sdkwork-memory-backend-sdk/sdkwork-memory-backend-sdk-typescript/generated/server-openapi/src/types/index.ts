@@ -92,6 +92,8 @@ export type { MemoryPolicyAssignmentPatch } from './memory-policy-assignment-pat
 export type { MemoryPolicyAssignmentList } from './memory-policy-assignment-list';
 export type { MemoryCommercialReadiness } from './memory-commercial-readiness';
 export type { MemoryCommercialReadinessRequest } from './memory-commercial-readiness-request';
+export type { MemoryUsageEntry } from './memory-usage-entry';
+export type { MemoryUsageList } from './memory-usage-list';
 export type { SdkWorkApiResponse } from './sdk-work-api-response';
 export type { SdkWorkResourceData } from './sdk-work-resource-data';
 export type { SdkWorkPageData } from './sdk-work-page-data';
@@ -177,3 +179,4 @@ export type { PolicyAssignmentsRetrieveResponse } from './policy-assignments-ret
 export type { PolicyAssignmentsUpdateResponse } from './policy-assignments-update-response';
 export type { CommercialReadinessRetrieveResponse } from './commercial-readiness-retrieve-response';
 export type { CommercialReadinessRebuildResponse } from './commercial-readiness-rebuild-response';
+export type { UsageListResponse } from './usage-list-response';

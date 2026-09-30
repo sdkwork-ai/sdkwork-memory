@@ -1,9 +1,9 @@
 # SDKWork Memory Backend API SDK
 
-This is the SDK family root for the `sdkwork-memory.backend` OpenAPI authority.
+This is the SDK family root for the `sdkwork-memory-backend-api` OpenAPI authority.
 
 - SDK family: `sdkwork-memory-backend-sdk`
-- API authority: `sdkwork-memory.backend`
+- API authority: `sdkwork-memory-backend-api`
 - API prefix: `/backend/v3/api`
 - Owner: `sdkwork-memory`
 - Standard profile: `sdkwork-v3`

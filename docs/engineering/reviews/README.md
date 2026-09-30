@@ -21,3 +21,6 @@ work, and a superseding review is a new `REVIEW-*` document registered in `docs/
   six evidence rounds (official Python/JS SDK runs, framing audit, field-level contract
   reconciliation). Rolling continuation sections are appended under their own dated headings
   per the disposition recorded in the document itself.
+- `REVIEW-20260930-fourth-audit-remediation.md` — fourth-round six-dimension audit remediation
+  ledger (clusters A-G): per-finding status with inline grep-verified evidence, the remediation
+  decisions taken, and residual observations.

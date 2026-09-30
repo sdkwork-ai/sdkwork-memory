@@ -195,7 +195,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -205,7 +205,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.space.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over a keyset-stable order. Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       }
     },
     "/backend/v3/api/memory/spaces/{spaceId}": {
@@ -369,7 +370,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -541,7 +542,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -770,7 +771,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -780,7 +781,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.record.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over uuid ascending (default sort). Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       }
     },
     "/backend/v3/api/memory/memories/{memoryId}": {
@@ -955,7 +957,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -1138,7 +1140,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -1333,7 +1335,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -1547,7 +1549,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -1557,7 +1559,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.event.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over uuid ascending (default sort). Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       }
     },
     "/backend/v3/api/memory/events/{eventId}": {
@@ -1732,7 +1735,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -1936,7 +1939,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -1946,7 +1949,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.candidate.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over uuid ascending (default sort). Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       }
     },
     "/backend/v3/api/memory/candidates/{candidateId}/approve": {
@@ -2121,7 +2125,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -2316,7 +2320,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -2530,7 +2534,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -2540,7 +2544,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.extraction_job.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over a keyset-stable order. Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "extractionJobs.create",
@@ -2702,7 +2707,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -2886,7 +2891,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -3079,7 +3084,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -3089,7 +3094,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.consolidation_job.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over a keyset-stable order. Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "consolidationJobs.create",
@@ -3251,7 +3257,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -3435,7 +3441,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -3639,7 +3645,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -3649,7 +3655,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.index.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over a keyset-stable order. Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "indexes.create",
@@ -3811,7 +3818,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -3995,7 +4002,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -4167,7 +4174,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -4362,7 +4369,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -4577,7 +4584,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -4587,7 +4594,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.retrieval_profile.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over a keyset-stable order. Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "retrievalProfiles.create",
@@ -4749,7 +4757,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -4933,7 +4941,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -5105,7 +5113,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -5308,7 +5316,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -5318,7 +5326,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.implementation_profile.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over a keyset-stable order. Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "implementationProfiles.create",
@@ -5480,7 +5489,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -5664,7 +5673,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -5836,7 +5845,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -6039,7 +6048,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -6049,7 +6058,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.provider_binding.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over a keyset-stable order. Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "providerBindings.create",
@@ -6211,7 +6221,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -6395,7 +6405,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -6567,7 +6577,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -6760,7 +6770,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -6770,7 +6780,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.eval_run.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over a keyset-stable order. Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "evalRuns.create",
@@ -6932,7 +6943,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -7116,7 +7127,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -7320,7 +7331,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -7330,7 +7341,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.retrieval_trace.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over a keyset-stable order. Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       }
     },
     "/backend/v3/api/memory/retrieval_traces/{traceId}": {
@@ -7494,7 +7506,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -7695,7 +7707,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -7705,7 +7717,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.audit_log.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over uuid ascending (default sort). Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       }
     },
     "/backend/v3/api/memory/retention_jobs": {
@@ -7888,7 +7901,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -7898,7 +7911,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.retention_job.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over a keyset-stable order. Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "retentionJobs.create",
@@ -8060,7 +8074,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -8245,7 +8259,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -8438,7 +8452,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -8448,7 +8462,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.migration_job.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over a keyset-stable order. Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "migrationJobs.create",
@@ -8610,7 +8625,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -8795,7 +8810,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -9004,7 +9019,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -9014,7 +9029,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.subject.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over uuid ascending (default sort). Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "subjects.create",
@@ -9176,7 +9192,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -9360,7 +9376,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -9532,7 +9548,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -9684,7 +9700,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -9926,7 +9942,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -9936,7 +9952,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.binding.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over uuid ascending (default sort). Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "bindings.create",
@@ -10098,7 +10115,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -10282,7 +10299,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -10424,7 +10441,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -10652,7 +10669,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -10662,7 +10679,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.capability_binding.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over uuid ascending (default sort). Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "capabilityBindings.create",
@@ -10824,7 +10842,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -11008,7 +11026,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -11150,7 +11168,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -11301,7 +11319,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -11312,6 +11330,7 @@
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.capabilities.resolved",
         "x-sdkwork-idempotent": true,
+        "description": "Resolves the capability bindings effective for a target. The resolved set is paged in pagination mode `cursor` (PAGINATION_SPEC section 3): pass `data.pageInfo.nextCursor` from the previous response as the request's `cursor` and omit it for the first page. Default page size 20; maximum 200.",
         "requestBody": {
           "required": true,
           "content": {
@@ -11531,7 +11550,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -11541,7 +11560,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.entity.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over uuid ascending (default sort). Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "entities.create",
@@ -11703,7 +11723,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -11887,7 +11907,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -12059,7 +12079,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -12292,7 +12312,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -12302,7 +12322,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.edge.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over uuid ascending (default sort). Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "edges.create",
@@ -12464,7 +12485,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -12648,7 +12669,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -12820,7 +12841,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -12972,7 +12993,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -13181,7 +13202,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -13191,7 +13212,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.policy.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over uuid ascending (default sort). Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "policies.create",
@@ -13353,7 +13375,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -13537,7 +13559,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -13709,7 +13731,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -13861,7 +13883,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -14081,7 +14103,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -14091,7 +14113,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-audit-event": "memory.backend.policy_assignment.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over uuid ascending (default sort). Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "policyAssignments.create",
@@ -14253,7 +14276,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -14437,7 +14460,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -14609,7 +14632,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -14761,7 +14784,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -14923,7 +14946,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -15097,7 +15120,7 @@
           }
         ],
         "x-sdkwork-owner": "sdkwork-memory",
-        "x-sdkwork-api-authority": "sdkwork-memory.backend",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-domain": "intelligence",
@@ -15118,6 +15141,200 @@
             }
           }
         }
+      }
+    },
+    "/backend/v3/api/memory/usage": {
+      "get": {
+        "operationId": "usage.list",
+        "tags": [
+          "memory"
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Opaque server-issued keyset cursor (pagination mode `cursor`, PAGINATION_SPEC section 3). Pass `data.pageInfo.nextCursor` from the previous page; omit for the first page. Client-constructed or forged cursors are rejected as invalid parameters."
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "description": "Page size for this cursor-mode listing: default 20, maximum 200. Page boundaries are stable keyset positions, not ordinal page numbers."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "items",
+                            "pageInfo"
+                          ],
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/MemoryUsageEntry"
+                              }
+                            },
+                            "pageInfo": {
+                              "$ref": "#/components/schemas/PageInfo"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Problem detail",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem detail",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Problem detail",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Problem detail",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Problem detail",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem detail",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Problem detail",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Problem detail",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Problem detail",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Problem detail",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-owner": "sdkwork-memory",
+        "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-domain": "intelligence",
+        "x-sdkwork-resource": "usage",
+        "x-sdkwork-permission": "memory.backend.usage.read",
+        "x-sdkwork-tenant-scope": "tenant",
+        "x-sdkwork-data-scope": "owner",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-audit-event": "memory.backend.usage.list",
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over day, metric ascending (default sort). Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       }
     }
   },
@@ -16425,7 +16642,9 @@
         ],
         "properties": {
           "query": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 8192,
+            "description": "Natural-language query text. Requests past 8192 characters are rejected as invalid parameters."
           },
           "spaceIds": {
             "type": "array",
@@ -16503,7 +16722,8 @@
           "contextBudgetTokens": {
             "type": "integer",
             "format": "int32",
-            "minimum": 1
+            "minimum": 1,
+            "maximum": 100000
           },
           "showExpired": {
             "type": "boolean"
@@ -19190,9 +19410,7 @@
             "type": "string",
             "enum": [
               "subject",
-              "space",
-              "binding",
-              "memory"
+              "space"
             ]
           },
           "targetId": {
@@ -19352,6 +19570,18 @@
             "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Opaque server-issued keyset cursor (pagination mode `cursor`, PAGINATION_SPEC section 3). Pass `data.pageInfo.nextCursor` from the previous page; omit for the first page. Client-constructed or forged cursors are rejected as invalid parameters."
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 20,
+            "description": "Page size for this cursor-mode listing: default 20, maximum 200. Page boundaries are stable keyset positions, not ordinal page numbers."
           }
         }
       },
@@ -20395,6 +20625,51 @@
           }
         }
       },
+      "MemoryUsageEntry": {
+        "type": "object",
+        "required": [
+          "day",
+          "metric",
+          "delta",
+          "updatedAt"
+        ],
+        "properties": {
+          "day": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "UTC calendar day (YYYY-MM-DD) the charge belongs to."
+          },
+          "metric": {
+            "type": "string"
+          },
+          "delta": {
+            "type": "integer",
+            "description": "Cumulative signed charge for the day (record.delete accumulates negative deltas)."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MemoryUsageList": {
+        "type": "object",
+        "required": [
+          "items",
+          "pageInfo"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemoryUsageEntry"
+            }
+          },
+          "pageInfo": {
+            "$ref": "#/components/schemas/PageInfo"
+          }
+        }
+      },
       "SdkWorkApiResponse": {
         "type": "object",
         "additionalProperties": false,
@@ -20639,7 +20914,7 @@
     }
   },
   "x-sdkwork-owner": "sdkwork-memory",
-  "x-sdkwork-api-authority": "sdkwork-memory.backend",
+  "x-sdkwork-api-authority": "sdkwork-memory-backend-api",
   "x-sdkwork-sdk-family": "sdkwork-memory-backend-sdk",
   "x-sdkwork-owner-only-input": true,
   "x-sdkwork-standard-version": "2026-06-10",

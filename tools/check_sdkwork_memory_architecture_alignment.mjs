@@ -1147,7 +1147,9 @@ for (const entry of collectOpenApiOperations(openApiRelativePath)) {
     continue;
   }
   const expectedTier =
-    entry.operation.operationId === 'memories.delete' ? 'authCritical' : 'openApiDefault';
+    entry.operation.operationId === 'memories.delete' || entry.operation.operationId === 'mem0.memory.removeAll'
+      ? 'authCritical'
+      : 'openApiDefault';
   assert(
     entry.operation['x-sdkwork-rate-limit-tier'] === expectedTier,
     `${openApiRelativePath} ${entry.method.toUpperCase()} ${entry.path} must declare ${expectedTier} rate limit tier`,

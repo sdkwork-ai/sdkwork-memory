@@ -8,10 +8,11 @@ use sdkwork_memory_contract::{
     MemoryCapabilities, MemoryContextPack, MemoryContextPackRequest, MemoryEvent,
     MemoryEventRequest, MemoryExtractionRequest, MemoryFeedback, MemoryFeedbackRequest,
     MemoryImplementationKind, MemoryLearningJob, MemoryOpenApi, MemoryOpenApiRequestContext,
-    MemoryProviderHealth, MemoryProviderHealthStatus, MemoryProviderInterface, MemoryRecord,
-    MemoryRecordList, MemoryRecordPatch, MemoryRecordRequest, MemoryRetrievalHit,
-    MemoryRetrievalRequest, MemoryRetrievalResult, MemoryRetrievalTrace, MemoryRetrieverKind,
-    MemoryServiceError, MemoryServiceErrorKind, MemoryServiceResult, MemoryType,
+    MemoryProviderBinding, MemoryProviderHealth, MemoryProviderHealthStatus,
+    MemoryProviderInterface, MemoryRecord, MemoryRecordList, MemoryRecordPatch,
+    MemoryRecordRequest, MemoryRetrievalHit, MemoryRetrievalRequest, MemoryRetrievalResult,
+    MemoryRetrievalTrace, MemoryRetrieverKind, MemoryServiceError, MemoryServiceErrorKind,
+    MemoryServiceResult, MemoryType,
 };
 use sdkwork_memory_plugin_native_sql::{
     build_native_sql_executable_runtime, native_sql_phase1_port_builders,
@@ -46,6 +47,50 @@ use crate::platform;
 use crate::runtime_data_plane::MemoryRuntimeDataPlane;
 use crate::sensitive_content::assert_memory_text_is_safe;
 use crate::store_error::map_native_sql_store_error;
+
+/// `note` carried by a successful extraction summary that produced zero
+/// candidates. A model refusing every input event (or an input without
+/// extractable content) is a completed run, not a retriable fault.
+pub const EXTRACTION_NO_CANDIDATES_NOTE: &str = "extraction produced no candidates";
+
+/// Cap on how many memory updates one [`OpenMemoryService::update_memories_batch`]
+/// call applies per store pass. Bounds a single request's write window; the
+/// per-record updates stay individually atomic (see the method's documentation).
+pub const MAX_UPDATE_MEMORIES_BATCH_CHUNK: usize = 200;
+
+/// Per-`health_state` binding counts behind one provider health aggregation.
+///
+/// `unknown` is counted on its own: a binding whose health has never been
+/// observed (job_worker marks bindings without an endpoint `unknown`) is not a
+/// healthy binding, and the aggregate must not absorb it into `healthy`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ProviderHealthStateCounts {
+    pub healthy: usize,
+    pub degraded: usize,
+    pub unhealthy: usize,
+    pub unknown: usize,
+    /// Bindings carrying a `health_state` outside the four known values.
+    pub other: usize,
+    /// Number of bindings the aggregation covered (the visible prefix when the
+    /// aggregation truncated at [`platform::max_provider_health_bindings`]).
+    pub total: usize,
+}
+
+/// Degraded provider health aggregation result.
+///
+/// The typed `MemoryProviderHealth` DTO has no extension field, so the
+/// truncation marker and the per-state counts travel beside it: the route
+/// layer serializes `health` and injects `bindings_truncated` under
+/// [`PROVIDER_HEALTH_BINDINGS_TRUNCATED_FIELD`] (plus the counts) into the
+/// response JSON.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProviderHealthSummary {
+    pub health: MemoryProviderHealth,
+    /// `true` when at least one tenant binding exists beyond the aggregation
+    /// cap; the response then carries only the aggregated prefix.
+    pub bindings_truncated: bool,
+    pub state_counts: ProviderHealthStateCounts,
+}
 
 pub struct OpenMemoryService {
     pub(crate) store: Arc<NativeSqlMemoryStore>,
@@ -233,6 +278,102 @@ impl OpenMemoryService {
 
     pub fn runtime_data_plane(&self) -> &MemoryRuntimeDataPlane {
         &self.runtime_data_plane
+    }
+
+    /// Provider health aggregation with the observability the typed DTO cannot
+    /// carry: whether the binding cap truncated the aggregation, and the
+    /// per-`health_state` counts with `unknown` kept out of `healthy`.
+    ///
+    /// Exceeding [`platform::max_provider_health_bindings`] is a size fact, not
+    /// a caller mistake, so the aggregation degrades instead of failing: it
+    /// stops at the cap, reports the aggregated prefix, and marks the
+    /// truncation ([`PROVIDER_HEALTH_BINDINGS_TRUNCATED_FIELD`] on the wire).
+    /// The route layer builds the JSON response from this summary; the trait
+    /// entry [`MemoryOpenApi::retrieve_provider_health`] projects only `health`.
+    pub async fn retrieve_provider_health_summary(
+        &self,
+        context: MemoryOpenApiRequestContext,
+    ) -> MemoryServiceResult<ProviderHealthSummary> {
+        let tenant_id = platform::tenant_id_i64(context.tenant_id)?;
+        let max_bindings = platform::max_provider_health_bindings();
+        let mut cursor = None;
+        let mut providers: Vec<MemoryProviderBinding> = Vec::new();
+        let mut bindings_truncated = false;
+        loop {
+            let rows = self
+                .store
+                .list_mem_provider_bindings_for_tenant(
+                    tenant_id,
+                    sdkwork_utils_rust::MAX_LIST_PAGE_SIZE,
+                    cursor.as_deref(),
+                )
+                .await
+                .map_err(Self::map_store_error)?;
+            let page_size = usize::try_from(sdkwork_utils_rust::MAX_LIST_PAGE_SIZE).unwrap_or(200);
+            let has_more = rows.len() > page_size;
+            for row in rows.iter().take(page_size) {
+                if providers.len() >= max_bindings {
+                    // The row under the cursor exists but was not aggregated:
+                    // that alone proves the tenant holds bindings past the cap.
+                    bindings_truncated = true;
+                    break;
+                }
+                providers.push(Self::map_provider_binding_public(row)?);
+            }
+            if bindings_truncated {
+                break;
+            }
+            if !has_more {
+                break;
+            }
+            cursor = rows
+                .get(page_size.saturating_sub(1))
+                .map(|row| row.binding_uuid.clone());
+        }
+
+        let mut state_counts = ProviderHealthStateCounts {
+            total: providers.len(),
+            ..ProviderHealthStateCounts::default()
+        };
+        for provider in &providers {
+            match provider.health_state.as_str() {
+                "healthy" => state_counts.healthy += 1,
+                "degraded" => state_counts.degraded += 1,
+                "unhealthy" => state_counts.unhealthy += 1,
+                "unknown" => state_counts.unknown += 1,
+                _ => state_counts.other += 1,
+            }
+        }
+        // `unknown` is an unobserved signal, never a healthy one: the aggregate
+        // is only healthy when every covered binding asserts health (or none
+        // exist), and a tenant whose bindings are all unobserved reports
+        // `unknown` rather than a health nobody measured.
+        let status = if providers.is_empty()
+            || (state_counts.degraded == 0
+                && state_counts.unhealthy == 0
+                && state_counts.unknown == 0
+                && state_counts.other == 0)
+        {
+            MemoryProviderHealthStatus::Healthy
+        } else if state_counts.unhealthy > 0 {
+            MemoryProviderHealthStatus::Unhealthy
+        } else if state_counts.healthy == 0
+            && state_counts.degraded == 0
+            && state_counts.other == 0
+        {
+            MemoryProviderHealthStatus::Unknown
+        } else {
+            MemoryProviderHealthStatus::Degraded
+        };
+        Ok(ProviderHealthSummary {
+            health: MemoryProviderHealth {
+                status,
+                checked_at: platform::current_timestamp(),
+                providers,
+            },
+            bindings_truncated,
+            state_counts,
+        })
     }
 
     pub fn from_phase1_runtime(
@@ -793,6 +934,39 @@ impl OpenMemoryService {
         }
     }
 
+    /// Shallow-merge a metadata patch into the stored metadata (incoming keys
+    /// win), mirroring mem0's update semantics. Shared by the single-record and
+    /// batch update paths so the two cannot drift; a non-object patch is a
+    /// validation error, not a silent replacement.
+    pub(crate) fn merged_metadata_json(
+        existing_metadata: Option<&serde_json::Value>,
+        patch_metadata: Option<&serde_json::Value>,
+    ) -> MemoryServiceResult<Option<String>> {
+        match patch_metadata {
+            None => Self::serialize_metadata(existing_metadata),
+            Some(incoming) if incoming.is_object() => {
+                let merged = match existing_metadata {
+                    Some(current) if current.is_object() => {
+                        let mut merged = current.clone();
+                        if let (Some(current_obj), Some(incoming_obj)) =
+                            (merged.as_object_mut(), incoming.as_object())
+                        {
+                            for (key, value) in incoming_obj {
+                                current_obj.insert(key.clone(), value.clone());
+                            }
+                        }
+                        merged
+                    }
+                    _ => incoming.clone(),
+                };
+                Self::serialize_metadata(Some(&merged))
+            }
+            Some(_) => Err(MemoryServiceError::validation(
+                "metadata must be a JSON object",
+            )),
+        }
+    }
+
     fn default_retriever_profile(&self) -> Option<serde_json::Value> {
         Some(self.retrieval_strategy.retriever_profile())
     }
@@ -848,18 +1022,24 @@ impl OpenMemoryService {
     /// Run an extraction synchronously and return the raw outcome. The HTTP
     /// endpoint enqueues a job for the background worker; this entry exists for
     /// operators and tests that drive extraction inline.
+    ///
+    /// An inline run has no learning job behind it, so its candidates carry a
+    /// `NULL` `learning_job_uuid`; a background run attributes its candidates
+    /// to the job and a requeued run first removes the previous attempt's
+    /// pending candidates, so retries never duplicate proposals.
     pub async fn run_extraction_now(
         &self,
         context: MemoryOpenApiRequestContext,
         request: MemoryExtractionRequest,
     ) -> MemoryServiceResult<serde_json::Value> {
-        self.execute_extraction_work(context, request).await
+        self.execute_extraction_work(context, request, None).await
     }
 
     pub(crate) async fn execute_extraction_work(
         &self,
         context: MemoryOpenApiRequestContext,
         request: MemoryExtractionRequest,
+        learning_job_uuid: Option<&str>,
     ) -> MemoryServiceResult<serde_json::Value> {
         access::assert_actor_can_access_space_for_write(
             &self.runtime_data_plane,
@@ -867,6 +1047,21 @@ impl OpenMemoryService {
             request.space_id,
         )
         .await?;
+        // A requeued extraction re-runs after its previous attempt already
+        // created pending candidates. Those proposals were never reviewed, so
+        // removing them first (scoped to this job's attribution) keeps the
+        // retry at-least-once at the job level instead of duplicating every
+        // candidate the failed attempt had already produced. Inline runs have
+        // no job attribution and never clean up.
+        if let Some(job_uuid) = learning_job_uuid {
+            self.store
+                .delete_pending_candidates_for_learning_job(
+                    platform::tenant_id_i64(context.tenant_id)?,
+                    job_uuid,
+                )
+                .await
+                .map_err(Self::map_store_error)?;
+        }
         let max_events = platform::max_extraction_input_events();
         if request.input_events.is_empty() {
             return Err(MemoryServiceError::validation(
@@ -1023,14 +1218,25 @@ impl OpenMemoryService {
                             .to_string(),
                         ),
                         confidence: 0.9,
+                        learning_job_uuid: learning_job_uuid.map(str::to_string),
                     })
                     .await?;
                 created_candidates += 1;
             }
+            // A model that refuses (or reports nothing usable for) every input
+            // event produced a legal, observable outcome — not a retriable
+            // fault. The empty run is answered as success with a note so the
+            // background worker records it as completed instead of retrying.
             if created_candidates == 0 {
-                return Err(MemoryServiceError::validation(
-                    "the extraction model returned no usable memories for the provided input events",
-                ));
+                return Ok(serde_json::json!({
+                    "candidateCount": 0,
+                    "missingEventCount": missing_events,
+                    "skippedEventCount": skipped_events,
+                    "extractionMode": "additive_llm",
+                    "refusedCount": report.refused.len(),
+                    "truncatedCount": report.truncated,
+                    "note": EXTRACTION_NO_CANDIDATES_NOTE,
+                }));
             }
             return Ok(serde_json::json!({
                 "candidateCount": created_candidates,
@@ -1054,25 +1260,204 @@ impl OpenMemoryService {
                     proposed_payload_json: None,
                     evidence_json: Some(format!(r#"["event:{event_id}"]"#)),
                     confidence: 0.7,
+                    learning_job_uuid: learning_job_uuid.map(str::to_string),
                 })
                 .await?;
             created_candidates += 1;
         }
 
-        if created_candidates == 0 {
-            return Err(MemoryServiceError::validation(
-                "extraction did not produce any candidates from the provided input events",
-            ));
-        }
-
-        Ok(serde_json::json!({
+        // The deterministic pass-through creates one candidate per event with
+        // extractable content, so zero candidates means the input itself
+        // carried none. That is a completed, observable run — not a retriable
+        // fault.
+        let mut summary = serde_json::json!({
             "candidateCount": created_candidates,
             "missingEventCount": missing_events,
             "skippedEventCount": skipped_events,
             "extractionMode": request
                 .extraction_mode
                 .unwrap_or_else(|| "deterministic".to_string()),
-        }))
+        });
+        if created_candidates == 0 {
+            summary["note"] = serde_json::json!(EXTRACTION_NO_CANDIDATES_NOTE);
+        }
+        Ok(summary)
+    }
+
+    /// mem0-platform batch update analogue: apply many `(memory_id, patch)`
+    /// updates inside one space while preserving the single-record semantics of
+    /// the typed `update_memory` operation.
+    ///
+    /// Whole-call work happens once instead of per record: one space write
+    /// grant, one space-retrieval authorization, and one batched read of every
+    /// affected record. Each record keeps its own semantics — an unknown id is
+    /// a per-item `NotFound`, a record whose sensitivity the actor cannot see
+    /// is a per-item `NotFound` (existence is never disclosed), a rejected
+    /// patch is a per-item `Validation`, and every applied update commits its
+    /// own mutation journal (outbox + audit) atomically, exactly as the
+    /// single-record path does.
+    ///
+    /// Updates are applied in chunks of at most
+    /// [`MAX_UPDATE_MEMORIES_BATCH_CHUNK`] records per pass to bound one
+    /// request's write window; the SPI record port is single-record atomic, so
+    /// each update within a chunk is its own store transaction.
+    ///
+    /// Results keep input order. A whole-call failure (scope mapping, space
+    /// authorization, the batched precheck read) fails every slot with the same
+    /// error; a per-record failure fails only its own slot.
+    pub async fn update_memories_batch(
+        &self,
+        context: MemoryOpenApiRequestContext,
+        space_id: u64,
+        updates: Vec<(u64, MemoryRecordPatch)>,
+    ) -> Vec<Result<MemoryRecord, MemoryServiceError>> {
+        fn fill(
+            len: usize,
+            error: &MemoryServiceError,
+        ) -> Vec<Result<MemoryRecord, MemoryServiceError>> {
+            (0..len).map(|_| Err(error.clone())).collect()
+        }
+
+        if updates.is_empty() {
+            return Vec::new();
+        }
+        let expected = updates.len();
+        let scope = match Self::scope(&context, space_id) {
+            Ok(scope) => scope,
+            Err(error) => return fill(expected, &error),
+        };
+        if let Err(error) = access::assert_actor_can_access_space_for_write(
+            &self.runtime_data_plane,
+            &context,
+            space_id,
+        )
+        .await
+        {
+            return fill(expected, &error);
+        }
+        let authorization = match access::authorize_actor_for_space_retrieval(
+            &self.runtime_data_plane,
+            &context,
+            space_id,
+        )
+        .await
+        {
+            Ok(authorization) => authorization,
+            Err(error) => return fill(expected, &error),
+        };
+        let memory_ids = updates
+            .iter()
+            .map(|(memory_id, _)| memory_id.to_string())
+            .collect::<Vec<_>>();
+        let records = match self
+            .runtime_data_plane
+            .retrieve_canonical_memories_batch(scope.clone(), memory_ids)
+            .await
+        {
+            Ok(records) => records,
+            Err(error) => return fill(expected, &error),
+        };
+
+        let mut plans: Vec<Result<UpdateCanonicalMemoryCommand, MemoryServiceError>> =
+            Vec::with_capacity(expected);
+        for ((memory_id, patch), canonical) in updates.into_iter().zip(records) {
+            let plan = match canonical {
+                None => Err(MemoryServiceError::not_found("memory not found")),
+                Some(canonical) => {
+                    self.prepare_memory_patch_update(
+                        &context,
+                        scope.clone(),
+                        space_id,
+                        authorization.actor_is_space_owner,
+                        memory_id,
+                        canonical,
+                        &patch,
+                    )
+                    .await
+                }
+            };
+            plans.push(plan);
+        }
+
+        let mut results: Vec<Result<MemoryRecord, MemoryServiceError>> =
+            Vec::with_capacity(expected);
+        while !plans.is_empty() {
+            let chunk_len = plans.len().min(MAX_UPDATE_MEMORIES_BATCH_CHUNK);
+            for plan in plans.drain(..chunk_len) {
+                match plan {
+                    Err(error) => results.push(Err(error)),
+                    Ok(command) => {
+                        match self
+                            .runtime_data_plane
+                            .update_canonical_memory_atomic(command)
+                            .await
+                        {
+                            Ok(Some(record)) => results.push(Self::map_canonical_record(record)),
+                            // The record vanished between the precheck read and
+                            // its update; that slot reports the same NotFound a
+                            // single-record update would.
+                            Ok(None) => {
+                                results.push(Err(MemoryServiceError::not_found(
+                                    "memory not found",
+                                )))
+                            }
+                            Err(error) => results.push(Err(error)),
+                        }
+                    }
+                }
+            }
+        }
+        results
+    }
+
+    /// Precheck one batched update against its loaded canonical record and
+    /// build the atomic update command: sensitivity visibility, patch text
+    /// safety, metadata shallow-merge, and the per-record mutation journal.
+    /// Mirrors the single-record `update_memory` step for step so the two
+    /// paths cannot drift.
+    #[allow(clippy::too_many_arguments)]
+    async fn prepare_memory_patch_update(
+        &self,
+        context: &MemoryOpenApiRequestContext,
+        scope: MemoryScopeContext,
+        space_id: u64,
+        actor_is_space_owner: bool,
+        memory_id: u64,
+        canonical: MemoryCanonicalRecord,
+        patch: &MemoryRecordPatch,
+    ) -> MemoryServiceResult<UpdateCanonicalMemoryCommand> {
+        access::assert_actor_may_read_record_sensitivity_for_owner(
+            context,
+            &canonical.sensitivity_level,
+            actor_is_space_owner,
+        )?;
+        if let Some(ref text) = patch.canonical_text {
+            assert_memory_text_is_safe(&[("canonicalText", text)])?;
+        }
+        if let Some(ref subject) = patch.subject {
+            assert_memory_text_is_safe(&[("subject", subject)])?;
+        }
+        let existing = Self::map_canonical_record(canonical)?;
+        let merged_metadata_json =
+            Self::merged_metadata_json(existing.metadata.as_ref(), patch.metadata.as_ref())?;
+        let event_payload = serde_json::json!({
+            "memoryId": memory_id,
+            "spaceId": space_id,
+        });
+        let journal = self.memory_mutation_journal(
+            &memory_id.to_string(),
+            "memory.record.updated",
+            "memory.record.update",
+            event_payload,
+        )?;
+        Ok(UpdateCanonicalMemoryCommand {
+            scope,
+            memory_id: memory_id.to_string(),
+            canonical_text: patch.canonical_text.clone(),
+            subject: patch.subject.clone(),
+            metadata_json: merged_metadata_json,
+            journal,
+        })
     }
 }
 
@@ -1141,8 +1526,13 @@ impl MemoryOpenApi for OpenMemoryService {
             MemoryServiceError::storage(format!("payload serialization failed: {error}"))
         })?;
         assert_memory_text_is_safe(&[("eventPayload", &payload_json)])?;
+        // Event + governance audit commit in one store transaction: PRD
+        // requires every accepted request to carry an audit record, and two
+        // independent statements would let a crash leave an accepted event
+        // row without its audit line.
+        let audit_id = self.next_id()?.to_string();
         self.store
-            .append_open_api_event(
+            .append_open_api_event_with_audit(
                 &scope,
                 &event_id,
                 &request.event_type,
@@ -1150,21 +1540,14 @@ impl MemoryOpenApi for OpenMemoryService {
                 &request.event_time,
                 &request.payload,
                 sensitivity,
+                &audit_id,
+                "memory.event.create",
+                "memory_event",
+                &event_id,
+                "accepted",
             )
             .await
             .map_err(Self::map_store_error)?;
-
-        let audit_id = self.next_id()?.to_string();
-        self.runtime_data_plane
-            .append_audit(AppendMemoryAuditCommand {
-                scope: scope.clone(),
-                audit_id,
-                action: "memory.event.create".to_string(),
-                resource_type: "memory_event".to_string(),
-                resource_id: event_id.clone(),
-                result: "accepted".to_string(),
-            })
-            .await?;
 
         self.store
             .retrieve_open_api_event(&scope, &event_id)
@@ -1251,7 +1634,9 @@ impl MemoryOpenApi for OpenMemoryService {
         .await?;
         let scope = Self::scope(&context, request.space_id)?;
         let quota_scope = scope.clone();
-        let quota_limits = crate::tenant_quota::MemoryQuotaLimits::from_env();
+        let quota_limits =
+            crate::tenant_quota::resolve_quota_limits(&self.store, context.tenant_id as i64)
+                .await?;
         let memory_id = self.next_id()?.to_string();
         let object_text = request
             .object_text
@@ -1347,30 +1732,8 @@ impl MemoryOpenApi for OpenMemoryService {
         // Mirroring mem0's update semantics, a metadata patch shallow-merges
         // into the stored metadata instead of replacing it wholesale; incoming
         // keys win.
-        let merged_metadata_json = match patch.metadata.clone() {
-            None => Self::serialize_metadata(existing.metadata.as_ref())?,
-            Some(incoming) if incoming.is_object() => {
-                let merged = match existing.metadata {
-                    Some(mut current) if current.is_object() => {
-                        if let (Some(current_obj), Some(incoming_obj)) =
-                            (current.as_object_mut(), incoming.as_object())
-                        {
-                            for (key, value) in incoming_obj {
-                                current_obj.insert(key.clone(), value.clone());
-                            }
-                        }
-                        current
-                    }
-                    _ => incoming,
-                };
-                Self::serialize_metadata(Some(&merged))?
-            }
-            Some(_) => {
-                return Err(MemoryServiceError::validation(
-                    "metadata must be a JSON object",
-                ))
-            }
-        };
+        let merged_metadata_json =
+            Self::merged_metadata_json(existing.metadata.as_ref(), patch.metadata.as_ref())?;
 
         let event_payload = serde_json::json!({
             "memoryId": memory_id,
@@ -1498,9 +1861,7 @@ impl MemoryOpenApi for OpenMemoryService {
                 platform::MAX_SCOPE_SPACE_IDS
             )));
         }
-        if request.query.trim().is_empty() {
-            return Err(MemoryServiceError::validation("query must not be blank"));
-        }
+        crate::retrieval_profile::validate_retrieval_query(&request.query)?;
         crate::retrieval_profile::validate_retrieval_limits(
             request.top_k,
             request.context_budget_tokens,
@@ -1809,7 +2170,6 @@ impl MemoryOpenApi for OpenMemoryService {
             // score every rehydrated candidate against the query. A provider
             // failure degrades the retrieval (lexical signals continue) rather
             // than failing the request.
-            let embedder_bound = self.embedder.is_some();
             let vector_similarities = match (&self.embedder, &shared_query_vector) {
                 (None, _) | (_, None) => Vec::new(),
                 (Some(embedder), Some(query_vector)) => {
@@ -1841,15 +2201,29 @@ impl MemoryOpenApi for OpenMemoryService {
                 // the resolved entity boosts, and the vector similarities fused
                 // by score_and_rank with the semantic threshold gate. A single
                 // retriever list feeds RRF, which preserves its ordering.
-                // When the embedder is unavailable every semantic score is 0,
-                // so gating at the caller's threshold would drop every hit;
+                // When no semantic scores are available — either no embedder is
+                // bound at all, or a bound embedder failed (or produced no
+                // usable similarities) for this query — every semantic score is
+                // 0, so gating at the caller's threshold would drop every hit;
                 // degrade to pure lexical ranking instead of an empty result.
-                let effective_threshold =
-                    if vector_similarities.is_empty() && embedder_bound {
-                        0.0
-                    } else {
-                        semantic_threshold
-                    };
+                // A caller-requested threshold that had to be relaxed marks the
+                // retrieval degraded: the answer is the lexical ranking, not
+                // the semantic gate that was asked for. An empty candidate
+                // pool relaxes nothing — there was nothing to gate — so it
+                // stays an ordinary empty result.
+                let effective_threshold = if vector_similarities.is_empty() {
+                    if semantic_threshold > 0.0 && !record_inputs.is_empty() {
+                        retrieval_degraded = true;
+                        if !degradation_codes
+                            .contains(&"semantic_threshold_relaxed".to_string())
+                        {
+                            degradation_codes.push("semantic_threshold_relaxed".to_string());
+                        }
+                    }
+                    0.0
+                } else {
+                    semantic_threshold
+                };
                 let inputs = record_inputs
                     .iter()
                     .map(|record| {
@@ -2232,56 +2606,10 @@ impl MemoryOpenApi for OpenMemoryService {
         &self,
         context: MemoryOpenApiRequestContext,
     ) -> MemoryServiceResult<MemoryProviderHealth> {
-        let tenant_id = platform::tenant_id_i64(context.tenant_id)?;
-        let max_bindings = platform::max_provider_health_bindings();
-        let mut cursor = None;
-        let mut providers = Vec::new();
-        loop {
-            let rows = self
-                .store
-                .list_mem_provider_bindings_for_tenant(
-                    tenant_id,
-                    sdkwork_utils_rust::MAX_LIST_PAGE_SIZE,
-                    cursor.as_deref(),
-                )
-                .await
-                .map_err(Self::map_store_error)?;
-            let page_size = usize::try_from(sdkwork_utils_rust::MAX_LIST_PAGE_SIZE).unwrap_or(200);
-            let has_more = rows.len() > page_size;
-            for row in rows.iter().take(page_size) {
-                if providers.len() >= max_bindings {
-                    return Err(MemoryServiceError::validation(format!(
-                        "provider binding count exceeds health aggregation limit ({max_bindings})"
-                    )));
-                }
-                providers.push(Self::map_provider_binding_public(row)?);
-            }
-            if !has_more {
-                break;
-            }
-            cursor = rows
-                .get(page_size.saturating_sub(1))
-                .map(|row| row.binding_uuid.clone());
-        }
-        let status = if providers.is_empty()
-            || providers
-                .iter()
-                .all(|provider| provider.health_state == "healthy")
-        {
-            MemoryProviderHealthStatus::Healthy
-        } else if providers
-            .iter()
-            .any(|provider| provider.health_state == "unhealthy")
-        {
-            MemoryProviderHealthStatus::Unhealthy
-        } else {
-            MemoryProviderHealthStatus::Degraded
-        };
-        Ok(MemoryProviderHealth {
-            status,
-            checked_at: platform::current_timestamp(),
-            providers,
-        })
+        Ok(self
+            .retrieve_provider_health_summary(context)
+            .await?
+            .health)
     }
 
     #[tracing::instrument(
@@ -2546,6 +2874,12 @@ impl MemoryOpenApi for OpenMemoryService {
             MemoryServiceError::storage(format!("extraction input encode failed: {error}"))
         })?;
 
+        // The `Idempotency-Key` HTTP header is owned by the middleware layer
+        // and never reaches this typed service boundary: `MemoryOpenApi`
+        // methods receive only the request context and the decoded request
+        // body, so this enqueue passes no store-level idempotency key.
+        // Duplicate suppression for the HTTP surface happens in the
+        // middleware before a job id is ever generated.
         crate::job_worker::enqueue_learning_job(
             &self.store,
             tenant_id,

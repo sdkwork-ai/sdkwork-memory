@@ -122,17 +122,13 @@ impl EmbeddingModelPort for OpenAiEmbeddings {
 
     async fn embed(&self, command: EmbeddingCommand) -> MemorySpiResult<Vec<f32>> {
         let payload = build_embeddings_request(&self.config.embedding_model, &command.input);
-        let response = self
+        let builder = self
             .http
             .post(self.url())
             .bearer_auth(&self.config.api_key)
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|error| MemorySpiError::PortOperationFailed {
-                port: "EmbeddingModelPort".to_string(),
-                message: format!("embedding request failed: {error}"),
-            })?;
+            .json(&payload);
+        let response =
+            crate::retry::send_with_retries(&builder, "embedding", "EmbeddingModelPort").await?;
         let status = response.status();
         let body = crate::response::read_body_capped(response).await.map_err(
             |error: MemorySpiError| MemorySpiError::PortOperationFailed {
@@ -164,59 +160,109 @@ impl EmbeddingModelPort for OpenAiEmbeddings {
         Ok(vector)
     }
 
-    /// One batched HTTP call per request, mirroring mem0's `embed_batch`
-    /// batching; the API preserves input order in `data`.
+    /// Batched embeddings, split into one HTTP request per byte-budget chunk
+    /// and mirroring mem0's `embed_batch` batching; the API preserves input
+    /// order within each chunk's `data`, so appending chunk responses in chunk
+    /// order realigns vectors with `commands`.
     async fn embed_batch(&self, commands: Vec<EmbeddingCommand>) -> MemorySpiResult<Vec<Vec<f32>>> {
         if commands.is_empty() {
             return Ok(Vec::new());
         }
         let inputs = commands
-            .iter()
-            .map(|command| command.input.clone())
+            .into_iter()
+            .map(|command| command.input)
             .collect::<Vec<_>>();
-        let payload = build_batch_embeddings_request(&self.config.embedding_model, &inputs);
-        let response = self
-            .http
-            .post(self.url())
-            .bearer_auth(&self.config.api_key)
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|error| MemorySpiError::PortOperationFailed {
-                port: "EmbeddingModelPort".to_string(),
-                message: format!("embedding request failed: {error}"),
+        let chunks = split_embed_inputs(inputs, self.config.embed_batch_max_bytes);
+        let mut vectors = Vec::new();
+        for chunk in &chunks {
+            let payload = build_batch_embeddings_request(&self.config.embedding_model, chunk);
+            let builder = self
+                .http
+                .post(self.url())
+                .bearer_auth(&self.config.api_key)
+                .json(&payload);
+            let response =
+                crate::retry::send_with_retries(&builder, "embedding", "EmbeddingModelPort")
+                    .await?;
+            let status = response.status();
+            let body = crate::response::read_body_capped(response).await.map_err(
+                |error: MemorySpiError| MemorySpiError::PortOperationFailed {
+                    port: "EmbeddingModelPort".to_string(),
+                    message: error.to_string(),
+                },
+            )?;
+            if !status.is_success() {
+                return Err(MemorySpiError::PortOperationFailed {
+                    port: "EmbeddingModelPort".to_string(),
+                    message: format!("embedding request returned HTTP {status}"),
+                });
+            }
+            let payload: Value = serde_json::from_str(&body).map_err(|error| {
+                MemorySpiError::PortOperationFailed {
+                    port: "EmbeddingModelPort".to_string(),
+                    message: format!("embedding response is not JSON: {error}"),
+                }
             })?;
-        let status = response.status();
-        let body = crate::response::read_body_capped(response).await.map_err(
-            |error: MemorySpiError| MemorySpiError::PortOperationFailed {
-                port: "EmbeddingModelPort".to_string(),
-                message: error.to_string(),
-            },
-        )?;
-        if !status.is_success() {
-            return Err(MemorySpiError::PortOperationFailed {
-                port: "EmbeddingModelPort".to_string(),
-                message: format!("embedding request returned HTTP {status}"),
-            });
-        }
-        let payload: Value =
-            serde_json::from_str(&body).map_err(|error| MemorySpiError::PortOperationFailed {
-                port: "EmbeddingModelPort".to_string(),
-                message: format!("embedding response is not JSON: {error}"),
-            })?;
-        let vectors = parse_batch_embeddings_response(&payload)?;
-        if vectors.len() != inputs.len() {
-            return Err(MemorySpiError::PortOperationFailed {
-                port: "EmbeddingModelPort".to_string(),
-                message: format!(
-                    "embedding response returned {} vectors for {} inputs",
-                    vectors.len(),
-                    inputs.len()
-                ),
-            });
+            let chunk_vectors = parse_batch_embeddings_response(&payload)?;
+            if chunk_vectors.len() != chunk.len() {
+                return Err(MemorySpiError::PortOperationFailed {
+                    port: "EmbeddingModelPort".to_string(),
+                    message: format!(
+                        "embedding response returned {} vectors for {} inputs",
+                        chunk_vectors.len(),
+                        chunk.len()
+                    ),
+                });
+            }
+            vectors.extend(chunk_vectors);
         }
         Ok(vectors)
     }
+}
+
+/// Splits `inputs` into per-request chunks whose input bytes stay within
+/// `budget_bytes`, moving each text into exactly one chunk so the input order
+/// survives the split.
+///
+/// A single text larger than the budget is truncated onto the budget at a
+/// UTF-8 character boundary (debug-logged) instead of failing the batch: a
+/// memory that oversized is degraded for this one request, not dropped.
+pub(crate) fn split_embed_inputs(inputs: Vec<String>, budget_bytes: usize) -> Vec<Vec<String>> {
+    let budget_bytes = budget_bytes.max(1);
+    let mut chunks: Vec<Vec<String>> = Vec::new();
+    let mut current: Vec<String> = Vec::new();
+    let mut current_bytes = 0_usize;
+    for mut input in inputs {
+        if input.len() > budget_bytes {
+            tracing::debug!(
+                bytes = input.len(),
+                budget_bytes,
+                "embedding input exceeds the per-request byte budget; truncating"
+            );
+            input = truncate_to_byte_budget(&input, budget_bytes);
+        }
+        if !current.is_empty() && current_bytes + input.len() > budget_bytes {
+            chunks.push(std::mem::take(&mut current));
+            current_bytes = 0;
+        }
+        current_bytes += input.len();
+        current.push(input);
+    }
+    if !current.is_empty() {
+        chunks.push(current);
+    }
+    chunks
+}
+
+/// Cuts `text` to at most `budget_bytes` UTF-8 bytes without splitting a
+/// character. The budget is never zero ([`split_embed_inputs`] floors it), so
+/// the cut always lands on a boundary at or before `budget_bytes`.
+fn truncate_to_byte_budget(text: &str, budget_bytes: usize) -> String {
+    let mut end = budget_bytes.min(text.len());
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text[..end].to_string()
 }
 
 #[cfg(test)]
@@ -252,5 +298,64 @@ mod tests {
             parse_embeddings_response(&serde_json::json!({ "data": [{ "embedding": [] }] }))
                 .is_err()
         );
+    }
+
+    #[test]
+    fn inputs_fitting_the_budget_stay_in_one_chunk() {
+        let inputs = vec!["a".to_string(), "bb".to_string(), "ccc".to_string()];
+        assert_eq!(
+            split_embed_inputs(inputs, 64),
+            vec![vec!["a".to_string(), "bb".to_string(), "ccc".to_string()]]
+        );
+    }
+
+    #[test]
+    fn chunks_never_exceed_the_byte_budget_and_keep_input_order() {
+        let inputs = ["alpha", "beta", "gamma", "delta", "epsilon"]
+            .iter()
+            .map(|text| text.to_string())
+            .collect::<Vec<_>>();
+        let chunks = split_embed_inputs(inputs.clone(), 10);
+        assert!(chunks.len() > 1, "the batch must actually be split");
+        for chunk in &chunks {
+            let chunk_bytes = chunk.iter().map(|text| text.len()).sum::<usize>();
+            assert!(
+                chunk_bytes <= 10,
+                "chunk of {chunk_bytes} bytes escaped the budget"
+            );
+        }
+        let flattened = chunks.into_iter().flatten().collect::<Vec<_>>();
+        assert_eq!(
+            flattened, inputs,
+            "splitting must not reorder or drop inputs"
+        );
+    }
+
+    #[test]
+    fn an_oversized_single_input_is_truncated_to_the_budget_not_dropped() {
+        let long = "你知道么".to_string();
+        let chunks = split_embed_inputs(vec![long.clone()], 5);
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].len(), 1);
+        let truncated = &chunks[0][0];
+        assert!(truncated.len() <= 5);
+        assert_eq!(truncated, "你", "the cut must stay on a character boundary");
+        assert!(long.starts_with(truncated));
+    }
+
+    #[test]
+    fn byte_budget_truncation_never_splits_a_multibyte_character() {
+        assert_eq!(truncate_to_byte_budget("你对吗", 5), "你");
+        assert_eq!(truncate_to_byte_budget("plain ascii", 4), "plai");
+        assert_eq!(truncate_to_byte_budget("short", 64), "short");
+        assert_eq!(truncate_to_byte_budget("", 64), "");
+    }
+
+    #[test]
+    fn empty_batches_and_empty_inputs_do_not_break_the_split() {
+        assert!(split_embed_inputs(Vec::new(), 1024).is_empty());
+        let chunks = split_embed_inputs(vec![String::new(), String::new()], 1024);
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].len(), 2);
     }
 }

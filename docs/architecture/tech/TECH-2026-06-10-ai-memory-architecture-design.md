@@ -1749,13 +1749,13 @@ SDKWork API surfaces:
 ```text
 App API:
   Prefix: /app/v3/api
-  Authority metadata: sdkwork-memory.app
+  Authority metadata: sdkwork-memory-app-api (retired draft alias: sdkwork-memory.app)
   OpenAPI file: sdks/sdkwork-memory-app-sdk/openapi/memory-app-api.openapi.json
   SDK family: sdks/sdkwork-memory-app-sdk
 
 Backend API:
   Prefix: /backend/v3/api
-  Authority metadata: sdkwork-memory.backend
+  Authority metadata: sdkwork-memory-backend-api (retired draft alias: sdkwork-memory.backend)
   OpenAPI file: sdks/sdkwork-memory-backend-sdk/openapi/memory-backend-api.openapi.json
   SDK family: sdks/sdkwork-memory-backend-sdk
 
@@ -3258,8 +3258,8 @@ The generated OpenAPI contracts must pass this checklist:
 6. Operation IDs use dotted lowerCamelCase resource style.
 7. Every generated operation declares `x-sdkwork-owner: sdkwork-memory`.
 8. Open operations declare `x-sdkwork-api-authority: sdkwork-memory-open-api`.
-9. App operations declare `x-sdkwork-api-authority: sdkwork-memory.app`.
-10. Backend operations declare `x-sdkwork-api-authority: sdkwork-memory.backend`.
+9. App operations declare `x-sdkwork-api-authority: sdkwork-memory-app-api` (early drafts of this record showed the dotted `sdkwork-memory.app` alias; it was retired — API_SPEC requires kebab-case identities).
+10. Backend operations declare `x-sdkwork-api-authority: sdkwork-memory-backend-api` (early drafts of this record showed the dotted `sdkwork-memory.backend` alias; it was retired — API_SPEC requires kebab-case identities).
 11. Open API `components.securitySchemes` declares only `ApiKey` / `X-API-Key` for protected operations.
 12. App and Backend API `components.securitySchemes` declare only `AuthToken` and `AccessToken` for protected operations.
 13. Protected open-api operations use `ApiKey` security and `x-sdkwork-auth-mode: api-key`.

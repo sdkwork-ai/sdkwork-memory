@@ -221,46 +221,21 @@ impl NativeSqlMemoryStore {
         let now = now_text();
 
         let rejected = if let Some(space_id) = space_id {
-            sqlx::query(
-                r#"
-                UPDATE ai_candidate
-                SET decision_state = 'rejected',
-                    decision_reason = 'privacy_forget',
-                    decided_at = ?,
-                    updated_at = ?,
-                    version = version + 1
-                WHERE tenant_id = ? AND space_id = ? AND user_id = ? AND decision_state = 'pending'
-                "#,
+            self.reject_pending_candidates_batched(
+                "tenant_id = ? AND space_id = ? AND user_id = ?",
+                &[tenant_id, space_id, user_id],
+                &now,
             )
-            .bind(&now)
-            .bind(&now)
-            .bind(tenant_id)
-            .bind(space_id)
-            .bind(user_id)
-            .execute(self.pool())
             .await?
-            .rows_affected()
         } else {
-            sqlx::query(
-                r#"
-                UPDATE ai_candidate
-                SET decision_state = 'rejected',
-                    decision_reason = 'privacy_forget',
-                    decided_at = ?,
-                    updated_at = ?,
-                    version = version + 1
-                WHERE tenant_id = ? AND user_id = ? AND decision_state = 'pending'
-                "#,
+            self.reject_pending_candidates_batched(
+                "tenant_id = ? AND user_id = ?",
+                &[tenant_id, user_id],
+                &now,
             )
-            .bind(&now)
-            .bind(&now)
-            .bind(tenant_id)
-            .bind(user_id)
-            .execute(self.pool())
             .await?
-            .rows_affected()
         };
-        stats.rejected_candidates += rejected as u32;
+        stats.rejected_candidates += rejected;
 
         stats.purged_events = if let Some(space_id) = space_id {
             self.delete_events_for_user_in_space(tenant_id, user_id, space_id)
@@ -281,24 +256,33 @@ impl NativeSqlMemoryStore {
         let pattern = like_pattern(query);
         let batch_size = i64::from(sdkwork_utils_rust::MAX_LIST_PAGE_SIZE);
         let mut stats = ForgetScopeStats::default();
+        // Keyset continuation over `id`: the `lower(...) LIKE` predicate has no
+        // supporting index, so a batch that restarted from the top of the scope
+        // would re-scan every surviving row once per batch. Advancing past the
+        // last seen id keeps each batch to one scan, and rows deleted inside the
+        // batch always sit behind the cursor.
+        let mut last_id: i64 = 0;
 
         loop {
             let rows = sqlx::query(
                 r#"
-                SELECT uuid
+                SELECT uuid, id
                 FROM ai_record
                 WHERE tenant_id = ?
                   AND space_id = ?
+                  AND id > ?
                   AND (
                     lower(canonical_text) LIKE lower(?) ESCAPE '\'
                     OR lower(object_text) LIKE lower(?) ESCAPE '\'
                     OR lower(COALESCE(subject, '')) LIKE lower(?) ESCAPE '\'
                   )
+                ORDER BY id ASC
                 LIMIT ?
                 "#,
             )
             .bind(scope.tenant_id)
             .bind(scope.space_id)
+            .bind(last_id)
             .bind(&pattern)
             .bind(&pattern)
             .bind(&pattern)
@@ -312,6 +296,7 @@ impl NativeSqlMemoryStore {
 
             for row in rows {
                 let memory_id: String = row.get("uuid");
+                last_id = row.get("id");
                 let outcome = self
                     .hard_delete_record_with_cleanup(scope, &memory_id)
                     .await?;
@@ -549,6 +534,63 @@ impl NativeSqlMemoryStore {
             &[tenant_id, user_id, space_id],
         )
         .await
+    }
+
+    /// Rejects every pending candidate authored by the forgotten user in bounded
+    /// batches, mirroring [`Self::delete_events_batched`]: a single unbounded
+    /// `UPDATE` over a large user scope would pin every matching row for the
+    /// whole pass, so each batch first keyset-enumerates the next page of
+    /// pending ids and then rejects exactly those ids. The original scope and
+    /// `decision_state = 'pending'` predicates are re-applied on the `UPDATE`
+    /// itself, so a candidate decided concurrently cannot be flipped.
+    ///
+    /// `scope_where` is a code-controlled `ai_candidate` WHERE fragment owned
+    /// by the calling sites above, fully parameterized by `binds` — never
+    /// request content.
+    async fn reject_pending_candidates_batched(
+        &self,
+        scope_where: &str,
+        binds: &[i64],
+        now: &str,
+    ) -> Result<u32, NativeSqlStoreError> {
+        const FORGET_REJECT_BATCH: i64 = 500;
+        let select_sql = format!(
+            "SELECT id FROM ai_candidate \
+             WHERE {scope_where} AND decision_state = 'pending' AND id > ? \
+             ORDER BY id ASC LIMIT {FORGET_REJECT_BATCH}"
+        );
+        let mut rejected = 0_u64;
+        let mut last_id: i64 = 0;
+        loop {
+            let mut select = sqlx::query_scalar::<_, i64>(&select_sql);
+            for bind in binds {
+                select = select.bind(bind);
+            }
+            select = select.bind(last_id);
+            let ids = select.fetch_all(self.pool()).await?;
+            if ids.is_empty() {
+                break;
+            }
+            last_id = *ids.last().expect("batch non-empty");
+
+            let placeholders = crate::store::sql_placeholders(ids.len());
+            let mut update = sqlx::query(&format!(
+                "UPDATE ai_candidate \
+                 SET decision_state = 'rejected', decision_reason = 'privacy_forget', \
+                     decided_at = ?, updated_at = ?, version = version + 1 \
+                 WHERE id IN ({placeholders}) AND {scope_where} \
+                   AND decision_state = 'pending'"
+            ));
+            update = update.bind(now).bind(now);
+            for id in &ids {
+                update = update.bind(id);
+            }
+            for bind in binds {
+                update = update.bind(bind);
+            }
+            rejected += update.execute(self.pool()).await?.rows_affected();
+        }
+        Ok(u32::try_from(rejected).unwrap_or(u32::MAX))
     }
 }
 

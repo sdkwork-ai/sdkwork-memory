@@ -20,7 +20,8 @@ use sdkwork_web_core::{WebFrameworkError, WebRequestContextResolver, WebRequestP
 
 pub use correlation::{with_problem_correlation, MemoryProblemCorrelation};
 pub use metrics::{
-    memory_http_metrics, memory_metric_environment_label, refresh_memory_http_metric_dimensions,
+    memory_http_metrics, memory_metric_environment_label, memory_web_metrics,
+    refresh_memory_http_metric_dimensions, render_memory_web_prometheus,
 };
 pub use web_runtime::memory_request_body_limit_bytes;
 pub use principal::{parse_principal_optional_u64, parse_principal_u64};

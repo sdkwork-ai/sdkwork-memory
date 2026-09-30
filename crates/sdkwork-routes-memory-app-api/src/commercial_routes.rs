@@ -100,12 +100,15 @@ async fn update_entity(
 async fn create_policy_assignment(
     Extension(state): Extension<AppState>,
     context: Option<Extension<MemoryAppRequestContext>>,
-    MemoryJson(mut cmd): MemoryJson<CreatePolicyAssignmentCommand>,
+    MemoryJson(cmd): MemoryJson<CreatePolicyAssignmentCommand>,
 ) -> Result<Response, ApiProblem> {
     let product = state.require_product()?;
     let context = require_app_context(context)?;
-    cmd.tenant_id = context.tenant_id;
-    created_resource_json(product.create_policy_assignment(cmd).await)
+    created_resource_json(
+        product
+            .create_policy_assignment_for_actor(OpenMemoryService::to_open_context(&context), cmd)
+            .await,
+    )
 }
 
 async fn list_policy_assignments(
@@ -129,7 +132,12 @@ async fn update_policy_assignment(
     let context = require_app_context(context)?;
     ok_resource_json(
         product
-            .update_policy_assignment(context.tenant_id, &assignment_id, cmd)
+            .update_policy_assignment_for_actor(
+                OpenMemoryService::to_open_context(&context),
+                context.tenant_id,
+                &assignment_id,
+                cmd,
+            )
             .await,
     )
 }

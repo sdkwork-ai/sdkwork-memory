@@ -44,17 +44,24 @@ pub struct Bm25Document<'a> {
 
 /// Split lemmatized text into index terms.
 ///
-/// Terms are lowercased and stripped of empty fragments. Non-Latin scripts are
-/// preserved verbatim: CJK text has no whitespace boundaries, so a lemmatized CJK
-/// string contributes whole-word terms rather than per-character ones (per-character
-/// segmentation already happens in [`crate::retrieval`]'s tokenizer).
+/// Terms are lowercased and stripped of empty fragments. Latin terms survive
+/// verbatim. A term containing CJK has no whitespace boundaries of its own, so
+/// it is expanded into the shared adjacent-pair bigrams
+/// ([`crate::text::cjk_bigrams`]) — the same segmentation
+/// [`crate::lemmatization::lemmatize_for_bm25`] applies, keeping queries and
+/// documents symmetric even when one side skips lemmatization.
 #[must_use]
 pub fn bm25_terms(lemmatized_text: &str) -> Vec<String> {
-    lemmatized_text
-        .split_whitespace()
-        .map(str::to_lowercase)
-        .filter(|term| !term.is_empty())
-        .collect()
+    let mut terms = Vec::new();
+    for term in lemmatized_text.split_whitespace() {
+        let lowered = term.to_lowercase();
+        if lowered.chars().any(crate::text::is_cjk) {
+            terms.extend(crate::text::cjk_bigrams(&lowered));
+        } else if !lowered.is_empty() {
+            terms.push(lowered);
+        }
+    }
+    terms
 }
 
 /// A fitted BM25 index over a bounded document set.
@@ -517,5 +524,31 @@ mod tests {
             vec!["wine".to_string(), "sommelier".to_string()]
         );
         assert!(bm25_terms("   ").is_empty());
+    }
+
+    #[test]
+    fn cjk_terms_are_expanded_into_shared_bigrams() {
+        assert_eq!(
+            bm25_terms("用户偏好"),
+            vec!["用户".to_string(), "户偏".to_string(), "偏好".to_string()]
+        );
+        // Already-bigrammed (lemmatized) input is stable under re-expansion.
+        assert_eq!(bm25_terms("用户 户偏 偏好"), bm25_terms("用户偏好"));
+    }
+
+    #[test]
+    fn a_chinese_query_scores_above_zero_against_a_chinese_document() {
+        let query = crate::lemmatization::lemmatize_for_bm25("用户偏好");
+        let documents = [Bm25Document {
+            memory_id: "a",
+            lemmatized_text: &crate::lemmatization::lemmatize_for_bm25("用户偏好简洁"),
+        }];
+        let raw = Bm25Index::fit(&documents).score(&bm25_terms(&query));
+        assert_eq!(raw.len(), 1);
+        assert!(raw[0].1 > 0.0);
+
+        let normalized = normalized_keyword_scores(&query, &documents);
+        assert_eq!(normalized.len(), 1);
+        assert!(normalized[0].1 > 0.0 && normalized[0].1 <= 1.0);
     }
 }

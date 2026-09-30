@@ -15,13 +15,14 @@ pub(crate) async fn read_body_capped(
 ) -> Result<String, MemorySpiError> {
     let mut body: Vec<u8> = Vec::new();
     let mut response = response;
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|error| MemorySpiError::PortOperationFailed {
-            port: "provider-http".to_string(),
-            message: format!("provider response read failed: {error}"),
-        })?
+    while let Some(chunk) =
+        response
+            .chunk()
+            .await
+            .map_err(|error| MemorySpiError::PortOperationFailed {
+                port: "provider-http".to_string(),
+                message: format!("provider response read failed: {error}"),
+            })?
     {
         if body.len().saturating_add(chunk.len()) > MAX_PROVIDER_RESPONSE_BYTES {
             return Err(MemorySpiError::PortOperationFailed {

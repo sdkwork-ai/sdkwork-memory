@@ -14,12 +14,19 @@ const ENV_EMBEDDING_MODEL: &str = "SDKWORK_MEMORY_OPENAI_EMBEDDING_MODEL";
 const ENV_EMBEDDING_DIMENSIONS: &str = "SDKWORK_MEMORY_OPENAI_EMBEDDING_DIMENSIONS";
 const ENV_CHAT_MODEL: &str = "SDKWORK_MEMORY_OPENAI_CHAT_MODEL";
 const ENV_TIMEOUT_SECS: &str = "SDKWORK_MEMORY_OPENAI_TIMEOUT_SECS";
+const ENV_EMBED_BATCH_MAX_BYTES: &str = "SDKWORK_MEMORY_EMBED_BATCH_MAX_BYTES";
 
 const DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
 const DEFAULT_EMBEDDING_MODEL: &str = "text-embedding-3-small";
 const DEFAULT_EMBEDDING_DIMENSIONS: usize = 1536;
 const DEFAULT_CHAT_MODEL: &str = "gpt-4o-mini";
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
+/// Per-embeddings-request input budget when the environment is silent.
+const DEFAULT_EMBED_BATCH_MAX_BYTES: usize = 2 * 1024 * 1024;
+/// Floor and ceiling for [`OpenAiProviderConfig::embed_batch_max_bytes`]; the
+/// ceiling matches the response-body read cap in `crate::response`.
+pub(crate) const MIN_EMBED_BATCH_MAX_BYTES: usize = 64 * 1024;
+pub(crate) const MAX_EMBED_BATCH_MAX_BYTES: usize = 16 * 1024 * 1024;
 
 /// Connection settings for an OpenAI-compatible endpoint.
 #[derive(Clone, Default)]
@@ -35,9 +42,25 @@ pub struct OpenAiProviderConfig {
     /// Chat model used for completions.
     pub chat_model: String,
     pub timeout_secs: u64,
+    /// Byte budget for the input texts of one batched embeddings request;
+    /// larger batches are split into multiple requests. A single text above
+    /// the budget is truncated, never rejected.
+    pub embed_batch_max_bytes: usize,
     /// Host-injected HTTP client (SSRF-hardened). `None` builds one from the
     /// timeout configuration.
     http_client_override: Option<reqwest::Client>,
+}
+
+/// Resolves the batched-embeddings byte budget from an optional environment
+/// value: unparseable input falls back to the default, everything else is
+/// clamped onto the supported range.
+fn parse_embed_batch_max_bytes(raw: Option<&str>) -> usize {
+    raw.and_then(|value| value.trim().parse::<usize>().ok())
+        .map_or(DEFAULT_EMBED_BATCH_MAX_BYTES, clamp_embed_batch_max_bytes)
+}
+
+fn clamp_embed_batch_max_bytes(value: usize) -> usize {
+    value.clamp(MIN_EMBED_BATCH_MAX_BYTES, MAX_EMBED_BATCH_MAX_BYTES)
 }
 
 impl OpenAiProviderConfig {
@@ -74,6 +97,9 @@ impl OpenAiProviderConfig {
                 .and_then(|value| value.trim().parse().ok())
                 .filter(|value| *value > 0)
                 .unwrap_or(DEFAULT_TIMEOUT_SECS),
+            embed_batch_max_bytes: parse_embed_batch_max_bytes(
+                std::env::var(ENV_EMBED_BATCH_MAX_BYTES).ok().as_deref(),
+            ),
         })
     }
 
@@ -120,6 +146,7 @@ impl fmt::Debug for OpenAiProviderConfig {
             .field("embedding_dimensions", &self.embedding_dimensions)
             .field("chat_model", &self.chat_model)
             .field("timeout_secs", &self.timeout_secs)
+            .field("embed_batch_max_bytes", &self.embed_batch_max_bytes)
             .finish()
     }
 }
@@ -145,6 +172,37 @@ mod tests {
     }
 
     #[test]
+    fn embed_batch_budget_defaults_when_unset_or_unparseable_and_clamps_otherwise() {
+        assert_eq!(
+            parse_embed_batch_max_bytes(None),
+            DEFAULT_EMBED_BATCH_MAX_BYTES
+        );
+        assert_eq!(
+            parse_embed_batch_max_bytes(Some("")),
+            DEFAULT_EMBED_BATCH_MAX_BYTES
+        );
+        assert_eq!(
+            parse_embed_batch_max_bytes(Some("not-a-number")),
+            DEFAULT_EMBED_BATCH_MAX_BYTES
+        );
+        assert_eq!(parse_embed_batch_max_bytes(Some(" 262144 ")), 256 * 1024);
+        assert_eq!(
+            parse_embed_batch_max_bytes(Some("0")),
+            MIN_EMBED_BATCH_MAX_BYTES,
+            "zero and sub-floor values clamp up to the floor"
+        );
+        assert_eq!(
+            parse_embed_batch_max_bytes(Some("999999999999")),
+            MAX_EMBED_BATCH_MAX_BYTES
+        );
+        assert_eq!(clamp_embed_batch_max_bytes(64 * 1024), 64 * 1024);
+        assert_eq!(
+            clamp_embed_batch_max_bytes(16 * 1024 * 1024),
+            16 * 1024 * 1024
+        );
+    }
+
+    #[test]
     fn debug_output_never_carries_the_key() {
         let config = OpenAiProviderConfig {
             base_url: DEFAULT_BASE_URL.to_string(),
@@ -153,6 +211,7 @@ mod tests {
             embedding_dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
             chat_model: DEFAULT_CHAT_MODEL.to_string(),
             timeout_secs: DEFAULT_TIMEOUT_SECS,
+            embed_batch_max_bytes: DEFAULT_EMBED_BATCH_MAX_BYTES,
             http_client_override: None,
         };
         let debug = format!("{config:?}");

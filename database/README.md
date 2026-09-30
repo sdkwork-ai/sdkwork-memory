@@ -29,7 +29,8 @@ application-root directories:
    is the full DDL snapshot and the authority for greenfield deployments.
 2. `database/migrations/postgres/` holds the post-baseline incremental deltas
    (`0001_organization_id_not_null`, `0002_claim_order_and_keyset_indexes`,
-   `0003_hard_delete_cleanup_indexes`); paired up/down files there are the
+   `0003_hard_delete_cleanup_indexes`,
+   `0004_candidate_job_linkage`); paired up/down files there are the
    incremental authority. Under the committed `baselineStrategy:
    baseline-plus-migrations`, the checked-in baseline stays the authoritative
    DDL source and is never regenerated from these deltas: greenfield
@@ -40,11 +41,21 @@ application-root directories:
    fixture projection.
 3. The plugin's embedded compatibility runner
    (`plugins/sdkwork-memory-plugin-native-sql`, version keys in `store.rs`) is a
-   test/local-tool bootstrap only. Production never runs it: the store connects
+   test/local-tool bootstrap only. It embeds the baseline plus every
+   post-baseline PostgreSQL delta (0001-0005) — including
+   `0004_candidate_job_linkage`, which adds `ai_candidate.learning_job_uuid`
+   and `ai_eval_run.version`, and `0005_usage_daily`, which adds the
+   `ai_usage_daily` usage-fact table (mirrored by SQLite fixture migration
+   0018) — and a structural test asserts the embedded set
+   matches the application-root delta directory, so a locally bootstrapped
+   PostgreSQL carries the same schema the application-root lifecycle applies.
+   Production never runs it: the store connects
    with `apply_migration=false` and the application-root lifecycle
    (`sdkwork-memory-database-host`) applies the baseline. Its private bookkeeping
-   table `ops_memory_schema_version` is not part of the application schema and
-   nothing in production depends on it.
+   table `ops_memory_schema_version` is not part of the application schema;
+   production never depends on it, and an externally initialized SQLite pool
+   that lacks the quota-serialization row is rejected at startup with a named
+   diagnostic instead of failing at first space create.
 
 `pnpm verify` checks that the baseline and the contract are current.
 
@@ -76,7 +87,13 @@ application-root directories:
   marking are all fenced by the current unexpired token, and stale rows past the
   attempt ceiling land in a terminal `dead` state. Learning jobs carry
   `next_attempt_at` for attempt-aware requeue backoff; eval runs mirror
-  `ai_learning_job.error_json` for dead-letter reasons.
+  `ai_learning_job.error_json` for dead-letter reasons and carry an optimistic
+  `ai_eval_run.version` (PostgreSQL delta 0004, mirrored by SQLite fixture
+  migration 0017) that every state transition increments.
+- `ai_candidate.learning_job_uuid` links extracted candidates to their
+  originating learning job, so an extraction retry cannot duplicate candidates:
+  a requeued run inserts only candidates whose job linkage is new, and a run
+  that creates zero candidates completes as success.
 - A scheduled retention worker hard-deletes terminal and derived rows in
   bounded batches: terminal outbox events, terminal learning/eval jobs,
   retrieval traces with their hits and context packs, and audit logs — each on

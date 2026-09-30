@@ -745,7 +745,7 @@
       "apiSurface": "open-api",
       "x-sdkwork-wire-protocol": "external",
       "x-sdkwork-external-protocol-id": "mem0-platform",
-      "rateLimitTier": "openApiDefault"
+      "rateLimitTier": "authCritical"
     },
     {
       "method": "GET",

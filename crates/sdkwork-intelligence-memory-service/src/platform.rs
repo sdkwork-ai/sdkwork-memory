@@ -142,10 +142,57 @@ pub fn shared_id_generator() -> MemoryServiceResult<SnowflakeIdGenerator> {
 }
 
 pub fn next_numeric_id() -> MemoryServiceResult<u64> {
-    let id = id_generator()?
+    let result = id_generator()?
         .generate()
-        .map_err(|error| MemoryServiceError::storage(format!("id generation failed: {error}")))?;
-    u64::try_from(id).map_err(|_| MemoryServiceError::storage(format!("id out of u64 range: {id}")))
+        .map_err(|error| MemoryServiceError::storage(format!("id generation failed: {error}")))
+        .and_then(|id| {
+            u64::try_from(id)
+                .map_err(|_| MemoryServiceError::storage(format!("id out of u64 range: {id}")))
+        });
+    LAST_ID_GENERATION_FAILED.store(result.is_err(), std::sync::atomic::Ordering::Relaxed);
+    result
+}
+
+/// Set by [`next_numeric_id`] after every generation attempt so readiness can
+/// report a generator that initialized but now fails (for example a fenced
+/// lease that lost its node allocation).
+static LAST_ID_GENERATION_FAILED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Readiness signal for the Snowflake ID generator lease.
+///
+/// `false` means the process may be unable to allocate row ids:
+/// - the installed database lease is unhealthy (heartbeat dead or the lease
+///   guard fenced this process out), or
+/// - the most recent [`next_numeric_id`] call failed (including the
+///   "generator not initialized" refusal in production-like environments).
+///
+/// Without a lease to interrogate (dev fallback, uninitialized process) the
+/// last-attempt state decides, so a never-initialized production process reads
+/// unhealthy instead of silently passing readiness.
+pub fn numeric_id_generator_healthy() -> bool {
+    id_generator_health(
+        LAST_ID_GENERATION_FAILED.load(std::sync::atomic::Ordering::Relaxed),
+        ID_GENERATOR.get().map(|holder| {
+            holder
+                ._lease
+                .as_ref()
+                .map(NodeLease::is_healthy)
+        }),
+    )
+}
+
+/// Pure body of [`numeric_id_generator_healthy`]: `lease_healthy` is `None`
+/// when no lease exists (or no generator was initialized).
+fn id_generator_health(last_failed: bool, lease_healthy: Option<Option<bool>>) -> bool {
+    match lease_healthy {
+        // A live lease must also not have a failed generation behind it.
+        Some(Some(true)) => !last_failed,
+        // An installed but unhealthy lease is decisive.
+        Some(Some(false)) => false,
+        // No lease to interrogate: the last attempt is the only evidence.
+        Some(None) | None => !last_failed,
+    }
 }
 
 pub fn snowflake_initialized() -> bool {
@@ -518,6 +565,22 @@ pub fn memory_cursor_page_info(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn id_generator_health_policy_is_decisive_and_fail_closed() {
+        // A live lease with a clean last attempt is healthy.
+        assert!(id_generator_health(false, Some(Some(true))));
+        // An installed but unhealthy lease is decisive, even after successes.
+        assert!(!id_generator_health(false, Some(Some(false))));
+        assert!(!id_generator_health(true, Some(Some(false))));
+        // A live lease cannot paper over a failed generation attempt.
+        assert!(!id_generator_health(true, Some(Some(true))));
+        // Without a lease (or without a generator) the last attempt decides.
+        assert!(id_generator_health(false, Some(None)));
+        assert!(!id_generator_health(true, Some(None)));
+        assert!(id_generator_health(false, None));
+        assert!(!id_generator_health(true, None));
+    }
 
     #[test]
     fn parse_required_numeric_id_rejects_non_numeric_values() {

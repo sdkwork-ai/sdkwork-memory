@@ -13,6 +13,14 @@ use sqlx::Row;
 
 use crate::store::{now_text, NativeSqlMemoryStore, NativeSqlStoreError};
 
+/// Upper bound on the joined rows one entity-link lookup may return.
+///
+/// Entity boosting consumes the pairs as best-effort ranking evidence, so a
+/// memory with an extreme edge count is truncated rather than allowed to widen
+/// the join without bound; the `ORDER BY e.id` keeps the truncation stable
+/// across calls.
+pub const MAX_ENTITY_LINK_RESULTS: i64 = 1000;
+
 #[derive(Debug, Clone)]
 pub struct NativeSqlEntityRow {
     pub id: i64,
@@ -485,6 +493,12 @@ impl NativeSqlMemoryStore {
     /// from the retrieval candidate pool, so the join stays bounded by the
     /// pool instead of scanning every edge in the space; placeholders are
     /// bound parameters, never interpolated values.
+    ///
+    /// The join is additionally capped at [`MAX_ENTITY_LINK_RESULTS`] rows so a
+    /// memory with an extreme edge count cannot widen the query unboundedly.
+    /// Entity boosting is best-effort ranking evidence: truncating the link
+    /// list only shrinks the boost contribution and never changes which
+    /// memories are candidates, so over-limit truncation is safe.
     pub async fn list_entity_memory_links_for_memories(
         &self,
         tenant_id: i64,
@@ -506,15 +520,19 @@ impl NativeSqlMemoryStore {
             JOIN ai_entity tgt
               ON tgt.id = e.target_entity_id AND tgt.tenant_id = e.tenant_id
             JOIN ai_record r
-              ON r.id = e.source_memory_id AND r.tenant_id = e.tenant_id
+              ON r.tenant_id = e.tenant_id
+             AND r.id = e.source_memory_id
+             AND r.uuid IN ({placeholders})
             WHERE e.tenant_id = ? AND e.space_id = ? AND e.status <> 'deleted'
-              AND e.source_memory_id IN ({placeholders})
+            ORDER BY e.id ASC
+            LIMIT {MAX_ENTITY_LINK_RESULTS}
             "#
         );
-        let mut query = sqlx::query(&sql).bind(tenant_id).bind(space_id);
+        let mut query = sqlx::query(&sql);
         for memory_id in memory_ids {
             query = query.bind(memory_id);
         }
+        query = query.bind(tenant_id).bind(space_id);
         let rows = query.fetch_all(self.pool()).await?;
         Ok(Self::entity_links_from_rows(rows))
     }

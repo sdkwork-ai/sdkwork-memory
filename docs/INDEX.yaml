@@ -65,4 +65,9 @@ entries:
     layer: work
     audience: [architecture, engineering, api, data, security, operations]
     status: reviewed
+  - id: REVIEW-20260930
+    path: docs/engineering/reviews/REVIEW-20260930-fourth-audit-remediation.md
+    layer: work
+    audience: [architecture, engineering, api, data, security, operations]
+    status: reviewed
 domains: []

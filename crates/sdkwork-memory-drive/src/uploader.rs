@@ -96,7 +96,7 @@ fn upload_command(
             file_fingerprint,
             original_file_name: request.original_file_name.clone(),
             content_type: request.content_type.clone(),
-            content_length: request.body.len() as i64,
+            content_length: body.len() as i64,
             chunk_size_bytes: 8 * 1024 * 1024,
             target: UploaderTarget::AutoUploadSpace {
                 parent_node_id: None,

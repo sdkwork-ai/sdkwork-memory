@@ -81,3 +81,34 @@ fn context_pack_suppresses_duplicate_memories() {
     assert_eq!(pack["fragments"].as_array().unwrap().len(), 1);
     assert_eq!(pack["selection"]["deduplicatedCount"], 1);
 }
+
+#[test]
+fn context_pack_never_emits_a_bare_ellipsis_fragment() {
+    // "abcdefgh" costs 2 tokens, leaving 1: reserving a token for the ellipsis
+    // would leave zero tokens for content, so the long second hit must be
+    // reported as truncation instead of becoming a content-free "…" fragment.
+    let hits = vec![
+        sample_hit("abcdefgh"),
+        sample_hit("a second memory fragment far longer than one token"),
+    ];
+    let (pack, tokens, truncated) = build_context_pack_from_hits(&hits, 3);
+
+    assert!(truncated);
+    assert_eq!(tokens, 2);
+    let fragments = pack["fragments"].as_array().unwrap();
+    assert_eq!(fragments.len(), 1);
+    assert_ne!(fragments[0]["canonicalText"], "…");
+}
+
+#[test]
+fn context_pack_still_fits_a_whole_fragment_into_one_remaining_token() {
+    // The bare-ellipsis rule gates only the truncation path; a fragment that
+    // fits the remaining budget entirely must still be selected.
+    let hits = vec![sample_hit("abcdefgh"), sample_hit("ok")];
+    let (pack, tokens, truncated) = build_context_pack_from_hits(&hits, 3);
+
+    assert!(!truncated);
+    assert_eq!(tokens, 3);
+    assert_eq!(pack["fragments"].as_array().unwrap().len(), 2);
+    assert_eq!(pack["fragments"][1]["canonicalText"], "ok");
+}

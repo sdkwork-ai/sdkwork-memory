@@ -8,10 +8,12 @@ use sdkwork_memory_plugin_native_sql::{
     StaleRequeueCounts,
     build_native_sql_candidate_store, build_native_sql_habit_store,
     build_native_sql_retrieval_trace_store, ConsolidateDuplicateRecordsCommand,
-    FinishLearningJobCommand, InsertEntityCommand, InsertLearningJobCommand,
-    InsertMemoryEvalRunCommand, NativeSqlAppendOutboxEventCommand, NativeSqlCreateSpaceCommand,
-    NativeSqlMemoryStore, NativeSqlStoreError, PromoteApprovedCandidateCommand,
-    UpdateEntityCommand, UpdateEvalRunStateCommand, SENSITIVITY_READ_OWNER,
+    FinishLearningJobCommand, InsertEdgeCommand, InsertEntityCommand, InsertLearningJobCommand,
+    InsertMemoryEvalRunCommand, InsertPolicyCommand, InsertSubjectCommand,
+    NativeSqlAppendOutboxEventCommand, NativeSqlCreateSpaceCommand, NativeSqlMemoryStore,
+    NativeSqlStoreError, NativeSqlUsageDailyRow, PromoteApprovedCandidateCommand,
+    UpdateEntityCommand, UpdateEvalRunStateCommand, MAX_ENTITY_LINK_RESULTS,
+    SENSITIVITY_READ_OWNER,
 };
 use sdkwork_memory_spi::{
     AppendMemoryAuditCommand, AppendMemoryEventCommand, AppendMemoryOutboxCommand,
@@ -446,6 +448,89 @@ async fn sqlite_learning_job_completion_is_fenced_by_execution_lease() {
 }
 
 #[tokio::test]
+async fn sqlite_learning_job_idempotency_key_replay_resolves_to_the_stored_job() {
+    let store = NativeSqlMemoryStore::new_in_memory_sqlite().await.unwrap();
+    let command = |job_uuid: &'static str| InsertLearningJobCommand {
+        tenant_id: 77,
+        job_uuid,
+        space_id: None,
+        job_type: "extraction",
+        state: "queued",
+        priority: 0,
+        idempotency_key: Some("http-idempotency-key-1"),
+        input_json: Some(r#"{"spaceId":"10"}"#),
+    };
+    store.insert_learning_job(command("keyed-job-1")).await.unwrap();
+    // A concurrent replica enqueued the same logical job first: the partial
+    // unique index fires, and the conflict recovery must resolve to the
+    // stored job instead of surfacing a constraint error.
+    store.insert_learning_job(command("keyed-job-replay")).await.unwrap();
+
+    let stored = store
+        .retrieve_learning_job_for_tenant(77, "keyed-job-1")
+        .await
+        .unwrap()
+        .expect("the first job row must win the replay");
+    assert_eq!(stored.job_type, "extraction");
+    assert!(store
+        .retrieve_learning_job_for_tenant(77, "keyed-job-replay")
+        .await
+        .unwrap()
+        .is_none());
+    let keyed_rows: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM ai_learning_job WHERE tenant_id = ?")
+            .bind(77_i64)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert_eq!(keyed_rows, 1);
+}
+
+#[tokio::test]
+async fn sqlite_learning_job_idempotency_key_reuse_with_different_payload_conflicts() {
+    let store = NativeSqlMemoryStore::new_in_memory_sqlite().await.unwrap();
+    store
+        .insert_learning_job(InsertLearningJobCommand {
+            tenant_id: 77,
+            job_uuid: "keyed-job-1",
+            space_id: None,
+            job_type: "extraction",
+            state: "queued",
+            priority: 0,
+            idempotency_key: Some("http-idempotency-key-1"),
+            input_json: Some(r#"{"spaceId":"10"}"#),
+        })
+        .await
+        .unwrap();
+
+    // One idempotency key maps to one logical request: reusing it for a
+    // different payload is a client contract violation, not a replay.
+    let error = store
+        .insert_learning_job(InsertLearningJobCommand {
+            tenant_id: 77,
+            job_uuid: "keyed-job-2",
+            space_id: None,
+            job_type: "extraction",
+            state: "queued",
+            priority: 0,
+            idempotency_key: Some("http-idempotency-key-1"),
+            input_json: Some(r#"{"spaceId":"20"}"#),
+        })
+        .await
+        .expect_err("key reuse with a different payload must conflict");
+    assert!(matches!(
+        error,
+        NativeSqlStoreError::IdempotencyConflict { ref idempotency_key }
+            if idempotency_key == "http-idempotency-key-1"
+    ));
+    assert!(store
+        .retrieve_learning_job_for_tenant(77, "keyed-job-2")
+        .await
+        .unwrap()
+        .is_none());
+}
+
+#[tokio::test]
 async fn sqlite_governance_job_history_filters_actor_before_pagination() {
     let store = NativeSqlMemoryStore::new_in_memory_sqlite().await.unwrap();
     let scope = MemoryScopeContext {
@@ -585,6 +670,602 @@ async fn sqlite_eval_run_persists_dataset_profile_config_and_lifecycle_timestamp
         Some(r#"{"status":"completed"}"#)
     );
     assert_utc_timestamp(completed.finished_at.as_deref());
+}
+
+/// G2 contract: `requeue_failed_learning_job` requeues below the attempt
+/// ceiling (with backoff and a version charge), dead-letters at the ceiling,
+/// and rejects a fenced lease without writing anything.
+#[tokio::test]
+async fn sqlite_requeue_failed_learning_job_covers_fence_backoff_and_dead_letter() {
+    let store = NativeSqlMemoryStore::new_in_memory_sqlite().await.unwrap();
+    store
+        .insert_learning_job(InsertLearningJobCommand {
+            tenant_id: 77,
+            job_uuid: "requeue-job-1",
+            space_id: None,
+            job_type: "extract",
+            state: "queued",
+            priority: 0,
+            idempotency_key: None,
+            input_json: Some(r#"{"spaceId":"1"}"#),
+        })
+        .await
+        .unwrap();
+    let claimed = store
+        .claim_queued_learning_jobs(1, "job-worker-a", "job-lease-a", 30)
+        .await
+        .unwrap();
+    assert_eq!(claimed.len(), 1);
+
+    // Fenced lease: a wrong token is rejected with None and writes nothing.
+    let version_before = store
+        .retrieve_learning_job_for_tenant(77, "requeue-job-1")
+        .await
+        .unwrap()
+        .unwrap()
+        .version;
+    let fenced = store
+        .requeue_failed_learning_job(
+            77,
+            "requeue-job-1",
+            "job-worker-a",
+            "wrong-token",
+            2,
+            30,
+            r#"{"error":"boom"}"#,
+        )
+        .await
+        .unwrap();
+    assert!(fenced.is_none(), "a wrong lease token must be rejected");
+    let untouched = store
+        .retrieve_learning_job_for_tenant(77, "requeue-job-1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(untouched.state, "running");
+    assert_eq!(untouched.version, version_before, "a fenced requeue must not charge");
+
+    // Below the ceiling: back to 'queued' with backoff and version + 1.
+    let requeued = store
+        .requeue_failed_learning_job(
+            77,
+            "requeue-job-1",
+            "job-worker-a",
+            "job-lease-a",
+            2,
+            30,
+            r#"{"error":"boom"}"#,
+        )
+        .await
+        .unwrap()
+        .expect("below-ceiling failure requeues the job");
+    assert_eq!(requeued, "queued");
+    let row = store
+        .retrieve_learning_job_for_tenant(77, "requeue-job-1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        row.version,
+        version_before + 1,
+        "a requeue must charge version + 1 like the terminal finish does"
+    );
+    let next_attempt_at: Option<String> =
+        sqlx::query_scalar("SELECT next_attempt_at FROM ai_learning_job WHERE tenant_id = ? AND uuid = ?")
+            .bind(77_i64)
+            .bind("requeue-job-1")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert!(
+        next_attempt_at.is_some(),
+        "a below-ceiling requeue must schedule a backoff window"
+    );
+
+    // Fast-forward the backoff, re-claim, then exhaust the ceiling.
+    sqlx::query(
+        "UPDATE ai_learning_job SET next_attempt_at = '1970-01-01T00:00:00.000Z' WHERE tenant_id = ? AND uuid = ?",
+    )
+    .bind(77_i64)
+    .bind("requeue-job-1")
+    .execute(store.pool())
+    .await
+    .unwrap();
+    let reclaimed = store
+        .claim_queued_learning_jobs(1, "job-worker-b", "job-lease-b", 30)
+        .await
+        .unwrap();
+    assert_eq!(reclaimed.len(), 1);
+    let dead = store
+        .requeue_failed_learning_job(
+            77,
+            "requeue-job-1",
+            "job-worker-b",
+            "job-lease-b",
+            2,
+            30,
+            r#"{"error":"boom again"}"#,
+        )
+        .await
+        .unwrap()
+        .expect("ceiling-exhausting failure dead-letters the job");
+    assert_eq!(dead, "failed");
+    let terminal = store
+        .retrieve_learning_job_for_tenant(77, "requeue-job-1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(terminal.state, "failed");
+    let next_attempt_after_dead: Option<String> =
+        sqlx::query_scalar("SELECT next_attempt_at FROM ai_learning_job WHERE tenant_id = ? AND uuid = ?")
+            .bind(77_i64)
+            .bind("requeue-job-1")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert!(next_attempt_after_dead.is_none());
+}
+
+/// G2 contract (B8): `update_eval_run_state` charges `version + 1` on the
+/// terminal transition, matching `finish_learning_job`, and stays fenced.
+#[tokio::test]
+async fn sqlite_update_eval_run_state_bumps_version_and_stays_fenced() {
+    let store = NativeSqlMemoryStore::new_in_memory_sqlite().await.unwrap();
+    store
+        .insert_mem_eval_run_request(InsertMemoryEvalRunCommand {
+            tenant_id: 77,
+            eval_run_uuid: "601",
+            eval_type: "retrieval_quality",
+            state: "accepted",
+            dataset_ref: None,
+            profile_ref: None,
+            config_json: None,
+        })
+        .await
+        .unwrap();
+    let claimed = store
+        .claim_queued_eval_runs(1, "eval-worker", "eval-lease", 30)
+        .await
+        .unwrap();
+    assert_eq!(claimed.len(), 1);
+
+    let wrong_token = store
+        .update_eval_run_state(UpdateEvalRunStateCommand {
+            tenant_id: 77,
+            eval_run_uuid: "601",
+            lease_owner: "eval-worker",
+            lease_token: "wrong-token",
+            state: "succeeded",
+            metrics_json: None,
+            result_json: Some(r#"{"status":"fenced"}"#),
+        })
+        .await
+        .unwrap();
+    assert!(!wrong_token, "a wrong lease token must be rejected");
+
+    let updated = store
+        .update_eval_run_state(UpdateEvalRunStateCommand {
+            tenant_id: 77,
+            eval_run_uuid: "601",
+            lease_owner: "eval-worker",
+            lease_token: "eval-lease",
+            state: "succeeded",
+            metrics_json: Some(r#"{"recallAtK":1.0}"#),
+            result_json: Some(r#"{"status":"completed"}"#),
+        })
+        .await
+        .unwrap();
+    assert!(updated);
+    let version: i64 = sqlx::query_scalar("SELECT version FROM ai_eval_run WHERE tenant_id = ? AND uuid = ?")
+        .bind(77_i64)
+        .bind("601")
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    assert_eq!(version, 1, "the terminal transition must charge version + 1");
+}
+
+/// C5: the extraction-to-candidate linkage persists so a candidate stays
+/// traceable to the learning job that produced it.
+#[tokio::test]
+async fn sqlite_candidate_persists_learning_job_linkage() {
+    let store = new_contract_store().await;
+    let scope = MemoryScopeContext::for_test(1, 1);
+
+    MemoryCandidateStorePort::create(
+        &store,
+        CreateMemoryCandidateCommand {
+            learning_job_uuid: Some("9001".to_string()),
+            ..candidate_command(scope.clone(), "cand-linked")
+        },
+    )
+    .await
+    .unwrap();
+    MemoryCandidateStorePort::create(
+        &store,
+        candidate_command(scope.clone(), "cand-unlinked"),
+    )
+    .await
+    .unwrap();
+
+    let linked: Option<String> = sqlx::query_scalar(
+        "SELECT learning_job_uuid FROM ai_candidate WHERE tenant_id = ? AND uuid = ?",
+    )
+    .bind(1_i64)
+    .bind("cand-linked")
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(linked.as_deref(), Some("9001"));
+
+    let unlinked: Option<String> = sqlx::query_scalar(
+        "SELECT learning_job_uuid FROM ai_candidate WHERE tenant_id = ? AND uuid = ?",
+    )
+    .bind(1_i64)
+    .bind("cand-unlinked")
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert!(unlinked.is_none());
+}
+
+/// B11 regression: a cursor whose row was purged ends the window with an
+/// empty page (hasMore=false downstream) instead of restarting the list, on
+/// both cursor directions.
+#[tokio::test]
+async fn sqlite_purged_cursor_rows_end_list_windows_fail_closed() {
+    let store = new_contract_store().await;
+    let scope = MemoryScopeContext::for_test(1, 1);
+
+    // DESC keyset list: retrieval traces newest-first.
+    for trace_id in ["trace-cursor-1", "trace-cursor-2", "trace-cursor-3"] {
+        store
+            .append_retrieval_trace(&AppendMemoryRetrievalTraceCommand {
+                scope: scope.clone(),
+                trace_id: trace_id.to_string(),
+                actor_id: None,
+                query_text: Some("cursor probe".to_string()),
+                query_hash: format!("sha256:{trace_id}"),
+                retrievers_json: None,
+                latency_ms: Some(1),
+                degraded: false,
+                metadata_json: None,
+                hits: Vec::new(),
+                context_pack: None,
+            })
+            .await
+            .unwrap();
+    }
+    let first_page = store
+        .list_retrieval_traces_for_tenant(1, Some(1), 2, None)
+        .await
+        .unwrap();
+    // The store returns page_size + 1 rows so callers can detect has_more.
+    assert_eq!(first_page.len(), 3);
+    let cursor_trace = first_page[1].trace_id.clone();
+    // Purge the cursor row out from under the paginator.
+    sqlx::query("DELETE FROM ai_retrieval_trace WHERE tenant_id = ? AND uuid = ?")
+        .bind(1_i64)
+        .bind(&cursor_trace)
+        .execute(store.pool())
+        .await
+        .unwrap();
+    let purged_cursor_page = store
+        .list_retrieval_traces_for_tenant(1, Some(1), 2, Some(&cursor_trace))
+        .await
+        .unwrap();
+    assert!(
+        purged_cursor_page.is_empty(),
+        "a purged DESC cursor row must end the window (empty page) instead of restarting the list"
+    );
+    // The first page (no cursor) is unchanged by the fail-closed rule.
+    let fresh_first_page = store
+        .list_retrieval_traces_for_tenant(1, Some(1), 2, None)
+        .await
+        .unwrap();
+    assert_eq!(fresh_first_page.len(), 2);
+
+    // ASC keyset list: eval runs oldest-first.
+    for eval_run_uuid in ["eval-cursor-1", "eval-cursor-2", "eval-cursor-3"] {
+        store
+            .insert_mem_eval_run_request(InsertMemoryEvalRunCommand {
+                tenant_id: 1,
+                eval_run_uuid,
+                eval_type: "retrieval_quality",
+                state: "accepted",
+                dataset_ref: None,
+                profile_ref: None,
+                config_json: None,
+            })
+            .await
+            .unwrap();
+    }
+    let first_eval_page = store
+        .list_mem_eval_runs_for_tenant(1, 2, None)
+        .await
+        .unwrap();
+    assert_eq!(first_eval_page.len(), 3);
+    let eval_cursor = first_eval_page[1].eval_run_uuid.clone();
+    sqlx::query("DELETE FROM ai_eval_run WHERE tenant_id = ? AND uuid = ?")
+        .bind(1_i64)
+        .bind(&eval_cursor)
+        .execute(store.pool())
+        .await
+        .unwrap();
+    let purged_eval_page = store
+        .list_mem_eval_runs_for_tenant(1, 2, Some(&eval_cursor))
+        .await
+        .unwrap();
+    assert!(
+        purged_eval_page.is_empty(),
+        "a purged ASC cursor row must end the window (empty page) instead of restarting the list"
+    );
+    let fresh_eval_first_page = store
+        .list_mem_eval_runs_for_tenant(1, 2, None)
+        .await
+        .unwrap();
+    assert_eq!(fresh_eval_first_page.len(), 2);
+}
+
+/// D10: a space a memory binding grants the actor appears in the actor-filtered
+/// space list next to the actor's own spaces; an unbound actor does not see it.
+#[tokio::test]
+async fn sqlite_list_spaces_includes_binding_shared_spaces() {
+    let store = new_contract_store().await;
+    // Space 60 is owned by another principal.
+    store
+        .create_space_record(
+            1,
+            60,
+            &NativeSqlCreateSpaceCommand {
+                organization_id: None,
+                owner_subject_type: "user".to_string(),
+                owner_subject_id: "999".to_string(),
+                space_type: "workspace".to_string(),
+                display_name: "Shared Space".to_string(),
+                default_scope: "tenant".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+    // Space 61 stays owned by the actor themself.
+    store
+        .create_space_record(
+            1,
+            61,
+            &NativeSqlCreateSpaceCommand {
+                organization_id: None,
+                owner_subject_type: "user".to_string(),
+                owner_subject_id: "501".to_string(),
+                space_type: "workspace".to_string(),
+                display_name: "Own Space".to_string(),
+                default_scope: "tenant".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+    store
+        .insert_subject(InsertSubjectCommand {
+            id: 9100,
+            uuid: "subject-shared-actor",
+            tenant_id: 1,
+            organization_id: None,
+            subject_type: "user",
+            subject_ref: "501",
+            display_name: "Shared actor",
+            default_space_id: None,
+            metadata_json: None,
+        })
+        .await
+        .unwrap();
+    // Grant the actor access to space 60 through an active binding.
+    sqlx::query(
+        r#"
+        INSERT INTO ai_memory_binding (
+          id, uuid, tenant_id, binding_kind, source_subject_id,
+          target_space_id, binding_role, status, created_at, updated_at, version
+        )
+        VALUES (9200, 'binding-shared-1', 1, 'access', 9100, 60, 'reader', 'active',
+                '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 1)
+        "#,
+    )
+    .execute(store.pool())
+    .await
+    .unwrap();
+
+    let actor_spaces = store
+        .list_spaces_for_tenant(1, 10, 0, Some("501"))
+        .await
+        .unwrap();
+    let shared_space_ids = actor_spaces
+        .iter()
+        .map(|row| row.space_id)
+        .collect::<Vec<_>>();
+    assert!(
+        shared_space_ids.contains(&60),
+        "a binding-shared space must appear in the actor-filtered list, got {shared_space_ids:?}"
+    );
+    assert!(
+        shared_space_ids.contains(&61),
+        "the actor's own space must stay in the list"
+    );
+
+    let other_actor_spaces = store
+        .list_spaces_for_tenant(1, 10, 0, Some("404"))
+        .await
+        .unwrap();
+    assert!(
+        !other_actor_spaces.iter().any(|row| row.space_id == 60),
+        "an actor without a binding must not see the shared space"
+    );
+    // The unfiltered list keeps seeing every tenant-one space: the two seeded
+    // contract spaces plus the two this test created.
+    let all_spaces = store.list_spaces_for_tenant(1, 10, 0, None).await.unwrap();
+    assert_eq!(all_spaces.len(), 4);
+}
+
+/// D10 (gate parity): the list's binding branch uses the same gates as the
+/// governance evaluation — only access/share/ownership kinds authorize and the
+/// binding window must be current — so a `reference`-kind or expired binding
+/// never makes a space visible that access would refuse.
+#[tokio::test]
+async fn sqlite_list_spaces_binding_visibility_matches_the_governance_gates() {
+    let store = new_contract_store().await;
+    // Distinct space types: uk_ai_space_owner_type forbids one owner holding
+    // two spaces of the same type.
+    for (space_id, space_type, name) in [
+        (70, "workspace", "Reference Space"),
+        (71, "notes", "Expired Space"),
+        (72, "archive", "Live Space"),
+    ] {
+        store
+            .create_space_record(
+                1,
+                space_id,
+                &NativeSqlCreateSpaceCommand {
+                    organization_id: None,
+                    owner_subject_type: "user".to_string(),
+                    owner_subject_id: "999".to_string(),
+                    space_type: space_type.to_string(),
+                    display_name: name.to_string(),
+                    default_scope: "tenant".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+    }
+    store
+        .insert_subject(InsertSubjectCommand {
+            id: 9300,
+            uuid: "subject-gate-actor",
+            tenant_id: 1,
+            organization_id: None,
+            subject_type: "user",
+            subject_ref: "601",
+            display_name: "Gate actor",
+            default_space_id: None,
+            metadata_json: None,
+        })
+        .await
+        .unwrap();
+    // reference kind: never authorizes, so the space must not be listed.
+    sqlx::query(
+        r#"
+        INSERT INTO ai_memory_binding (
+          id, uuid, tenant_id, binding_kind, source_subject_id,
+          target_space_id, binding_role, status, created_at, updated_at, version
+        )
+        VALUES (9400, 'binding-gate-ref', 1, 'reference', 9300, 70, 'reader', 'active',
+                '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 1)
+        "#,
+    )
+    .execute(store.pool())
+    .await
+    .unwrap();
+    // Expired window: status is still 'active' but validity has lapsed.
+    sqlx::query(
+        r#"
+        INSERT INTO ai_memory_binding (
+          id, uuid, tenant_id, binding_kind, source_subject_id,
+          target_space_id, binding_role, status, valid_from, valid_to,
+          created_at, updated_at, version
+        )
+        VALUES (9401, 'binding-gate-expired', 1, 'access', 9300, 71, 'reader', 'active',
+                '2026-01-01T00:00:00.000Z', '2026-06-01T00:00:00.000Z',
+                '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 1)
+        "#,
+    )
+    .execute(store.pool())
+    .await
+    .unwrap();
+    // Live access binding: the space must be listed.
+    sqlx::query(
+        r#"
+        INSERT INTO ai_memory_binding (
+          id, uuid, tenant_id, binding_kind, source_subject_id,
+          target_space_id, binding_role, status, valid_from, valid_to,
+          created_at, updated_at, version
+        )
+        VALUES (9402, 'binding-gate-live', 1, 'access', 9300, 72, 'reader', 'active',
+                '2026-01-01T00:00:00.000Z', '2099-01-01T00:00:00.000Z',
+                '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 1)
+        "#,
+    )
+    .execute(store.pool())
+    .await
+    .unwrap();
+
+    let actor_spaces = store
+        .list_spaces_for_tenant(1, 10, 0, Some("601"))
+        .await
+        .unwrap();
+    let listed = actor_spaces
+        .iter()
+        .map(|row| row.space_id)
+        .collect::<Vec<_>>();
+    assert!(
+        !listed.contains(&70),
+        "a reference-kind binding must not surface the space, got {listed:?}"
+    );
+    assert!(
+        !listed.contains(&71),
+        "an expired binding must not surface the space, got {listed:?}"
+    );
+    assert!(
+        listed.contains(&72),
+        "a live access binding must surface the space, got {listed:?}"
+    );
+}
+
+/// C5/R5b: a requeued extraction removes only the previous attempt's pending
+/// candidates for its own job attribution — reviewed candidates and other
+/// jobs' candidates survive.
+#[tokio::test]
+async fn sqlite_delete_pending_candidates_for_learning_job_is_scoped_to_the_job() {
+    let store = new_contract_store().await;
+    let scope = MemoryScopeContext::for_test(1, 1);
+    let command = |candidate_id: &str, job: Option<&str>| CreateMemoryCandidateCommand {
+        scope: scope.clone(),
+        candidate_id: candidate_id.to_string(),
+        candidate_type: "extraction".to_string(),
+        memory_type: "semantic".to_string(),
+        proposed_text: format!("proposal {candidate_id}"),
+        proposed_payload_json: None,
+        evidence_json: None,
+        confidence: 0.7,
+        learning_job_uuid: job.map(str::to_string),
+    };
+    for (id, job) in [
+        ("7100", Some("job-a")),
+        ("7101", Some("job-a")),
+        ("7102", Some("job-b")),
+    ] {
+        store.create_candidate(&command(id, job)).await.unwrap();
+    }
+    // Approve one of job-a's candidates directly: reviewed rows are never
+    // reachable through the pending-only cleanup.
+    sqlx::query("UPDATE ai_candidate SET decision_state = 'approved' WHERE uuid = '7100'")
+        .execute(store.pool())
+        .await
+        .unwrap();
+
+    let deleted = store
+        .delete_pending_candidates_for_learning_job(1, "job-a")
+        .await
+        .unwrap();
+    assert_eq!(deleted, 1, "only job-a's pending candidate is removed");
+
+    let remaining: Vec<(String, Option<String>)> =
+        sqlx::query_as("SELECT uuid, learning_job_uuid FROM ai_candidate ORDER BY uuid")
+            .fetch_all(store.pool())
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|row: (String, Option<String>)| row)
+            .collect();
+    assert_eq!(remaining.len(), 2);
+    assert!(remaining.iter().any(|(uuid, _)| uuid == "7100"));
+    assert!(remaining.iter().any(|(uuid, _)| uuid == "7102"));
 }
 
 #[tokio::test]
@@ -925,6 +1606,177 @@ async fn sqlite_consolidation_rolls_back_supersession_sources_and_outbox_on_jour
     assert_eq!(outbox_count, 0);
 }
 
+#[tokio::test]
+async fn sqlite_open_api_event_with_audit_commits_event_and_audit_rows_together() {
+    let store = new_contract_store().await;
+    let scope = MemoryScopeContext::for_test(1, 1);
+    store
+        .append_open_api_event_with_audit(
+            &scope,
+            "audited-event",
+            "memory.evidence.observed",
+            "contract_test",
+            "2026-07-20T00:00:00Z",
+            &serde_json::json!({ "content": "audited evidence" }),
+            "internal",
+            "audited-event-audit",
+            "memory.event.create",
+            "memory_event",
+            "audited-event",
+            "accepted",
+        )
+        .await
+        .expect("event and audit rows must commit together");
+
+    let event = store
+        .retrieve_open_api_event(&scope, "audited-event")
+        .await
+        .unwrap()
+        .expect("audited event row");
+    assert_eq!(event.event_type, "memory.evidence.observed");
+    let audit_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM ai_audit_log WHERE tenant_id = ? AND uuid = ?",
+    )
+    .bind(scope.tenant_id)
+    .bind("audited-event-audit")
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(audit_count, 1);
+}
+
+#[tokio::test]
+async fn sqlite_open_api_event_with_audit_rolls_back_event_when_audit_insert_fails() {
+    let store = new_contract_store().await;
+    let scope = MemoryScopeContext::for_test(1, 1);
+    sqlx::query(
+        r#"
+        CREATE TRIGGER fail_open_api_event_audit
+        BEFORE INSERT ON ai_audit_log
+        WHEN NEW.action = 'memory.event.create'
+        BEGIN
+          SELECT RAISE(ABORT, 'forced open api event audit failure');
+        END
+        "#,
+    )
+    .execute(store.pool())
+    .await
+    .unwrap();
+
+    let result = store
+        .append_open_api_event_with_audit(
+            &scope,
+            "orphan-event",
+            "memory.evidence.observed",
+            "contract_test",
+            "2026-07-20T00:00:00Z",
+            &serde_json::json!({ "content": "orphan evidence" }),
+            "internal",
+            "orphan-event-audit",
+            "memory.event.create",
+            "memory_event",
+            "orphan-event",
+            "accepted",
+        )
+        .await;
+    assert!(result.is_err(), "a failed audit insert must fail the append");
+
+    assert!(
+        store
+            .retrieve_open_api_event(&scope, "orphan-event")
+            .await
+            .unwrap()
+            .is_none(),
+        "the event row must roll back with its failed audit line"
+    );
+}
+
+#[tokio::test]
+async fn sqlite_open_api_event_with_audit_replay_writes_only_the_owed_audit_line() {
+    let store = new_contract_store().await;
+    let scope = MemoryScopeContext::for_test(1, 1);
+    async fn append(
+        store: &NativeSqlMemoryStore,
+        scope: &MemoryScopeContext,
+        audit_id: &str,
+        payload: serde_json::Value,
+    ) -> Result<(), NativeSqlStoreError> {
+        store
+            .append_open_api_event_with_audit(
+                scope,
+                "replayed-event",
+                "memory.evidence.observed",
+                "contract_test",
+                "2026-07-20T00:00:00Z",
+                &payload,
+                "internal",
+                audit_id,
+                "memory.event.create",
+                "memory_event",
+                "replayed-event",
+                "accepted",
+            )
+            .await
+    }
+    append(
+        &store,
+        &scope,
+        "replayed-event-audit-1",
+        serde_json::json!({ "content": "evidence" }),
+    )
+    .await
+    .unwrap();
+    // Same event id and payload: the idempotent replay must not duplicate the
+    // event row, but the replayed request still earns its audit line.
+    append(
+        &store,
+        &scope,
+        "replayed-event-audit-2",
+        serde_json::json!({ "content": "evidence" }),
+    )
+    .await
+    .unwrap();
+
+    let event_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM ai_event WHERE tenant_id = ? AND uuid = ?")
+            .bind(scope.tenant_id)
+            .bind("replayed-event")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert_eq!(event_count, 1);
+    let audit_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM ai_audit_log WHERE tenant_id = ? AND uuid LIKE ?",
+    )
+    .bind(scope.tenant_id)
+    .bind("replayed-event-audit-%")
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(audit_count, 2);
+
+    // Same event id with a different payload is a conflict, not a replay: it
+    // must fail and leave no audit row behind.
+    let conflict = append(
+        &store,
+        &scope,
+        "replayed-event-audit-3",
+        serde_json::json!({ "content": "different" }),
+    )
+    .await
+    .expect_err("conflicting replay must fail");
+    assert!(matches!(conflict, NativeSqlStoreError::EventConflict { .. }));
+    let audit_count_after_conflict: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM ai_audit_log WHERE tenant_id = ? AND uuid = ?",
+    )
+    .bind(scope.tenant_id)
+    .bind("replayed-event-audit-3")
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(audit_count_after_conflict, 0);
+}
+
 fn assert_utc_timestamp(value: Option<&str>) {
     let Some(text) = value else {
         panic!("expected UTC timestamp");
@@ -962,6 +1814,7 @@ fn candidate_command(
         proposed_payload_json: Some(r#"{"preference":"concise"}"#.to_string()),
         evidence_json: Some(r#"{"eventId":"evt-1"}"#.to_string()),
         confidence: 0.91,
+        learning_job_uuid: None,
     }
 }
 
@@ -3728,8 +4581,10 @@ async fn sqlite_store_marks_outbox_failed_increments_retry_and_excludes_it_from_
         .await
         .unwrap();
     assert_eq!(claimed_for_failure.len(), 1);
+    // max_retries = 1: the first charged attempt already reaches the ceiling,
+    // so the event lands terminally 'failed' (the SPI mark_failed shape).
     let failed = store
-        .mark_outbox_failed(&scope, "out-fail", "publisher-a", "lease-a")
+        .mark_outbox_failed(&scope, "out-fail", "publisher-a", "lease-a", 1)
         .await
         .unwrap()
         .unwrap();
@@ -3739,6 +4594,57 @@ async fn sqlite_store_marks_outbox_failed_increments_retry_and_excludes_it_from_
     assert_eq!(failed.retry_count, 1);
     assert!(failed.published_at.is_none());
     assert!(pending.is_empty());
+}
+
+/// B10 parity: `mark_outbox_failed` follows the same retry ladder as
+/// `record_outbox_delivery_failure` — attempts below the ceiling return the
+/// event to 'pending' with a backoff window instead of a terminal failure.
+#[tokio::test]
+async fn sqlite_store_marks_outbox_failed_requeues_below_the_retry_ceiling() {
+    let store = new_contract_store().await;
+    let scope = MemoryScopeContext::for_test(1, 1);
+
+    store
+        .append_outbox_event(outbox_command(
+            &scope,
+            "out-fail-retry",
+            "rec-1",
+            r#"{"memoryId":"rec-1"}"#,
+        ))
+        .await
+        .unwrap();
+    store
+        .claim_global_pending_outbox_events(1, "publisher-a", "lease-a", 30)
+        .await
+        .unwrap();
+
+    // Ceiling not reached: the event goes back to 'pending' with a future
+    // next_attempt_at and its lease cleared, exactly like the delivery path.
+    let requeued = store
+        .mark_outbox_failed(&scope, "out-fail-retry", "publisher-a", "lease-a", 3)
+        .await
+        .unwrap()
+        .expect("requeued failure row");
+    assert_eq!(requeued.publish_state, "pending");
+    assert_eq!(requeued.retry_count, 1);
+
+    let next_attempt_at: Option<String> = sqlx::query_scalar(
+        "SELECT next_attempt_at FROM ai_outbox_event WHERE uuid = 'out-fail-retry'",
+    )
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert!(
+        next_attempt_at.is_some(),
+        "a below-ceiling failure must schedule an exponential-backoff retry"
+    );
+
+    // The lease was cleared, so a fenced worker cannot charge a second time.
+    let fenced = store
+        .mark_outbox_failed(&scope, "out-fail-retry", "publisher-a", "lease-a", 3)
+        .await
+        .unwrap();
+    assert!(fenced.is_none(), "a stale lease must fence the failure mark");
 }
 
 #[tokio::test]
@@ -3877,6 +4783,7 @@ async fn sqlite_store_implements_outbox_delivery_lifecycle_spi_port() {
             outbox_id: "out-spi-failed".to_string(),
             lease_owner: "spi-worker".to_string(),
             lease_token: "spi-lease-b".to_string(),
+            max_retries: 1,
         },
     )
     .await
@@ -5848,4 +6755,667 @@ async fn sqlite_store_retention_purges_terminal_and_derived_rows_only() {
 
 fn crate_now_text() -> String {
     sdkwork_utils_rust::format_datetime(sdkwork_utils_rust::now(), None)
+}
+
+#[tokio::test]
+async fn sqlite_user_forget_rejects_pending_candidates_across_the_batch_boundary() {
+    let store = new_contract_store().await;
+    let scope = MemoryScopeContext {
+        tenant_id: 1,
+        space_id: 1,
+        organization_id: None,
+        user_id: Some(101),
+    };
+    // One candidate sweep batch is 500 rows, so 501 pending candidates force the
+    // keyset enumeration to cross a batch boundary; a candidate decided before the
+    // forget must never be flipped by the sweep.
+    for index in 0..501 {
+        MemoryCandidateStorePort::create(
+            &store,
+            candidate_command(scope.clone(), &format!("forget-candidate-{index}")),
+        )
+        .await
+        .unwrap();
+    }
+    MemoryCandidateStorePort::create(
+        &store,
+        candidate_command(scope.clone(), "forget-candidate-approved"),
+    )
+    .await
+    .unwrap();
+    MemoryCandidateStorePort::approve(
+        &store,
+        ApproveMemoryCandidateCommand {
+            scope: scope.clone(),
+            candidate_id: "forget-candidate-approved".to_string(),
+            decision_reason: Some("decided before forget".to_string()),
+            decided_by: Some(7),
+        },
+    )
+    .await
+    .unwrap();
+
+    let stats = store
+        .forget_records_for_user(1, 101, Some(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        stats.rejected_candidates, 501,
+        "every pending candidate across both batches must be counted"
+    );
+
+    let rejected: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM ai_candidate WHERE tenant_id = 1 AND space_id = 1 \
+         AND user_id = 101 AND decision_state = 'rejected' \
+         AND decision_reason = 'privacy_forget'",
+    )
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(rejected, 501);
+
+    let decided_before_forget: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM ai_candidate WHERE uuid = 'forget-candidate-approved' \
+         AND decision_state = 'approved'",
+    )
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        decided_before_forget, 1,
+        "the batched UPDATE must keep the original decision_state predicate"
+    );
+}
+
+#[tokio::test]
+async fn sqlite_forget_matching_query_sweeps_past_one_keyset_page() {
+    let store = new_contract_store().await;
+    let scope = MemoryScopeContext {
+        tenant_id: 1,
+        space_id: 1,
+        organization_id: None,
+        user_id: Some(101),
+    };
+    // One LIKE sweep page is MAX_LIST_PAGE_SIZE (200) rows, so 205 matches force the
+    // keyset cursor to advance past the first page. A sweep that restarts from the top
+    // or loses its ORDER BY would strand the tail rows instead of deleting all of them.
+    for index in 0..205 {
+        store
+            .create_record_open_api(
+                &scope,
+                &format!("sweep-match-{index}"),
+                "user",
+                "semantic",
+                None,
+                None,
+                "sweep needle target",
+                "sweep needle target",
+                "internal",
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+    }
+    for memory_id in ["sweep-keep-a", "sweep-keep-b"] {
+        store
+            .create_record_open_api(
+                &scope,
+                memory_id,
+                "user",
+                "semantic",
+                None,
+                None,
+                "unrelated content",
+                "unrelated content",
+                "internal",
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+    }
+
+    let stats = store
+        .forget_records_matching_query(&scope, "sweep needle")
+        .await
+        .unwrap();
+    assert_eq!(
+        stats.deleted_records, 205,
+        "matches beyond the first page must be swept by the advancing cursor"
+    );
+
+    let remaining: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM ai_record WHERE tenant_id = 1 AND space_id = 1",
+    )
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        remaining, 2,
+        "records outside the LIKE match must survive the sweep"
+    );
+}
+
+#[tokio::test]
+async fn sqlite_entity_memory_links_are_truncated_at_the_ranking_cap() {
+    let store = new_contract_store().await;
+    let scope = MemoryScopeContext::for_test(1, 1);
+    store
+        .create_record_open_api(
+            &scope,
+            "610000000000000001",
+            "user",
+            "semantic",
+            None,
+            None,
+            "linked memory",
+            "linked memory",
+            "internal",
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    store
+        .insert_entity(InsertEntityCommand {
+            id: 5001,
+            uuid: "cap-entity-src",
+            tenant_id: 1,
+            space_id: 1,
+            entity_type: "concept",
+            canonical_name: "Cap Source Entity",
+            aliases_json: None,
+            attributes_json: None,
+            sensitivity_level: "internal",
+        })
+        .await
+        .unwrap();
+    store
+        .insert_entity(InsertEntityCommand {
+            id: 5002,
+            uuid: "cap-entity-tgt",
+            tenant_id: 1,
+            space_id: 1,
+            entity_type: "concept",
+            canonical_name: "Cap Target Entity",
+            aliases_json: None,
+            attributes_json: None,
+            sensitivity_level: "internal",
+        })
+        .await
+        .unwrap();
+    let record_id: i64 =
+        sqlx::query_scalar("SELECT id FROM ai_record WHERE uuid = '610000000000000001'")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+
+    // 1001 edges produce 1001 joined rows, one past MAX_ENTITY_LINK_RESULTS (1000), so
+    // the lookup must truncate instead of returning the whole join.
+    for index in 0..1001 {
+        store
+            .insert_edge(InsertEdgeCommand {
+                id: 6000 + index,
+                uuid: &format!("cap-edge-{index}"),
+                tenant_id: 1,
+                space_id: 1,
+                source_entity_id: 5001,
+                target_entity_id: 5002,
+                relation_type: "mentions",
+                source_record_id: Some(record_id),
+                weight: Some(0.5),
+                valid_from: None,
+                valid_to: None,
+                metadata_json: None,
+            })
+            .await
+            .unwrap();
+    }
+
+    let links = store
+        .list_entity_memory_links_for_memories(1, 1, &["610000000000000001".to_string()])
+        .await
+        .unwrap();
+    assert_eq!(
+        links.len(),
+        2 * MAX_ENTITY_LINK_RESULTS as usize,
+        "each capped row contributes one endpoint pair, so the join must truncate"
+    );
+    assert!(links
+        .iter()
+        .all(|link| link.memory_id == "610000000000000001" && !link.entity_name.is_empty()));
+}
+
+#[tokio::test]
+async fn sqlite_commercial_list_page_sizes_are_clamped() {
+    let store = new_contract_store().await;
+    for index in 0..3 {
+        store
+            .insert_subject(InsertSubjectCommand {
+                id: 7000 + index,
+                uuid: &format!("clamp-subject-{index}"),
+                tenant_id: 1,
+                organization_id: None,
+                subject_type: "user",
+                subject_ref: &format!("clamp-actor-{index}"),
+                display_name: "clamp fixture",
+                default_space_id: None,
+                metadata_json: None,
+            })
+            .await
+            .unwrap();
+    }
+
+    // page_size 0 used to produce LIMIT 1, which broke the continuation lookahead; the
+    // clamp lifts it to a one-row page plus the sentinel row.
+    let zero_page = store
+        .list_subjects(1, None, None, None, 0)
+        .await
+        .unwrap();
+    assert_eq!(zero_page.len(), 2);
+    // i32::MAX used to overflow `page_size + 1`; it must clamp to the crate-wide bound.
+    let max_page = store
+        .list_subjects(1, None, None, None, i32::MAX)
+        .await
+        .unwrap();
+    assert_eq!(max_page.len(), 3);
+
+    store
+        .insert_binding(
+            8000,
+            "clamp-binding",
+            1,
+            None,
+            "access",
+            "viewer",
+            Some(7000),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    let binding_page = store
+        .list_bindings(1, None, None, None, None, None, None, i32::MAX)
+        .await
+        .unwrap();
+    assert_eq!(binding_page.len(), 1);
+
+    store
+        .insert_capability_binding(
+            8100,
+            "clamp-capability",
+            1,
+            "memory.read",
+            "space",
+            1,
+            "enforce",
+            1,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    let capability_page = store
+        .list_capability_bindings(1, None, None, None, None, None, i32::MAX)
+        .await
+        .unwrap();
+    assert_eq!(capability_page.len(), 1);
+}
+
+// ---------------------------------------------------------------------------
+// Usage metering facts (ai_usage_daily)
+// ---------------------------------------------------------------------------
+
+fn metered_journal(memory_id: &str, audit_action: &str) -> MemoryMutationJournal {
+    // The create and the delete of one memory each journal their own outbox
+    // event, so the outbox id must differ per action, not per memory.
+    let suffix = audit_action.rsplit('.').next().unwrap_or("event");
+    MemoryMutationJournal {
+        outbox_id: format!("outbox-usage-{memory_id}-{suffix}"),
+        aggregate_type: "memory_record".to_string(),
+        aggregate_id: memory_id.to_string(),
+        event_type: audit_action.to_string(),
+        event_version: "1.0".to_string(),
+        payload_json: format!(r#"{{"memoryId":"{memory_id}"}}"#),
+        audit_id: format!("audit-usage-{memory_id}-{suffix}"),
+        audit_action: audit_action.to_string(),
+        audit_resource_type: "memory_record".to_string(),
+        audit_resource_id: memory_id.to_string(),
+        audit_result: "accepted".to_string(),
+    }
+}
+
+async fn usage_charges_by_metric(
+    store: &NativeSqlMemoryStore,
+    tenant_id: i64,
+) -> Vec<(String, String, i64)> {
+    let mut rows = store
+        .list_usage_daily_for_tenant(tenant_id, None, 200)
+        .await
+        .expect("list usage daily rows");
+    rows.sort_by(|left, right| (&left.day, &left.metric).cmp(&(&right.day, &right.metric)));
+    rows.into_iter()
+        .map(|row| (row.day, row.metric, row.delta))
+        .collect()
+}
+
+async fn charge_usage(
+    store: &NativeSqlMemoryStore,
+    tenant_id: i64,
+    day: &str,
+    metric: &str,
+    delta: i64,
+) {
+    let mut tx = store.begin_tx().await.expect("begin usage tx");
+    store
+        .bump_usage_daily_on_tx(&mut tx, tenant_id, metric, delta, day)
+        .await
+        .expect("charge usage fact");
+    tx.commit().await.expect("commit usage fact");
+}
+
+#[tokio::test]
+async fn sqlite_usage_daily_bumps_accumulate_and_stay_day_isolated() {
+    let store = new_contract_store().await;
+    const TENANT: i64 = 4242;
+    const DAY_ONE: &str = "2026-09-30";
+    const DAY_TWO: &str = "2026-10-01";
+
+    for _ in 0..3 {
+        charge_usage(&store, TENANT, DAY_ONE, "record.create", 1).await;
+    }
+    charge_usage(&store, TENANT, DAY_ONE, "record.delete", -1).await;
+    // The same (day, metric) charge repeats idempotently as accumulation, and
+    // the same metric on the next day stays an independent counter.
+    charge_usage(&store, TENANT, DAY_TWO, "record.create", 1).await;
+
+    assert_eq!(
+        usage_charges_by_metric(&store, TENANT).await,
+        vec![
+            (DAY_ONE.to_string(), "record.create".to_string(), 3),
+            (DAY_ONE.to_string(), "record.delete".to_string(), -1),
+            (DAY_TWO.to_string(), "record.create".to_string(), 1),
+        ]
+    );
+    // A second tenant never sees another tenant's usage facts.
+    assert!(usage_charges_by_metric(&store, 4243).await.is_empty());
+}
+
+#[tokio::test]
+async fn sqlite_journal_mutations_charge_usage_in_the_same_transaction() {
+    let store = new_contract_store().await;
+    let scope = MemoryScopeContext::for_test(51, 51);
+    store
+        .create_space_record(
+            51,
+            51,
+            &NativeSqlCreateSpaceCommand {
+                organization_id: None,
+                owner_subject_type: "user".to_string(),
+                owner_subject_id: "510".to_string(),
+                space_type: "workspace".to_string(),
+                display_name: "Usage Journal Space".to_string(),
+                default_scope: "tenant".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    MemoryRecordStorePort::create_canonical_atomic(
+        &store,
+        CreateCanonicalMemoryCommand {
+            scope: scope.clone(),
+            memory_id: "usage-record-1".to_string(),
+            scope_label: "user".to_string(),
+            memory_type: "semantic".to_string(),
+            subject: None,
+            predicate: None,
+            object_text: "usage fact one".to_string(),
+            canonical_text: "usage fact one".to_string(),
+            sensitivity_level: "internal".to_string(),
+            journal: metered_journal("usage-record-1", "memory.record.create"),
+            expires_at: None,
+            metadata_json: None,
+        },
+    )
+    .await
+    .expect("metered canonical create must commit");
+
+    // An unknown journal action must stay unmetered and never fail.
+    MemoryRecordStorePort::create_canonical_atomic(
+        &store,
+        CreateCanonicalMemoryCommand {
+            scope: scope.clone(),
+            memory_id: "usage-record-2".to_string(),
+            scope_label: "user".to_string(),
+            memory_type: "semantic".to_string(),
+            subject: None,
+            predicate: None,
+            object_text: "unmetered promotion".to_string(),
+            canonical_text: "unmetered promotion".to_string(),
+            sensitivity_level: "internal".to_string(),
+            journal: metered_journal("usage-record-2", "memory.candidate.promoted"),
+            expires_at: None,
+            metadata_json: None,
+        },
+    )
+    .await
+    .expect("unmetered canonical create must commit");
+
+    let receipt = MemoryRecordStorePort::delete_canonical_atomic(
+        &store,
+        DeleteCanonicalMemoryCommand {
+            scope: scope.clone(),
+            memory_id: "usage-record-1".to_string(),
+            journal: metered_journal("usage-record-1", "memory.record.delete"),
+        },
+    )
+    .await
+    .expect("metered canonical delete must commit");
+    assert!(receipt.deleted);
+
+    let charges = usage_charges_by_metric(&store, 51).await;
+    let total = |metric: &str| {
+        charges
+            .iter()
+            .filter(|(_, charge_metric, _)| charge_metric == metric)
+            .map(|(_, _, delta)| *delta)
+            .sum::<i64>()
+    };
+    assert_eq!(total("record.create"), 1, "only the create action charges");
+    assert_eq!(total("record.delete"), -1);
+    assert_eq!(
+        total("event.create"),
+        0,
+        "no event action was journaled, so no event charge exists"
+    );
+}
+
+#[tokio::test]
+async fn sqlite_usage_daily_listing_is_keyset_paged_over_day_metric() {
+    let store = new_contract_store().await;
+    const TENANT: i64 = 4244;
+    for (day, metric) in [
+        ("2026-06-01", "event.create"),
+        ("2026-06-01", "record.create"),
+        ("2026-06-01", "record.delete"),
+        ("2026-06-02", "retrieval.count"),
+    ] {
+        charge_usage(&store, TENANT, day, metric, 1).await;
+    }
+
+    let page_keys = |rows: &[NativeSqlUsageDailyRow]| {
+        rows.iter()
+            .map(|row| (row.day.clone(), row.metric.clone()))
+            .collect::<Vec<_>>()
+    };
+
+    // page_size + 1 lookahead: the first page carries the sentinel row.
+    let first_page = store
+        .list_usage_daily_for_tenant(TENANT, None, 2)
+        .await
+        .expect("first usage page");
+    assert_eq!(
+        page_keys(&first_page),
+        vec![
+            ("2026-06-01".to_string(), "event.create".to_string()),
+            ("2026-06-01".to_string(), "record.create".to_string()),
+            ("2026-06-01".to_string(), "record.delete".to_string()),
+        ]
+    );
+
+    let second_page = store
+        .list_usage_daily_for_tenant(TENANT, Some(("2026-06-01", "record.create")), 2)
+        .await
+        .expect("second usage page");
+    assert_eq!(
+        page_keys(&second_page),
+        vec![
+            ("2026-06-01".to_string(), "record.delete".to_string()),
+            ("2026-06-02".to_string(), "retrieval.count".to_string()),
+        ]
+    );
+
+    let last_page = store
+        .list_usage_daily_for_tenant(TENANT, Some(("2026-06-02", "retrieval.count")), 2)
+        .await
+        .expect("usage page past the end");
+    assert!(
+        last_page.is_empty(),
+        "an exclusive cursor at the last row ends the window"
+    );
+}
+
+#[tokio::test]
+async fn sqlite_retrieval_trace_charges_usage_best_effort() {
+    let store = new_contract_store().await;
+    let scope = MemoryScopeContext::for_test(53, 53);
+    store
+        .create_space_record(
+            53,
+            53,
+            &NativeSqlCreateSpaceCommand {
+                organization_id: None,
+                owner_subject_type: "user".to_string(),
+                owner_subject_id: "530".to_string(),
+                space_type: "workspace".to_string(),
+                display_name: "Usage Trace Space".to_string(),
+                default_scope: "tenant".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    store
+        .append_retrieval_trace(&AppendMemoryRetrievalTraceCommand {
+            scope: scope.clone(),
+            trace_id: "trace-usage-1".to_string(),
+            actor_id: None,
+            query_text: Some("usage probe".to_string()),
+            query_hash: "sha256:usage-probe".to_string(),
+            retrievers_json: None,
+            latency_ms: Some(1),
+            degraded: false,
+            metadata_json: None,
+            hits: Vec::new(),
+            context_pack: None,
+        })
+        .await
+        .expect("append retrieval trace");
+
+    let charges = usage_charges_by_metric(&store, 53).await;
+    assert_eq!(
+        charges,
+        vec![(charges[0].0.clone(), "retrieval.count".to_string(), 1)],
+        "each stored retrieval trace charges exactly one retrieval.count"
+    );
+}
+
+#[tokio::test]
+async fn sqlite_find_active_tenant_quota_policy_parses_and_fails_closed() {
+    let store = new_contract_store().await;
+    async fn insert_quota_policy(
+        store: &NativeSqlMemoryStore,
+        id: i64,
+        tenant_id: i64,
+        policy_json: &str,
+    ) {
+        let uuid = id.to_string();
+        let scope_ref = tenant_id.to_string();
+        store
+            .insert_policy(InsertPolicyCommand {
+                id,
+                uuid: &uuid,
+                tenant_id,
+                policy_type: "memory.quota",
+                scope: "tenant",
+                scope_ref: Some(&scope_ref),
+                policy_json,
+            })
+            .await
+            .expect("insert tenant quota policy");
+    }
+
+    insert_quota_policy(&store, 9001, 61, r#"{"maxRecordsPerSpace": 5, "maxSpacesPerUser": 7}"#)
+        .await;
+    insert_quota_policy(&store, 9002, 62, r#"{"maxRecordsPerSpace": 12345}"#).await;
+    insert_quota_policy(&store, 9003, 63, "not-json").await;
+    insert_quota_policy(&store, 9004, 64, r#"{"maxSpacesPerUser": 0}"#).await;
+
+    let full = store
+        .find_active_tenant_quota_policy(61)
+        .await
+        .expect("full policy resolves");
+    assert_eq!(
+        full.map(|policy| policy.max_records_per_space),
+        Some(Some(5))
+    );
+    assert_eq!(
+        full.map(|policy| policy.max_spaces_per_user),
+        Some(Some(7))
+    );
+
+    let partial = store
+        .find_active_tenant_quota_policy(62)
+        .await
+        .expect("partial policy resolves");
+    assert_eq!(
+        partial.map(|policy| policy.max_records_per_space),
+        Some(Some(12_345))
+    );
+    assert_eq!(
+        partial.map(|policy| policy.max_spaces_per_user),
+        Some(None),
+        "an absent key stays absent so the service can fall back to the environment default"
+    );
+
+    let missing = store
+        .find_active_tenant_quota_policy(65)
+        .await
+        .expect("missing policy resolves to none");
+    assert_eq!(missing, None);
+
+    let malformed = store
+        .find_active_tenant_quota_policy(63)
+        .await
+        .expect_err("malformed policy JSON must fail closed");
+    assert!(matches!(
+        malformed,
+        NativeSqlStoreError::InvariantViolation { .. }
+    ));
+
+    let non_positive = store
+        .find_active_tenant_quota_policy(64)
+        .await
+        .expect_err("a zero limit would disable the quota and must fail closed");
+    assert!(matches!(
+        non_positive,
+        NativeSqlStoreError::InvariantViolation { .. }
+    ));
 }

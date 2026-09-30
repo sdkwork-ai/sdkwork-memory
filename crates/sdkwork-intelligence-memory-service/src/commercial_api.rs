@@ -9,22 +9,22 @@ use sdkwork_memory_contract::{
     CreateCapabilityBindingCommand, CreateEdgeCommand, CreateEntityCommand,
     CreatePolicyAssignmentCommand, CreatePolicyCommand, CreateSubjectCommand, ListBindingsQuery,
     ListCapabilityBindingsQuery, ListEdgesQuery, ListEntitiesQuery, ListPoliciesQuery,
-    ListPolicyAssignmentsQuery, ListSubjectsQuery, MemoryBinding, MemoryBindingList,
-    MemoryCapabilityBinding, MemoryCapabilityBindingList, MemoryCommercialReadiness, MemoryEdge,
-    MemoryEdgeList, MemoryEntity, MemoryEntityList, MemoryOpenApiRequestContext, MemoryPolicy,
-    MemoryPolicyAssignment, MemoryPolicyAssignmentList, MemoryPolicyList,
+    ListPolicyAssignmentsQuery, ListSubjectsQuery, ListUsageQuery, MemoryBinding,
+    MemoryBindingList, MemoryCapabilityBinding, MemoryCapabilityBindingList, MemoryCommercialReadiness,
+    MemoryEdge, MemoryEdgeList, MemoryEntity, MemoryEntityList, MemoryOpenApiRequestContext,
+    MemoryPolicy, MemoryPolicyAssignment, MemoryPolicyAssignmentList, MemoryPolicyList,
     MemoryResolvedCapabilityList, MemoryServiceError, MemoryServiceResult, MemorySubject,
-    MemorySubjectList, PolicyAssignmentTargetType, PolicyInheritanceMode,
-    RebuildCommercialReadinessCommand, ResolveCapabilitiesQuery, ResolvedCapability, SubjectType,
-    UpdateEdgeCommand, UpdateEntityCommand, UpdatePolicyAssignmentCommand, UpdatePolicyCommand,
-    UpdateSubjectCommand,
+    MemorySubjectList, MemoryUsageEntry, MemoryUsageList, PolicyAssignmentTargetType,
+    PolicyInheritanceMode, RebuildCommercialReadinessCommand, ResolveCapabilitiesQuery,
+    ResolvedCapability, SubjectType, UpdateEdgeCommand, UpdateEntityCommand,
+    UpdatePolicyAssignmentCommand, UpdatePolicyCommand, UpdateSubjectCommand,
 };
 use sdkwork_memory_plugin_native_sql::{
     InsertCommercialReadinessCommand,
     InsertPolicyAssignmentCommand as StoreInsertPolicyAssignmentCommand,
     InsertPolicyCommand as StoreInsertPolicyCommand, InsertSubjectCommand, NativeSqlBindingRow,
     NativeSqlCapabilityBindingRow, NativeSqlCommercialReadinessRow, NativeSqlPolicyAssignmentRow,
-    NativeSqlPolicyRow, NativeSqlSubjectRow,
+    NativeSqlPolicyRow, NativeSqlSubjectRow, NativeSqlUsageDailyRow,
     UpdatePolicyAssignmentCommand as StoreUpdatePolicyAssignmentCommand,
     UpdatePolicyCommand as StoreUpdatePolicyCommand,
     UpdateSubjectCommand as StoreUpdateSubjectCommand,
@@ -360,6 +360,15 @@ impl super::open_api::OpenMemoryService {
     // Capability binding management
     // -----------------------------------------------------------------------
 
+    /// Create a capability binding.
+    ///
+    /// Phase-1 semantics: bindings may only target a space (`targetId` = the
+    /// `ai_space.id` the binding governs) or a subject (`targetId` = the
+    /// subject's internal numeric id — the same value as its uuid string, so
+    /// governance-side subject matching can join `ai_subject.id` against it).
+    /// `binding` and `memory` targets have no reviewed evaluator on the
+    /// enforcement surface yet and are rejected here so a stored binding can
+    /// never silently fall outside authorization.
     pub async fn create_capability_binding(
         &self,
         cmd: CreateCapabilityBindingCommand,
@@ -368,6 +377,14 @@ impl super::open_api::OpenMemoryService {
         let id = platform::next_numeric_id()?;
         let uuid = id.to_string();
         let target_type = target_type_str(cmd.target_type);
+        if !matches!(
+            cmd.target_type,
+            CapabilityTargetType::Space | CapabilityTargetType::Subject
+        ) {
+            return Err(MemoryServiceError::validation(
+                "capability binding targetType must be one of space, subject",
+            ));
+        }
         let mode = mode_str(cmd.mode);
         let metadata_json = cmd
             .metadata
@@ -968,6 +985,29 @@ impl super::open_api::OpenMemoryService {
     // Policy management (backend)
     // -----------------------------------------------------------------------
 
+    /// A `memory.quota` policy only takes effect when it anchors exactly one
+    /// tenant: `scope = "tenant"` and `scope_ref` equal to the tenant's
+    /// decimal id — the exact tuple the quota resolver reads. Enforcing the
+    /// convention at the write surface turns a silently inert policy (visible
+    /// in listings, never consulted) into a typed validation error.
+    fn validate_quota_policy_scope_ref(
+        policy_type: &str,
+        scope: &str,
+        scope_ref: Option<&str>,
+        tenant_id: i64,
+    ) -> MemoryServiceResult<()> {
+        if policy_type != "memory.quota" {
+            return Ok(());
+        }
+        let expected = tenant_id.to_string();
+        if scope != "tenant" || scope_ref != Some(expected.as_str()) {
+            return Err(MemoryServiceError::validation(format!(
+                "a memory.quota policy must use scope \"tenant\" with scopeRef \"{expected}\" so the quota resolver can find it"
+            )));
+        }
+        Ok(())
+    }
+
     pub async fn create_policy(
         &self,
         cmd: CreatePolicyCommand,
@@ -978,6 +1018,12 @@ impl super::open_api::OpenMemoryService {
                 "policyType and scope are required",
             ));
         }
+        Self::validate_quota_policy_scope_ref(
+            &cmd.policy_type,
+            &cmd.scope,
+            cmd.scope_ref.as_deref(),
+            tenant_id,
+        )?;
         let policy_json = serde_json::to_string(&cmd.policy).map_err(|error| {
             MemoryServiceError::storage(format!("policy serialization failed: {error}"))
         })?;
@@ -1064,6 +1110,23 @@ impl super::open_api::OpenMemoryService {
         cmd: UpdatePolicyCommand,
     ) -> MemoryServiceResult<MemoryPolicy> {
         let tenant_id_i64 = platform::tenant_id_i64(tenant_id)?;
+        // The effective post-update combination decides whether the quota
+        // scope_ref convention applies: overlay the patch onto the stored row
+        // before validating, so a patch cannot silently unanchor a
+        // `memory.quota` policy from its tenant.
+        let existing = self.retrieve_policy(tenant_id, policy_id).await?;
+        let effective_type = cmd.policy_type.as_deref().unwrap_or(&existing.policy_type);
+        let effective_scope = cmd.scope.as_deref().unwrap_or(&existing.scope);
+        let effective_scope_ref = match &cmd.scope_ref {
+            Some(scope_ref) => Some(scope_ref.as_str()),
+            None => existing.scope_ref.as_deref(),
+        };
+        Self::validate_quota_policy_scope_ref(
+            effective_type,
+            effective_scope,
+            effective_scope_ref,
+            tenant_id_i64,
+        )?;
         let policy_json = cmd
             .policy
             .as_ref()
@@ -1158,6 +1221,60 @@ impl super::open_api::OpenMemoryService {
             .await
     }
 
+    /// App-surface policy assignment creation: authorizes the assignment
+    /// target against the acting subject before delegating to the shared
+    /// creation path, and pins the tenant to the request context's.
+    ///
+    /// Phase-1 target semantics: a `space` target must pass the space write
+    /// gate, a `subject` target must be the actor itself, and every other
+    /// enum target has no reviewed app-surface evaluator and fails closed.
+    /// The legacy actor-less [`Self::create_policy_assignment`] entry stays
+    /// for the elevated backend surface until the routes forward the request
+    /// context here.
+    pub async fn create_policy_assignment_for_actor(
+        &self,
+        context: MemoryOpenApiRequestContext,
+        mut cmd: CreatePolicyAssignmentCommand,
+    ) -> MemoryServiceResult<MemoryPolicyAssignment> {
+        cmd.tenant_id = context.tenant_id;
+        self.assert_policy_assignment_target_authorized(&context, cmd.target_type, cmd.target_id)
+            .await?;
+        self.create_policy_assignment(cmd).await
+    }
+
+    /// Authorize an actor-driven policy assignment target before it is stored
+    /// (create) or before an assignment whose target it names is mutated
+    /// (update). See [`Self::create_policy_assignment_for_actor`] for the
+    /// phase-1 target semantics.
+    async fn assert_policy_assignment_target_authorized(
+        &self,
+        context: &MemoryOpenApiRequestContext,
+        target_type: PolicyAssignmentTargetType,
+        target_id: u64,
+    ) -> MemoryServiceResult<()> {
+        match target_type {
+            PolicyAssignmentTargetType::Space => {
+                access::assert_actor_can_access_space_for_write(
+                    &self.runtime_data_plane,
+                    context,
+                    target_id,
+                )
+                .await
+            }
+            PolicyAssignmentTargetType::Subject => {
+                if context.actor_id != Some(target_id) {
+                    return Err(MemoryServiceError::forbidden(
+                        "policy assignment subject targets must reference the acting subject",
+                    ));
+                }
+                Ok(())
+            }
+            other => Err(MemoryServiceError::validation(format!(
+                "policy assignment targetType {other:?} is not accepted on the app surface"
+            ))),
+        }
+    }
+
     pub async fn retrieve_policy_assignment(
         &self,
         tenant_id: u64,
@@ -1246,6 +1363,30 @@ impl super::open_api::OpenMemoryService {
             .await
     }
 
+    /// App-surface policy assignment mutation. An update cannot retarget an
+    /// assignment, so the authorization runs against the target the existing
+    /// assignment already names — a caller who may not create an assignment
+    /// for a target may not mutate one either.
+    pub async fn update_policy_assignment_for_actor(
+        &self,
+        context: MemoryOpenApiRequestContext,
+        tenant_id: u64,
+        assignment_id: &str,
+        cmd: UpdatePolicyAssignmentCommand,
+    ) -> MemoryServiceResult<MemoryPolicyAssignment> {
+        let existing = self
+            .retrieve_policy_assignment(tenant_id, assignment_id)
+            .await?;
+        self.assert_policy_assignment_target_authorized(
+            &context,
+            existing.target_type,
+            existing.target_id,
+        )
+        .await?;
+        self.update_policy_assignment(tenant_id, assignment_id, cmd)
+            .await
+    }
+
     pub async fn delete_policy_assignment(
         &self,
         tenant_id: u64,
@@ -1268,6 +1409,49 @@ impl super::open_api::OpenMemoryService {
             return Err(MemoryServiceError::not_found("policy assignment not found"));
         }
         Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // Usage metering
+    // -----------------------------------------------------------------------
+
+    /// Lists one tenant's usage metering facts in keyset order `(day, metric)`
+    /// ascending. The tenant always comes from the authenticated backend
+    /// context (the query DTO's `tenant_id` is injected by the route), and the
+    /// cursor is the opaque signed continuation token wrapping the `(day,
+    /// metric)` position.
+    pub async fn list_usage(&self, query: ListUsageQuery) -> MemoryServiceResult<MemoryUsageList> {
+        let tenant_id = platform::tenant_id_i64(query.tenant_id)?;
+        let page_size = platform::validated_page_size(query.page_size)?;
+        let cursor = decode_usage_cursor(query.cursor.as_deref())?;
+        let rows = self
+            .store
+            .list_usage_daily_for_tenant(
+                tenant_id,
+                cursor.as_ref().map(|(day, metric)| (day.as_str(), metric.as_str())),
+                page_size,
+            )
+            .await
+            .map_err(Self::map_store_error)?;
+
+        let has_more = rows.len() as i32 > page_size;
+        let items: Vec<_> = rows
+            .into_iter()
+            .take(page_size as usize)
+            .map(map_usage_row_to_dto)
+            .collect();
+        let next_cursor = if has_more {
+            items
+                .last()
+                .map(|entry| format!("{}|{}", entry.day, entry.metric))
+        } else {
+            None
+        };
+
+        Ok(MemoryUsageList {
+            items,
+            page_info: platform::memory_cursor_page_info(page_size, has_more, next_cursor),
+        })
     }
 
     // -----------------------------------------------------------------------
@@ -1640,6 +1824,36 @@ pub(crate) fn commercial_mutation_journal(
 }
 
 // ---------------------------------------------------------------------------
+// Usage metering helpers
+// ---------------------------------------------------------------------------
+
+/// The usage cursor wraps the raw `(day, metric)` keyset position in the
+/// shared signed token envelope; `|` never occurs in either component (the day
+/// is `YYYY-MM-DD`, the metric is a dotted lowercase name).
+const USAGE_CURSOR_SEPARATOR: char = '|';
+
+fn decode_usage_cursor(cursor: Option<&str>) -> MemoryServiceResult<Option<(String, String)>> {
+    let Some(raw) = platform::decode_list_cursor(cursor)? else {
+        return Ok(None);
+    };
+    let (day, metric) = raw.split_once(USAGE_CURSOR_SEPARATOR).ok_or_else(|| {
+        MemoryServiceError::validation(
+            "cursor must be a server-issued opaque token; cursor forgery is not supported",
+        )
+    })?;
+    Ok(Some((day.to_string(), metric.to_string())))
+}
+
+fn map_usage_row_to_dto(row: NativeSqlUsageDailyRow) -> MemoryUsageEntry {
+    MemoryUsageEntry {
+        day: row.day,
+        metric: row.metric,
+        delta: row.delta,
+        updated_at: row.updated_at,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Mappers
 // ---------------------------------------------------------------------------
 
@@ -2005,5 +2219,99 @@ fn parse_policy_inheritance_mode(value: &str) -> PolicyInheritanceMode {
         "deny" => PolicyInheritanceMode::Deny,
         "shadow" => PolicyInheritanceMode::Shadow,
         _ => PolicyInheritanceMode::Inherit,
+    }
+}
+
+#[cfg(test)]
+mod usage_list_tests {
+    use super::*;
+    use crate::open_api::OpenMemoryService;
+    use sdkwork_memory_plugin_native_sql::NativeSqlMemoryStore;
+
+    // Distinct from every other tenant used in this crate's tests: the usage
+    // facts are written through a real store, so collisions would flake.
+    const TENANT: u64 = 872_001;
+
+    async fn service_with_usage_facts() -> OpenMemoryService {
+        let store = NativeSqlMemoryStore::new_in_memory_sqlite()
+            .await
+            .expect("create migrated in-memory SQLite store");
+        for (day, metric, delta) in [
+            ("2026-06-01", "event.create", 3),
+            ("2026-06-01", "record.create", 5),
+            ("2026-06-01", "record.delete", -2),
+            ("2026-06-02", "retrieval.count", 9),
+        ] {
+            let mut tx = store.begin_tx().await.expect("begin usage tx");
+            store
+                .bump_usage_daily_on_tx(&mut tx, TENANT as i64, metric, delta, day)
+                .await
+                .expect("charge usage fact");
+            tx.commit().await.expect("commit usage tx");
+        }
+        OpenMemoryService::new(store)
+    }
+
+    #[tokio::test]
+    async fn usage_listing_pages_in_keyset_order_with_cursor_round_trip() {
+        let service = service_with_usage_facts().await;
+
+        let first = service
+            .list_usage(ListUsageQuery {
+                tenant_id: TENANT,
+                cursor: None,
+                page_size: Some(2),
+            })
+            .await
+            .expect("first usage page");
+        assert_eq!(
+            first
+                .items
+                .iter()
+                .map(|entry| (entry.day.as_str(), entry.metric.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("2026-06-01", "event.create"), ("2026-06-01", "record.create")]
+        );
+        assert_eq!(first.page_info.has_more, Some(true));
+        let next_cursor = first
+            .page_info
+            .next_cursor
+            .expect("a full page owes a continuation cursor");
+
+        let second = service
+            .list_usage(ListUsageQuery {
+                tenant_id: TENANT,
+                cursor: Some(next_cursor),
+                page_size: Some(2),
+            })
+            .await
+            .expect("second usage page");
+        assert_eq!(
+            second
+                .items
+                .iter()
+                .map(|entry| (entry.day.as_str(), entry.metric.as_str(), entry.delta))
+                .collect::<Vec<_>>(),
+            vec![
+                ("2026-06-01", "record.delete", -2),
+                ("2026-06-02", "retrieval.count", 9),
+            ]
+        );
+        assert_eq!(second.page_info.has_more, Some(false));
+        assert_eq!(second.page_info.next_cursor, None);
+    }
+
+    #[tokio::test]
+    async fn forged_usage_cursor_is_a_client_validation_error() {
+        let service = service_with_usage_facts().await;
+        let error = service
+            .list_usage(ListUsageQuery {
+                tenant_id: TENANT,
+                cursor: Some("forged-cursor".to_string()),
+                page_size: None,
+            })
+            .await
+            .expect_err("a forged cursor must be rejected as a client error");
+        assert_eq!(error.code, "validation_error");
     }
 }

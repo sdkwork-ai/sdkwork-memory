@@ -5,8 +5,7 @@ use axum::{
     response::Response,
 };
 use sdkwork_web_core::{
-    new_request_id, trace_id_from_traceparent, WebRequestContext, REQUEST_ID_HEADER,
-    TRACEPARENT_HEADER,
+    new_request_id, trace_id_from_traceparent, WebRequestContext, TRACEPARENT_HEADER,
 };
 use tracing::Instrument;
 
@@ -42,11 +41,14 @@ impl MemoryProblemCorrelation {
             };
         }
 
-        let request_id = read_header(headers, REQUEST_ID_HEADER).unwrap_or_else(new_request_id);
+        // The request id is always minted here. A caller-supplied
+        // `X-Request-Id` is an unauthenticated input, and echoing it back in
+        // problem documents would let any client correlate (or collide with)
+        // another tenant's incidents, so no header fallback exists for it.
         let trace_id = read_header(headers, TRACEPARENT_HEADER)
             .and_then(|traceparent| trace_id_from_traceparent(&traceparent).map(str::to_owned));
         Self {
-            request_id,
+            request_id: new_request_id(),
             trace_id,
         }
     }

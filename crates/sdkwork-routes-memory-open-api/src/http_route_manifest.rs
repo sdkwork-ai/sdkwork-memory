@@ -194,7 +194,7 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "/v1/memories/",
         "memory",
         "mem0.memory.removeAll",
-    ).with_required_permission("memory.open.records.write").with_rate_limit_tier(RateLimitTier::OpenApiDefault),
+    ).with_required_permission("memory.open.records.write").with_rate_limit_tier(RateLimitTier::AuthCritical),
     HttpRoute::api_key(
         HttpMethod::Get,
         "/v1/memories/{memory_id}/",

@@ -17,6 +17,7 @@ fn candidate_command(
         proposed_payload_json: Some(format!(r#"{{"candidate":"{candidate_id}"}}"#)),
         evidence_json: Some(r#"{"source":"test"}"#.to_string()),
         confidence: 0.9,
+        learning_job_uuid: None,
     }
 }
 

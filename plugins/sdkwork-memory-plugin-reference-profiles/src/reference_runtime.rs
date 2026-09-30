@@ -873,6 +873,12 @@ impl MemoryOutboxStorePort for ReferenceMemoryRuntime {
         &self,
         command: MarkMemoryOutboxFailedCommand,
     ) -> MemorySpiResult<Option<MemoryOutboxEvent>> {
+        // Known in-memory simplification: the reference profile fails an
+        // outbox event on the first `mark_failed` and ignores
+        // `max_retries`. The production native-SQL store implements the
+        // documented retry ladder (retry_count increment, exponential
+        // backoff, terminal `failed` only past `max_retries`); this profile
+        // exists to exercise the SPI surface, not to mirror that behavior.
         let key = ScopedId::new(&command.scope, command.outbox_id);
         let mut outbox = self.outbox.lock().map_err(lock_error)?;
         let Some(event) = outbox.get_mut(&key) else {
@@ -1549,6 +1555,8 @@ impl MemoryRetrievalTraceStorePort for ReferenceMemoryRuntime {
             metadata_json: command.metadata_json,
             hits: command.hits,
             context_pack: command.context_pack,
+            created_at: now_text(),
+            space_id: Some(command.scope.space_id),
         };
         let key = ScopedId::new(&command.scope, command.trace_id);
         self.retrieval_traces

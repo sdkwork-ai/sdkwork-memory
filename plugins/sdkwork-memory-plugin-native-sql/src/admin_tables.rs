@@ -286,9 +286,13 @@ impl NativeSqlMemoryStore {
             FROM ai_index
             WHERE tenant_id = ?
               AND (? IS NULL OR space_id = ?)
-              AND id > COALESCE(
-                (SELECT id FROM ai_index i2 WHERE i2.tenant_id = ? AND i2.uuid = ? LIMIT 1),
-                0
+              AND (
+                ? = ''
+                -- a purged cursor row ends the window (fail-closed)
+                OR id > COALESCE(
+                  (SELECT id FROM ai_index i2 WHERE i2.tenant_id = ? AND i2.uuid = ? LIMIT 1),
+                  9223372036854775807
+                )
               )
             ORDER BY id ASC
             LIMIT ?
@@ -297,6 +301,7 @@ impl NativeSqlMemoryStore {
         .bind(tenant_id)
         .bind(space_id)
         .bind(space_id)
+        .bind(cursor)
         .bind(tenant_id)
         .bind(cursor)
         .bind(page_size + 1)
@@ -479,9 +484,13 @@ impl NativeSqlMemoryStore {
             FROM ai_retrieval_profile
             WHERE tenant_id = ?
               AND (? IS NULL OR space_id = ?)
-              AND id > COALESCE(
-                (SELECT id FROM ai_retrieval_profile p2 WHERE p2.tenant_id = ? AND p2.uuid = ? LIMIT 1),
-                0
+              AND (
+                ? = ''
+                -- a purged cursor row ends the window (fail-closed)
+                OR id > COALESCE(
+                  (SELECT id FROM ai_retrieval_profile p2 WHERE p2.tenant_id = ? AND p2.uuid = ? LIMIT 1),
+                  9223372036854775807
+                )
               )
             ORDER BY id ASC
             LIMIT ?
@@ -490,6 +499,7 @@ impl NativeSqlMemoryStore {
         .bind(tenant_id)
         .bind(space_id)
         .bind(space_id)
+        .bind(cursor)
         .bind(tenant_id)
         .bind(cursor)
         .bind(page_size + 1)
@@ -706,15 +716,20 @@ impl NativeSqlMemoryStore {
                    created_at, updated_at, version
             FROM ai_implementation_profile
             WHERE tenant_id = ?
-              AND id > COALESCE(
-                (SELECT id FROM ai_implementation_profile p2 WHERE p2.tenant_id = ? AND p2.uuid = ? LIMIT 1),
-                0
+              AND (
+                ? = ''
+                -- a purged cursor row ends the window (fail-closed)
+                OR id > COALESCE(
+                  (SELECT id FROM ai_implementation_profile p2 WHERE p2.tenant_id = ? AND p2.uuid = ? LIMIT 1),
+                  9223372036854775807
+                )
               )
             ORDER BY id ASC
             LIMIT ?
             "#,
         )
         .bind(tenant_id)
+        .bind(cursor)
         .bind(tenant_id)
         .bind(cursor)
         .bind(page_size + 1)
@@ -1027,15 +1042,20 @@ impl NativeSqlMemoryStore {
                    created_at, updated_at, version
             FROM ai_provider_binding
             WHERE tenant_id = ?
-              AND id > COALESCE(
-                (SELECT id FROM ai_provider_binding b2 WHERE b2.tenant_id = ? AND b2.uuid = ? LIMIT 1),
-                0
+              AND (
+                ? = ''
+                -- a purged cursor row ends the window (fail-closed)
+                OR id > COALESCE(
+                  (SELECT id FROM ai_provider_binding b2 WHERE b2.tenant_id = ? AND b2.uuid = ? LIMIT 1),
+                  9223372036854775807
+                )
               )
             ORDER BY id ASC
             LIMIT ?
             "#,
         )
         .bind(tenant_id)
+        .bind(cursor)
         .bind(tenant_id)
         .bind(cursor)
         .bind(page_size + 1)
@@ -1214,15 +1234,20 @@ impl NativeSqlMemoryStore {
                    result_json, started_at, finished_at, created_at, updated_at
             FROM ai_eval_run
             WHERE tenant_id = ?
-              AND id > COALESCE(
-                (SELECT id FROM ai_eval_run r2 WHERE r2.tenant_id = ? AND r2.uuid = ? LIMIT 1),
-                0
+              AND (
+                ? = ''
+                -- a purged cursor row ends the window (fail-closed)
+                OR id > COALESCE(
+                  (SELECT id FROM ai_eval_run r2 WHERE r2.tenant_id = ? AND r2.uuid = ? LIMIT 1),
+                  9223372036854775807
+                )
               )
             ORDER BY id ASC
             LIMIT ?
             "#,
         )
         .bind(tenant_id)
+        .bind(cursor)
         .bind(tenant_id)
         .bind(cursor)
         .bind(page_size + 1)

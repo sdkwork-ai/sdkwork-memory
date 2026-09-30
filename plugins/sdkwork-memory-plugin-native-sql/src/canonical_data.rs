@@ -767,6 +767,55 @@ pub(crate) async fn remove_record_fts_on_tx(
     Ok(())
 }
 
+/// Journal audit actions whose mutations carry a usage charge. The action
+/// spellings mirror what the service actually journals (record create/delete
+/// via the canonical mutation commands, event create via the accepted-event
+/// audit action); unknown actions are deliberately unmetered and never an
+/// error, so a new journal action cannot silently corrupt usage facts.
+pub(crate) const JOURNAL_ACTION_RECORD_CREATE: &str = "memory.record.create";
+pub(crate) const JOURNAL_ACTION_RECORD_DELETE: &str = "memory.record.delete";
+pub(crate) const JOURNAL_ACTION_EVENT_CREATE: &str = "memory.event.create";
+
+/// Maps a journal audit action onto its usage charge `(metric, delta)`.
+/// A supersede journals `memory.record.supersede` — deliberately unmetered as
+/// a delete — plus one `memory.record.create`, so an admin supersede charges
+/// exactly one create. That matches quota arithmetic: the superseded row
+/// stays inside `status <> 'deleted'`, so it is still counted as active, and
+/// usage is an append-only activity aggregate, not a live-active-record
+/// ledger.
+pub(crate) fn usage_charge_for_journal_action(action: &str) -> Option<(&'static str, i64)> {
+    match action {
+        JOURNAL_ACTION_RECORD_CREATE => {
+            Some((crate::commercial_store::USAGE_METRIC_RECORD_CREATE, 1))
+        }
+        JOURNAL_ACTION_RECORD_DELETE => {
+            Some((crate::commercial_store::USAGE_METRIC_RECORD_DELETE, -1))
+        }
+        JOURNAL_ACTION_EVENT_CREATE => {
+            Some((crate::commercial_store::USAGE_METRIC_EVENT_CREATE, 1))
+        }
+        _ => None,
+    }
+}
+
+/// Charges the usage counter of a mutation-class journal action inside the
+/// same transaction that journals it, so a usage fact can never commit without
+/// its business mutation (and vice versa). Non-mutation actions are ignored.
+pub(crate) async fn bump_usage_daily_for_journal_action_on_tx(
+    store: &NativeSqlMemoryStore,
+    tx: &mut sqlx::Transaction<'_, sqlx::Any>,
+    tenant_id: i64,
+    audit_action: &str,
+) -> Result<(), NativeSqlStoreError> {
+    let Some((metric, delta)) = usage_charge_for_journal_action(audit_action) else {
+        return Ok(());
+    };
+    let day = crate::commercial_store::usage_day_text();
+    store
+        .bump_usage_daily_on_tx(tx, tenant_id, metric, delta, &day)
+        .await
+}
+
 pub(crate) async fn append_journal_on_tx(
     store: &NativeSqlMemoryStore,
     tx: &mut sqlx::Transaction<'_, sqlx::Any>,
@@ -774,7 +823,59 @@ pub(crate) async fn append_journal_on_tx(
     journal: &MemoryMutationJournal,
 ) -> Result<(), NativeSqlStoreError> {
     store.append_outbox_on_tx(tx, scope, journal).await?;
-    store.append_audit_on_tx(tx, scope, journal).await
+    store.append_audit_on_tx(tx, scope, journal).await?;
+    bump_usage_daily_for_journal_action_on_tx(store, tx, scope.tenant_id, &journal.audit_action)
+        .await
+}
+
+#[cfg(test)]
+mod usage_metering_tests {
+    use super::*;
+
+    #[test]
+    fn mutation_actions_map_onto_usage_charges() {
+        assert_eq!(
+            usage_charge_for_journal_action(JOURNAL_ACTION_RECORD_CREATE),
+            Some((crate::commercial_store::USAGE_METRIC_RECORD_CREATE, 1))
+        );
+        assert_eq!(
+            usage_charge_for_journal_action(JOURNAL_ACTION_RECORD_DELETE),
+            Some((crate::commercial_store::USAGE_METRIC_RECORD_DELETE, -1))
+        );
+        assert_eq!(
+            usage_charge_for_journal_action(JOURNAL_ACTION_EVENT_CREATE),
+            Some((crate::commercial_store::USAGE_METRIC_EVENT_CREATE, 1))
+        );
+    }
+
+    #[test]
+    fn unknown_actions_are_never_metered_and_never_fail() {
+        for action in [
+            "memory.record.consolidate",
+            "memory.candidate.promoted",
+            "memory.record.updated",
+            "policy.created",
+            "",
+        ] {
+            assert_eq!(usage_charge_for_journal_action(action), None);
+        }
+    }
+
+    #[test]
+    fn supersede_charges_exactly_one_create_and_never_a_delete() {
+        // The real supersede flow journals `memory.record.supersede`
+        // (unmetered by design) plus one `memory.record.create`: usage is an
+        // activity aggregate, not a live-active-record ledger. Pin that the
+        // supersede action itself never charges and that create/delete keep
+        // their signed arithmetic.
+        assert_eq!(usage_charge_for_journal_action("memory.record.supersede"), None);
+        let (_, create_delta) =
+            usage_charge_for_journal_action(JOURNAL_ACTION_RECORD_CREATE).expect("create charges");
+        let (_, delete_delta) =
+            usage_charge_for_journal_action(JOURNAL_ACTION_RECORD_DELETE).expect("delete charges");
+        assert_eq!(create_delta, 1);
+        assert_eq!(delete_delta, -1);
+    }
 }
 
 pub(crate) fn validate_journal(

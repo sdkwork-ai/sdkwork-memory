@@ -9,13 +9,17 @@ use serde::Serialize;
 use crate::correlation::MemoryProblemCorrelation;
 use crate::problem::MemoryApiProblem;
 
+/// The trace id reported on responses and in problem documents.
+///
+/// The request context's trace id when the framework resolved one (which
+/// includes a `traceparent`-propagated trace), otherwise a freshly minted
+/// server id. The correlation `request_id` is deliberately **not** a fallback:
+/// a request id is not a trace id, and presenting one as the other would join
+/// unrelated incidents under a single lookup key.
 pub fn resolved_trace_id() -> String {
     if let Some(correlation) = MemoryProblemCorrelation::current() {
         if let Some(trace_id) = correlation.trace_id.filter(|value| !value.is_empty()) {
             return trace_id;
-        }
-        if !correlation.request_id.is_empty() {
-            return correlation.request_id;
         }
     }
     sdkwork_web_core::new_request_id()
@@ -164,11 +168,11 @@ mod tests {
     use axum::middleware::from_fn;
     use axum::routing::get;
     use axum::Router;
-    use sdkwork_web_core::{REQUEST_ID_HEADER, TRACEPARENT_HEADER};
+    use sdkwork_web_core::TRACEPARENT_HEADER;
     use tower::util::ServiceExt;
 
     use crate::correlation::problem_correlation_middleware;
-    use crate::response::success_resource_response;
+    use crate::response::{resolved_trace_id, success_resource_response};
 
     async fn success_handler() -> axum::response::Response {
         success_resource_response(serde_json::json!({ "spaceId": "1" }))
@@ -184,7 +188,6 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/test")
-                    .header(REQUEST_ID_HEADER, "req-memory-1")
                     .header(
                         TRACEPARENT_HEADER,
                         "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
@@ -206,5 +209,48 @@ mod tests {
             payload["traceId"].as_str().unwrap()
         );
         assert_eq!("1", payload["data"]["item"]["spaceId"].as_str().unwrap());
+    }
+
+    /// A caller-supplied `X-Request-Id` is never echoed as the trace id: with
+    /// no propagated trace, the trace id is minted on the server. A request id
+    /// is not a trace id, and joining the two would let any client correlate
+    /// incidents it never saw.
+    #[tokio::test]
+    async fn request_id_header_is_not_reported_as_the_trace_id() {
+        let app = Router::new()
+            .route("/test", get(success_handler))
+            .layer(from_fn(problem_correlation_middleware));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/test")
+                    .header(sdkwork_web_core::REQUEST_ID_HEADER, "req-memory-1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let trace_id = payload["traceId"].as_str().expect("trace id is set");
+        assert_ne!(
+            trace_id, "req-memory-1",
+            "the caller's request id must not come back as the trace id"
+        );
+        assert!(!trace_id.is_empty());
+        assert_ne!(trace_id, "-");
+    }
+
+    /// The same rule holds when no correlation scope was entered at all.
+    #[test]
+    fn resolved_trace_id_is_server_minted_without_a_correlation_scope() {
+        let trace_id = resolved_trace_id();
+        assert!(!trace_id.is_empty());
+        assert_ne!(trace_id, "-");
     }
 }

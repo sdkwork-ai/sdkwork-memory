@@ -44,7 +44,7 @@
   ],
   "contracts": {
     "apiAuthority": {
-      "name": "sdkwork-memory.backend",
+      "name": "sdkwork-memory-backend-api",
       "prefix": "/backend/v3/api",
       "authorityOpenApi": "openapi/memory-backend-api.openapi.json",
       "derivedOpenApi": [

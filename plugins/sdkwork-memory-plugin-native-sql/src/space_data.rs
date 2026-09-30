@@ -14,6 +14,40 @@ const SPACE_QUOTA_LOCK_VERSION: &str = "0001";
 const SPACE_STORE_PORT: &str = "MemorySpaceStorePort";
 
 impl NativeSqlMemoryStore {
+    /// Startup probe for pools adopted through `from_database_pool`: those skip
+    /// the embedded migration runner (`apply_migration = false`), so a SQLite
+    /// database initialized outside this plugin reaches the first
+    /// `create_space` without the quota serialization row and fails there.
+    /// Verifying the row once at startup turns that into a named, actionable
+    /// admission error instead. PostgreSQL serializes quota admission with a
+    /// transaction-scoped advisory lock and never depends on the row, so the
+    /// probe is a no-op on that dialect.
+    pub(crate) async fn ensure_space_quota_serialization_row_installed(
+        &self,
+    ) -> Result<(), NativeSqlStoreError> {
+        if self.dialect() != MemorySqlDialect::Sqlite {
+            return Ok(());
+        }
+        // `schema_is_initialized` treats any probe error as "not initialized"
+        // because an adopted database may lack the bookkeeping table entirely;
+        // this probe follows the same rule and reports the driver cause inside
+        // the named diagnostic rather than leaking it as a database error.
+        let installed = match sqlx::query_scalar::<_, i32>(
+            "SELECT 1 FROM ops_memory_schema_version WHERE version = ? LIMIT 1",
+        )
+        .bind(SPACE_QUOTA_LOCK_VERSION)
+        .fetch_optional(self.pool())
+        .await
+        {
+            Ok(row) => row,
+            Err(error) => return Err(missing_space_quota_serialization_row_error(Some(error))),
+        };
+        if installed.is_none() {
+            return Err(missing_space_quota_serialization_row_error(None));
+        }
+        Ok(())
+    }
+
     pub async fn create_space_atomic_with_quota(
         &self,
         command: &CreateMemorySpaceCommand,
@@ -107,9 +141,10 @@ impl MemorySpaceStorePort for NativeSqlMemoryStore {
 /// application-root lifecycle schema. SQLite performs a no-op update as the
 /// transaction's first write, acquiring the database writer lock before the quota
 /// count; the version table it touches is guaranteed to exist because every SQLite
-/// database is initialized through this plugin's embedded migration runner. This
-/// deliberately serializes all space creation until a per-owner quota ledger is
-/// introduced through a reviewed schema migration.
+/// database is initialized through this plugin's embedded migration runner, and
+/// `from_database_pool` verifies the row at startup instead of trusting that
+/// invariant. This deliberately serializes all space creation until a per-owner
+/// quota ledger is introduced through a reviewed schema migration.
 async fn lock_space_quota_serialization_row(
     dialect: MemorySqlDialect,
     tx: &mut sqlx::Transaction<'_, sqlx::Any>,
@@ -139,6 +174,25 @@ async fn lock_space_quota_serialization_row(
             }
             Ok(())
         }
+    }
+}
+
+/// Named startup error for a missing quota serialization row. The diagnostic
+/// names both remedies: re-initialize the database through the embedded
+/// bootstrap, or seed the row manually into `ops_memory_schema_version`.
+fn missing_space_quota_serialization_row_error(cause: Option<sqlx::Error>) -> NativeSqlStoreError {
+    let cause = cause
+        .map(|error| format!(" (probe failed: {error})"))
+        .unwrap_or_default();
+    NativeSqlStoreError::InvariantViolation {
+        message: format!(
+            "space quota serialization row {SPACE_QUOTA_LOCK_VERSION} is not installed; this \
+             SQLite database was not initialized through this plugin's embedded bootstrap. \
+             Initialize it once through the embedded bootstrap \
+             (NativeSqlMemoryStore::connect on the same database file), or seed the row with \
+             INSERT INTO ops_memory_schema_version (version) VALUES \
+             ('{SPACE_QUOTA_LOCK_VERSION}') before reusing an externally initialized pool{cause}"
+        ),
     }
 }
 
@@ -195,5 +249,92 @@ fn space_store_port_error(error: NativeSqlStoreError) -> MemorySpiError {
     MemorySpiError::PortOperationFailed {
         port: SPACE_STORE_PORT.to_string(),
         message: error.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod space_quota_serialization_probe_tests {
+    use super::*;
+    use sdkwork_database_config::{DatabaseConfig, DatabaseEngine};
+
+    /// Mirrors the `from_database_pool` adopt path: a SQLite pool opened with
+    /// `apply_migration = false`, so the embedded bootstrap never ran.
+    async fn adopted_unmigrated_store() -> NativeSqlMemoryStore {
+        let config = DatabaseConfig {
+            engine: DatabaseEngine::Sqlite,
+            url: "sqlite::memory:".to_owned(),
+            ..DatabaseConfig::default()
+        };
+        NativeSqlMemoryStore::open_pool(&config, false)
+            .await
+            .expect("adopt an uninitialized SQLite database")
+    }
+
+    #[tokio::test]
+    async fn startup_probe_rejects_missing_serialization_row_with_actionable_diagnostic() {
+        let store = adopted_unmigrated_store().await;
+        let error = store
+            .ensure_space_quota_serialization_row_installed()
+            .await
+            .expect_err("the missing quota serialization row must fail the startup probe");
+        match &error {
+            NativeSqlStoreError::InvariantViolation { message } => {
+                let missing_row = format!(
+                    "space quota serialization row {SPACE_QUOTA_LOCK_VERSION} is not installed"
+                );
+                assert!(
+                    message.contains(&missing_row),
+                    "diagnostic must name the missing row, got: {message}"
+                );
+                assert!(
+                    message.contains("embedded bootstrap"),
+                    "diagnostic must point at the embedded bootstrap remedy, got: {message}"
+                );
+                assert!(
+                    message.contains("ops_memory_schema_version"),
+                    "diagnostic must name the table to seed for the manual remedy, got: {message}"
+                );
+            }
+            other => panic!("expected a named store error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn startup_probe_accepts_database_after_the_embedded_bootstrap_seeds_the_row() {
+        let store = adopted_unmigrated_store().await;
+        assert!(
+            store
+                .ensure_space_quota_serialization_row_installed()
+                .await
+                .is_err(),
+            "the serialization row is missing before initialization"
+        );
+
+        // The exact remedy the diagnostic names: run the embedded bootstrap
+        // against the same database, which seeds `ops_memory_schema_version`.
+        NativeSqlMemoryStore::install_sqlite_phase1_schema(store.pool())
+            .await
+            .expect("embedded bootstrap must seed the serialization row");
+
+        store
+            .ensure_space_quota_serialization_row_installed()
+            .await
+            .expect("the seeded serialization row must pass the startup probe");
+    }
+
+    #[tokio::test]
+    async fn startup_probe_skips_the_postgres_dialect() {
+        // PostgreSQL quota admission serializes on a transaction-scoped
+        // advisory lock, so the bookkeeping row never gates startup there. The
+        // SQLite pool below proves the dialect short-circuit without a
+        // PostgreSQL server.
+        let store = adopted_unmigrated_store().await;
+        let postgres_adopted =
+            NativeSqlMemoryStore::from_any_pool(store.pool().clone(), MemorySqlDialect::Postgres)
+                .await;
+        postgres_adopted
+            .ensure_space_quota_serialization_row_installed()
+            .await
+            .expect("postgres admission must not depend on the bookkeeping row");
     }
 }

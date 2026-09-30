@@ -495,6 +495,12 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "memory",
         "commercialReadiness.rebuild",
     ).with_required_permission("memory.backend.commercialReadiness.write").with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/memory/usage",
+        "memory",
+        "usage.list",
+    ).with_required_permission("memory.backend.usage.read"),
 ];
 
 pub fn backend_route_manifest() -> HttpRouteManifest {

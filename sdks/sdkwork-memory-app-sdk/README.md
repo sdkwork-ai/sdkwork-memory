@@ -1,9 +1,9 @@
 # SDKWork Memory App API SDK
 
-This is the SDK family root for the `sdkwork-memory.app` OpenAPI authority.
+This is the SDK family root for the `sdkwork-memory-app-api` OpenAPI authority.
 
 - SDK family: `sdkwork-memory-app-sdk`
-- API authority: `sdkwork-memory.app`
+- API authority: `sdkwork-memory-app-api`
 - API prefix: `/app/v3/api`
 - Owner: `sdkwork-memory`
 - Standard profile: `sdkwork-v3`

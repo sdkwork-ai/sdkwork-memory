@@ -140,6 +140,15 @@ struct MemoryIamAuditEmitter;
 #[async_trait]
 impl AuditEmitter for MemoryIamAuditEmitter {
     async fn emit(&self, fact: AuditFact) -> Result<(), WebFrameworkError> {
+        // The audit fact carries the pipeline's wall-clock duration, which is
+        // what the write-request histogram observes. Counting happens before
+        // the database write below so an audit outage never loses the metric.
+        if let Some(duration_ms) = fact.duration_ms {
+            crate::metrics::memory_web_metrics().record_write_request_duration(
+                fact.method.as_str(),
+                Duration::from_millis(duration_ms),
+            );
+        }
         let result = self.record(fact).await;
         // Audit emission runs in the response `after` phase. Returning an error
         // would let the framework replace an already-committed business
@@ -191,6 +200,11 @@ struct MemoryIamSecurityEventEmitter;
 #[async_trait]
 impl SecurityEventEmitter for MemoryIamSecurityEventEmitter {
     async fn emit(&self, event: SecurityEvent) -> Result<(), WebFrameworkError> {
+        // Counted before the database write below: a security-event storage
+        // outage must not under-report the rejections it just made.
+        if matches!(event.kind, SecurityEventKind::RateLimitExceeded) {
+            crate::metrics::memory_web_metrics().record_rate_limit_rejection();
+        }
         let result = self.record(event).await;
         // Same post-response rationale as the audit emitter: a security-event
         // failure must not overwrite an already-committed response with a 5xx.

@@ -32,6 +32,7 @@ sdkwork-web-core.workspace = true
 tracing.workspace = true
 sdkwork-intelligence-memory-service.workspace = true
 sdkwork-intelligence-memory-repository-sqlx.workspace = true
+sdkwork-database-config.workspace = true
 sdkwork-memory-database-host.workspace = true
 sdkwork-memory-drive.workspace = true
 sdkwork-memory-provider-openai.workspace = true

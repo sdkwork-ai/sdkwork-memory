@@ -67,6 +67,50 @@ pub struct Mem0AddRequest {
     /// either way; this surface has no second, non-inferred write shape.
     #[serde(default)]
     pub infer: Option<bool>,
+    // Everything below is refused by name when present (see the handler): each
+    // is an upstream switch whose work this surface either does not perform or
+    // does not let the caller reconfigure per request. They are declared so
+    // presence is observable instead of silently dropped.
+    /// Refused by name when present: upstream uses it to pin a memory against
+    /// later ADD/UPDATE/DELETE arbitration, and this surface has no
+    /// immutability flag to honour.
+    #[serde(default)]
+    pub immutable: Option<Value>,
+    /// Refused by name when present: include/exclude lists steer mem0's LLM
+    /// extraction, and this surface files the literal text without an
+    /// extraction step.
+    #[serde(default)]
+    pub includes: Option<Value>,
+    #[serde(default)]
+    pub excludes: Option<Value>,
+    /// Refused by name when present: the canonical record has no graph-memory
+    /// variant; entity scopes are registered on every write.
+    #[serde(default)]
+    pub enable_graph: Option<Value>,
+    /// Refused by name when present: a response-shape switch would change the
+    /// response contract, and the mem0 memory shape here is fixed.
+    #[serde(default)]
+    pub output_format: Option<Value>,
+    /// Refused by name when present: the extraction model profile is
+    /// deployment configuration, not a per-request switch.
+    #[serde(default)]
+    pub prompt_profile_id: Option<Value>,
+    /// Refused by name when present: temporal reasoning derives instants the
+    /// caller supplies, and this surface stamps its own (same rule as
+    /// `timestamp`).
+    #[serde(default)]
+    pub temporal_reasoning: Option<Value>,
+    /// Refused by name when present: a timezone only matters for interpreting
+    /// caller-supplied instants, which this surface does not accept.
+    #[serde(default)]
+    pub timezone: Option<Value>,
+    /// Refused by name when present: the observation instant is a
+    /// caller-supplied timestamp under another name, and the canonical record
+    /// keeps the store's own instants.
+    #[serde(default)]
+    pub observation_datetime: Option<Value>,
+    #[serde(default)]
+    pub observation_date: Option<Value>,
 }
 
 /// `POST /v3/memories/search/`.
@@ -160,6 +204,17 @@ pub struct Mem0ListRequest {
     /// canonical profile decision, not a per-request switch.
     #[serde(default)]
     pub latest_only: Option<bool>,
+    /// Refused by name when present: a projection changes the response
+    /// contract, and the mem0 memory shape on this surface is fixed (the same
+    /// rule `search.fields` follows).
+    #[serde(default)]
+    pub fields: Option<Value>,
+    /// Refused by name when present: the canonical listing has no keyword
+    /// narrowing, and a silently ignored keyword would report a smaller
+    /// result set as complete. `POST /v3/memories/search/` is the surface
+    /// that ranks by lexical match.
+    #[serde(default)]
+    pub keywords: Option<Value>,
 }
 
 /// Query parameters of `POST /v3/memories/`.
@@ -202,7 +257,8 @@ pub struct Mem0DeleteParams {
 /// surface cannot honour is **refused rather than ignored**. The four top-level
 /// entity filters are the documented REST spelling; `filters` is what the Python
 /// client actually sends, and reading only the former is how a filter-scoped
-/// bulk delete silently became an unscoped one.
+/// bulk delete silently became an unscoped one. `metadata` is the same kind of
+/// narrowing in a third spelling, and gets the same treatment.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Mem0DeleteAllParams {
     #[serde(default)]
@@ -216,9 +272,12 @@ pub struct Mem0DeleteAllParams {
     /// `MemoryClient.delete_all(filters={...})` passes the dict straight into
     /// `httpx`'s query params, so the wire value is a **`str()` of the dict** —
     /// `{'user_id': 'alice'}` — and not JSON. It is therefore read as opaque
-    /// text: the question is only whether a filter was asked for.
+    /// text: the question is only whether a filter was asked for. The same
+    /// holds for `metadata`.
     #[serde(default)]
     pub filters: Option<String>,
+    #[serde(default)]
+    pub metadata: Option<String>,
 }
 
 impl Mem0DeleteAllParams {
@@ -241,6 +300,12 @@ impl Mem0DeleteAllParams {
             .as_deref()
             .filter(|raw| !is_empty_filter_literal(raw))
             .map(|raw| ("filters", raw))
+            .or_else(|| {
+                self.metadata
+                    .as_deref()
+                    .filter(|raw| !is_empty_filter_literal(raw))
+                    .map(|raw| ("metadata", raw))
+            })
     }
 }
 
@@ -288,6 +353,32 @@ mod tests {
             ..Default::default()
         };
         assert!(params.requested_filter().is_some());
+    }
+
+    /// `delete_all(metadata={...})` narrows the deletion just as much as a
+    /// `filters` dict, so it must be reported by its own name rather than
+    /// dropped.
+    #[test]
+    fn the_python_client_metadata_parameter_counts_as_a_filter() {
+        let params = Mem0DeleteAllParams {
+            metadata: Some("{'topic': 'batch'}".to_owned()),
+            ..Default::default()
+        };
+        assert_eq!(
+            params.requested_filter(),
+            Some(("metadata", "{'topic': 'batch'}"))
+        );
+    }
+
+    /// An explicitly empty `metadata` object is "no narrowing", matching the
+    /// `filters` spelling: refusing it would be a false refusal.
+    #[test]
+    fn an_empty_metadata_object_is_not_a_filter() {
+        let params = Mem0DeleteAllParams {
+            metadata: Some("{ }".to_owned()),
+            ..Default::default()
+        };
+        assert_eq!(params.requested_filter(), None);
     }
 
     /// An explicitly empty filter set is the request the caller made: delete the
@@ -446,10 +537,12 @@ pub struct Mem0FeedbackResult {
 /// `PUT`/`DELETE /v1/batch/` response.
 ///
 /// Upstream's 200 carries a single `message` and nothing else — there is **no
-/// per-item result channel**. That is the whole reason the batch handlers
-/// validate and prove existence for every entry *before* mutating any of them:
-/// with only a count to report, a partially applied batch would be
-/// indistinguishable from a complete one.
+/// per-item result channel**. The batch handlers therefore validate every
+/// entry's shape *before* mutating any of it, and the service layer's batched
+/// precheck read resolves existence once for the whole batch: when a slot
+/// fails, the batch answers with that one error (404 naming the entry as the
+/// caller sent it, or the count-honest conflict message), so a caller never
+/// mistakes a partially applied batch for a complete one.
 #[derive(Debug, Clone, Serialize)]
 pub struct Mem0BatchAck {
     pub message: String,

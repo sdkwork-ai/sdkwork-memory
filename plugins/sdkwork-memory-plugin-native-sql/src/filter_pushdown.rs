@@ -17,10 +17,11 @@
 //! # Fail closed
 //!
 //! A translation returns [`NativeSqlStoreError::MetadataFilterUnsupported`] rather than
-//! emitting a weaker predicate. The only case where a dialect genuinely falls short is
-//! `icontains` with a non-ASCII needle on SQLite, whose `lower()` folds ASCII only; matching
-//! it there would return fewer rows than PostgreSQL for the same filter, which is exactly
-//! the silent divergence this module refuses.
+//! emitting a weaker predicate. Two guards keep the dialects in exact agreement: `icontains`
+//! with a non-ASCII needle is refused on SQLite, whose `lower()` folds ASCII only, and an
+//! ordering bound is re-validated as a finite decimal before any SQL is generated, because
+//! PostgreSQL raises on a literal it cannot parse while SQLite's `CAST` silently yields
+//! `0.0` — exactly the silent divergence this module refuses.
 //!
 //! # Null handling
 //!
@@ -253,6 +254,21 @@ fn render_condition(
             operator,
             bound,
         } => {
+            // The bound binds as text and each dialect casts it (`?::numeric`,
+            // `CAST(? AS REAL)`). PostgreSQL raises on a literal it cannot parse while
+            // SQLite's CAST silently yields 0.0, so the bound is re-validated here —
+            // before any SQL is generated — and a non-numeric bound fails both dialects
+            // closed instead of diverging at run time.
+            let bound_is_numeric = bound
+                .as_str()
+                .parse::<f64>()
+                .is_ok_and(|value| value.is_finite());
+            if !bound_is_numeric {
+                return Err(unsupported(&format!(
+                    "ordering bound {bound} for field {field:?} is not a finite decimal \
+                     number both dialects can cast"
+                )));
+            }
             let comparison = match operator {
                 OrderingFilterOperator::Gt => ">",
                 OrderingFilterOperator::Gte => ">=",
@@ -348,5 +364,56 @@ fn metadata_text_expr(
 fn unsupported(message: &str) -> NativeSqlStoreError {
     NativeSqlStoreError::MetadataFilterUnsupported {
         message: message.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod ordering_bound_tests {
+    use super::*;
+    use sdkwork_memory_spi::NumericLiteral;
+
+    /// Builds an ordering leaf carrying the given bound text.
+    fn ordering_condition(bound_text: &str) -> MetadataFilterCondition {
+        MetadataFilterCondition::Ordering {
+            field: "score".to_string(),
+            operator: OrderingFilterOperator::Gte,
+            bound: NumericLiteral::parse(bound_text).expect("valid numeric bound"),
+        }
+    }
+
+    #[test]
+    fn an_ordering_bound_binds_identically_across_dialects() {
+        let condition = ordering_condition("0.50");
+        let mut postgres_predicate = SqlPredicate::default();
+        render_condition(
+            MemorySqlDialect::Postgres,
+            "r",
+            &condition,
+            &mut postgres_predicate,
+        )
+        .expect("PostgreSQL renders a numeric ordering bound");
+        let mut sqlite_predicate = SqlPredicate::default();
+        render_condition(
+            MemorySqlDialect::Sqlite,
+            "r",
+            &condition,
+            &mut sqlite_predicate,
+        )
+        .expect("SQLite renders a numeric ordering bound");
+
+        // Both dialects receive the same validated literal in the same bind position, so
+        // a bound one dialect casts and the other silently coerces cannot arise by
+        // construction; the re-validation guard keeps any impossible bound a shared,
+        // fail-closed refusal rather than a per-dialect run-time divergence.
+        assert_eq!(
+            postgres_predicate.binds.last(),
+            sqlite_predicate.binds.last()
+        );
+        assert_eq!(
+            postgres_predicate.binds.last().map(String::as_str),
+            Some("0.50")
+        );
+        assert!(postgres_predicate.sql.contains(">="));
+        assert!(sqlite_predicate.sql.contains(">="));
     }
 }

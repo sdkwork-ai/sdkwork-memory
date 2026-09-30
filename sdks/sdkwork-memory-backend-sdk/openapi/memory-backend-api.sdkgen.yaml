@@ -3,7 +3,7 @@ kind: sdkwork.sdkgen.config
 input: memory-backend-api.openapi.json
 output: ../sdkwork-memory-backend-sdk-typescript/generated/server-openapi
 sdkOwner: sdkwork-memory
-apiAuthority: sdkwork-memory.backend
+apiAuthority: sdkwork-memory-backend-api
 sdkFamily: sdkwork-memory-backend-sdk
 standardProfile: sdkwork-v3
 languageTargets:

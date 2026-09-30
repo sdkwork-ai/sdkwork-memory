@@ -4,7 +4,7 @@ Status: active current-state Canon
 
 Owner: SDKWork Memory maintainers
 
-Updated: 2026-07-21
+Updated: 2026-09-30
 
 Specs: `REQUIREMENTS_SPEC.md`, `DOCUMENTATION_SPEC.md`
 
@@ -36,7 +36,7 @@ The repository also owns the Memory PC application:
 | Retrieval | Keyword and provider-backed retrieval, profiles, context packs, feedback, and traces |
 | Knowledge | Tenant-scoped entities and edges with App/Backend SDK operations |
 | Governance | Policies, assignments, audit logs, retention, migration, export, and forget workflows |
-| Commercial control plane | Subjects, bindings, capability bindings, resolution, and readiness snapshots |
+| Commercial control plane | Subjects, bindings, capability bindings, resolution, tenant quota policies, usage facts, and readiness snapshots |
 | PC Console | `/console/*`; consumes only `@sdkwork/memory-app-sdk` |
 | PC Admin | `/admin/*`; consumes only `@sdkwork/memory-backend-sdk` |
 | Deployment | `standalone.development`, `standalone.production`, `cloud.development`, `cloud.production` |
@@ -46,6 +46,7 @@ Generated route manifests and authority OpenAPI files are the operation inventor
 ## Product Rules
 
 - Authentication context is the tenant authority. Business request bodies and list query parameters never select the current tenant.
+- Cross-tenant isolation is evidenced by an adversarial two-tenant matrix test in `crates/sdkwork-memory-integration-tests` (including foreign cursor-token replay), and purged-cursor replay is covered fail-closed at the store contract level; zero cross-tenant access is a gate, not an aspiration.
 - Console cannot import or call Backend SDK operations. Admin cannot substitute raw HTTP for the composed Backend SDK.
 - Interactive lists use server pagination. High-volume histories use store-level keyset windows and never download all rows for client slicing.
 - SDKWork-owned HTTP success responses use the standard response envelope; errors use `application/problem+json` with numeric `code` and `traceId`.
@@ -53,7 +54,7 @@ Generated route manifests and authority OpenAPI files are the operation inventor
 - Embeddings are optional. Native SQL retrieval remains operational when external providers are absent or degraded.
 - Restricted and sensitive data access fails closed and is constrained before the store query or provider call.
 - Exports use approved Drive integration when a Drive target is requested. Credentials and provider secrets are references, never repository data.
-- Export memory is bounded: inline defaults to 4 MiB, Drive defaults to 64 MiB, and neither path may exceed the 256 MiB hard cap until streaming multipart is implemented and verified.
+- Export memory is bounded: inline defaults to 4 MiB and never exceeds a 32 MiB absolute cap; Drive defaults to 64 MiB with the 256 MiB absolute cap, and neither path may exceed its cap until streaming multipart is implemented and verified.
 - Cluster workers use database-fenced leases; an expired Outbox, learning, or evaluation worker cannot acknowledge or complete work after takeover. Learning execution errors requeue with attempt-aware backoff, and exhausted attempt budgets dead-letter with logged, metric-exported transitions. The retention sweep and provider-health probe are lease-admitted so exactly one replica runs each pass.
 - A scheduled retention worker hard-deletes terminal outbox events, terminal learning/evaluation jobs, retrieval traces with their hits and context packs, and audit logs past per-table configurable windows, so high-churn tables stay bounded under production traffic.
 

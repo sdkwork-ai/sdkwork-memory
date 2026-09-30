@@ -115,6 +115,9 @@ spec:
             # node IDs per pod. See DATABASE_SPEC §6.10.
             - name: SDKWORK_DATABASE_AUTO_MIGRATE
               value: "false"
+            # mode=http requires the egress rule in
+            # networkpolicy-egress-optional.yaml (sdkwork-memory-outbox-http-egress);
+            # the default-deny policy blocks outbound HTTPS otherwise.
             - name: SDKWORK_MEMORY_OUTBOX_DELIVERY_MODE
               value: http
             - name: SDKWORK_MEMORY_OUTBOX_DELIVERY_CONCURRENCY

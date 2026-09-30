@@ -11,7 +11,7 @@ use sdkwork_memory_contract::{
     CreateBindingCommand, CreateCapabilityBindingCommand, CreateEdgeCommand, CreateEntityCommand,
     CreatePolicyAssignmentCommand, CreatePolicyCommand, CreateSubjectCommand, ListBindingsQuery,
     ListCapabilityBindingsQuery, ListEdgesQuery, ListEntitiesQuery, ListPoliciesQuery,
-    ListPolicyAssignmentsQuery, ListSubjectsQuery, MemoryBackendRequestContext,
+    ListPolicyAssignmentsQuery, ListSubjectsQuery, ListUsageQuery, MemoryBackendRequestContext,
     RebuildCommercialReadinessCommand, ResolveCapabilitiesQuery, UpdateEdgeCommand,
     UpdateEntityCommand, UpdatePolicyAssignmentCommand, UpdatePolicyCommand, UpdateSubjectCommand,
 };
@@ -74,6 +74,7 @@ pub fn commercial_routes() -> Router {
             paths::COMMERCIAL_READINESS_REBUILD,
             post(rebuild_commercial_readiness),
         )
+        .route(paths::USAGE, get(list_usage))
 }
 
 // --- Subject handlers ---
@@ -855,6 +856,28 @@ async fn rebuild_commercial_readiness(
     cmd.tenant_id = context.tenant_id;
     match product.rebuild_commercial_readiness(cmd).await {
         Ok(readiness) => success_resource_response(readiness),
+        Err(error) => BackendApiProblem::from(error).into_response(),
+    }
+}
+
+// --- Usage metering handlers ---
+
+async fn list_usage(
+    Extension(state): Extension<BackendState>,
+    context: Option<Extension<MemoryBackendRequestContext>>,
+    Query(mut query): Query<ListUsageQuery>,
+) -> Response {
+    let product = match state.require_product() {
+        Ok(product) => product,
+        Err(resp) => return resp,
+    };
+    let context = match require_backend_context(context) {
+        Ok(ctx) => ctx,
+        Err(problem) => return problem.into_response(),
+    };
+    query.tenant_id = context.tenant_id;
+    match product.list_usage(query).await {
+        Ok(list) => success_page_response(list),
         Err(error) => BackendApiProblem::from(error).into_response(),
     }
 }

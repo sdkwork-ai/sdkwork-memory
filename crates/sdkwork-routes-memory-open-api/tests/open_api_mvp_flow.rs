@@ -239,3 +239,41 @@ async fn open_api_mvp_flow_event_extraction_candidates_and_feedback() {
         .unwrap();
     assert_eq!(feedback.status(), StatusCode::CREATED);
 }
+
+/// `GET /mem/v3/api/memory/provider_health` answers with the observability the
+/// typed `MemoryProviderHealth` DTO cannot carry: whether the binding cap
+/// truncated the aggregation, and the per-`health_state` counts (with
+/// `unknown` kept out of `healthy`). The declared DTO members
+/// (`status`/`checkedAt`/`providers`) are untouched.
+#[tokio::test]
+async fn open_api_provider_health_reports_truncation_flag_and_state_counts() {
+    let store = sdkwork_memory_test_support::space_fixtures::new_seeded_in_memory_store().await;
+    let app = build_router_with_open_api(OpenMemoryService::new(store));
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/mem/v3/api/memory/provider_health")
+                .extension(open_context())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let envelope: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let item = api_envelope::item(&envelope);
+    // A tenant with no bindings is a completed aggregation, not a truncated
+    // one, and zero is a counted answer for every state.
+    assert_eq!(item["bindingsTruncated"], false, "{item}");
+    let counts = &item["stateCounts"];
+    for state in ["healthy", "degraded", "unhealthy", "unknown", "other", "total"] {
+        assert_eq!(counts[state], 0, "stateCounts.{state}: {counts}");
+    }
+    assert_eq!(item["status"], "healthy");
+    assert!(item["checkedAt"].as_str().is_some());
+    assert!(item["providers"].as_array().is_some());
+}

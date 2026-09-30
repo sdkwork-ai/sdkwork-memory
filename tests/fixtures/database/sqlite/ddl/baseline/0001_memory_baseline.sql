@@ -1024,3 +1024,46 @@ CREATE INDEX IF NOT EXISTS idx_ai_memory_binding_source
 
 CREATE INDEX IF NOT EXISTS idx_ai_memory_binding_target
   ON ai_memory_binding (tenant_id, target_memory_id);
+
+-- source: tests/fixtures/database/sqlite/migrations/0017_candidate_job_linkage.up.sql
+-- Extraction idempotency linkage for candidates: records which learning job
+-- produced each ai_candidate row (SQLite parity of PostgreSQL migration
+-- 0004_candidate_job_linkage). The column stays NULL for candidates created
+-- outside a background extraction job, and the partial index only covers the
+-- linked rows so per-job lookups and dedup checks stay small.
+--
+-- Also adds ai_eval_run.version (SQLite parity of the same PostgreSQL
+-- migration): update_eval_run_state charges it on every terminal transition,
+-- matching ai_learning_job's optimistic-count semantics.
+
+ALTER TABLE ai_candidate ADD COLUMN learning_job_uuid TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_ai_candidate_learning_job
+  ON ai_candidate (tenant_id, learning_job_uuid)
+  WHERE learning_job_uuid IS NOT NULL;
+
+ALTER TABLE ai_eval_run ADD COLUMN version INTEGER NOT NULL DEFAULT 0;
+
+-- source: tests/fixtures/database/sqlite/migrations/0018_usage_daily.up.sql
+-- Usage metering facts (SQLite parity of PostgreSQL migration
+-- 0005_usage_daily): one cumulative counter row per (tenant, day, metric),
+-- charged inside the same transaction as the journaled mutation that produced
+-- it, or best-effort after a stored retrieval trace. Rows are append-only
+-- aggregates; retention never cleans them because the table stays naturally
+-- bounded by days x metrics per tenant.
+
+CREATE TABLE IF NOT EXISTS ai_usage_daily (
+  id BIGINT NOT NULL PRIMARY KEY,
+  tenant_id INTEGER NOT NULL,
+  day TEXT NOT NULL,
+  metric TEXT NOT NULL,
+  delta INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_ai_usage_daily_day_metric
+  ON ai_usage_daily (tenant_id, day, metric);
+
+CREATE INDEX IF NOT EXISTS idx_ai_usage_daily_tenant_day
+  ON ai_usage_daily (tenant_id, day);

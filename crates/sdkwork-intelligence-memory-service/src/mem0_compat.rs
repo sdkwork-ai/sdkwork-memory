@@ -77,8 +77,21 @@ pub struct Mem0MemoryHistory {
     /// The record's mem0 `user_id` scope as filed at write time; `None` when the
     /// memory was filed under a different entity scope only.
     pub user_id: Option<String>,
-    /// Mutation events, newest first.
+    /// Mutation events, newest first. Never longer than the `page_size` the
+    /// caller asked for.
     pub events: Vec<Mem0MemoryMutationEvent>,
+    /// `true` when the record's journal holds more entries than `page_size`, so
+    /// `events` is a prefix, not the whole history. mem0's `history` is defined
+    /// as the memory's *whole* history, and a partial log is indistinguishable
+    /// from a complete one, so callers refuse (`501`) on this flag instead of
+    /// answering with a subset.
+    ///
+    /// Conservative at the store clamp ceiling: every list read caps its SQL
+    /// `LIMIT` at [`sdkwork_utils_rust::MAX_LIST_PAGE_SIZE`], so a history that
+    /// fills that ceiling is reported truncated even if it ends exactly there —
+    /// refusing a boundary-length history is preferred over silently serving a
+    /// possibly partial one.
+    pub truncated: bool,
 }
 
 /// One entry of a memory's mutation history.
@@ -124,7 +137,8 @@ impl OpenMemoryService {
 
         let space_id = i64::try_from(self.next_id()?)
             .map_err(|_| MemoryServiceError::storage("generated mem0 space id out of range"))?;
-        let quota_limits = crate::tenant_quota::MemoryQuotaLimits::from_env();
+        let quota_limits =
+            crate::tenant_quota::resolve_quota_limits(&self.store, tenant_id).await?;
         let admission = self
             .runtime_data_plane
             .create_space_atomic_with_quota(
@@ -299,6 +313,15 @@ impl OpenMemoryService {
     /// a deletion through the audit trail is the primary client flow for this
     /// operation. The mem0 `user_id` scope comes from the live record's
     /// metadata and is therefore absent once the record is deleted.
+    ///
+    /// `page_size` is the caller's page bound; the returned `events` never
+    /// exceed it and `truncated` reports whether the journal holds more. The
+    /// store read probes one entry past the bound (`page_size + 1` sentinel).
+    /// Every store list read clamps its SQL `LIMIT` at
+    /// [`sdkwork_utils_rust::MAX_LIST_PAGE_SIZE`], so at the ceiling the probe
+    /// cannot look past one full clamp: a history filling the clamp is reported
+    /// truncated even if it ends exactly there (conservative — see
+    /// [`Mem0MemoryHistory::truncated`]).
     pub async fn mem0_memory_history(
         &self,
         context: &MemoryOpenApiRequestContext,
@@ -321,19 +344,32 @@ impl OpenMemoryService {
             Err(error) => return Err(error),
         };
         let scope = Self::scope(context, space_id)?;
+        let requested = page_size.max(1);
+        let clamp_ceiling = usize::try_from(sdkwork_utils_rust::MAX_LIST_PAGE_SIZE).unwrap_or(200);
+        let page_size_usize = usize::try_from(requested).unwrap_or(clamp_ceiling);
         let entries = self
             .runtime_data_plane
             .list_audit_history(ListMemoryAuditHistoryQuery {
                 scope,
                 resource_type: MEM0_MEMORY_AUDIT_RESOURCE_TYPE.to_string(),
                 resource_id: memory_id.to_string(),
-                page_size,
+                page_size: requested.saturating_add(1),
             })
             .await?;
+        // Below the clamp the sentinel is exact: more rows than the bound means
+        // truncated. At the clamp the store cannot return a (bound + 1)-th row,
+        // so a full clamp is treated as truncated — the wire refuses rather
+        // than risk an incomplete history.
+        let truncated = if page_size_usize < clamp_ceiling {
+            entries.len() > page_size_usize
+        } else {
+            entries.len() >= clamp_ceiling
+        };
         Ok(Mem0MemoryHistory {
             user_id,
             events: entries
                 .into_iter()
+                .take(page_size_usize)
                 .map(|entry| Mem0MemoryMutationEvent {
                     audit_id: entry.audit_id,
                     action: entry.action,
@@ -343,6 +379,7 @@ impl OpenMemoryService {
                     created_at: entry.created_at,
                 })
                 .collect(),
+            truncated,
         })
     }
 }

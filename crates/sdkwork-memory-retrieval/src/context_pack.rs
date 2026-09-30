@@ -3,6 +3,8 @@ use std::collections::HashSet;
 use sdkwork_memory_contract::MemoryRetrievalHit;
 use serde_json::{json, Value};
 
+use crate::text::is_cjk;
+
 const NEAR_DUPLICATE_THRESHOLD: f64 = 0.85;
 
 pub fn estimate_tokens(text: &str) -> i32 {
@@ -22,13 +24,25 @@ pub fn estimate_tokens(text: &str) -> i32 {
     cjk_characters + (other_characters + 3) / 4
 }
 
+/// Incremental form of [`estimate_tokens`] for a running character count.
+///
+/// `estimate_tokens` is `cjk + ceil(other / 4)` for any string with a
+/// non-whitespace character, and the all-whitespace case collapses to the same
+/// `0 + 0`, so a prefix's token count can be maintained in O(1) per character
+/// instead of re-scanning the whole output.
+fn estimate_tokens_from_counts(cjk_characters: i32, other_characters: i32) -> i32 {
+    cjk_characters + (other_characters + 3) / 4
+}
+
 pub fn build_context_pack_from_hits(
     hits: &[MemoryRetrievalHit],
     budget_tokens: i32,
 ) -> (Value, i32, bool) {
     let budget_tokens = budget_tokens.max(0);
     let mut fragments = Vec::new();
-    let mut selected_texts = Vec::new();
+    // Token sets are computed once per selected text instead of once per
+    // (candidate, selected) pair, keeping dedup O(selected) per candidate.
+    let mut selected_token_sets: Vec<HashSet<String>> = Vec::new();
     let mut used_tokens = 0_i32;
     let mut truncated = false;
     let mut deduplicated_count = 0_i32;
@@ -39,7 +53,7 @@ pub fn build_context_pack_from_hits(
         };
         // Dedup and over-budget skips are recorded separately; only budget
         // pressure sets the pack-level `truncated` flag.
-        if is_redundant(&memory.canonical_text, &selected_texts) {
+        if is_redundant(&memory.canonical_text, &selected_token_sets) {
             deduplicated_count += 1;
             continue;
         }
@@ -54,6 +68,12 @@ pub fn build_context_pack_from_hits(
         let (canonical_text, fragment_tokens, fragment_truncated) =
             if original_tokens <= remaining_tokens {
                 (memory.canonical_text.clone(), original_tokens, false)
+            } else if remaining_tokens < 2 {
+                // Reserving one token for the ellipsis marker would leave zero
+                // tokens for content, producing a bare "…" fragment that
+                // carries no memory. Report the budget pressure instead.
+                truncated = true;
+                continue;
             } else if fragments.is_empty() {
                 // Reserve one token for the ellipsis marker so the cut is
                 // visible inside the text itself, not only in the flags.
@@ -70,7 +90,7 @@ pub fn build_context_pack_from_hits(
             continue;
         }
 
-        selected_texts.push(canonical_text.clone());
+        selected_token_sets.push(similarity_tokens(&canonical_text));
         fragments.push(json!({
             "memoryId": memory.memory_id.to_string(),
             "canonicalText": canonical_text,
@@ -101,9 +121,16 @@ fn truncate_to_token_budget(text: &str, budget_tokens: i32) -> String {
     }
 
     let mut output = String::new();
+    let mut cjk_characters = 0_i32;
+    let mut other_characters = 0_i32;
     for character in text.chars() {
         output.push(character);
-        if estimate_tokens(&output) > budget_tokens {
+        if is_cjk(character) {
+            cjk_characters += 1;
+        } else if !character.is_whitespace() {
+            other_characters += 1;
+        }
+        if estimate_tokens_from_counts(cjk_characters, other_characters) > budget_tokens {
             output.pop();
             break;
         }
@@ -111,11 +138,10 @@ fn truncate_to_token_budget(text: &str, budget_tokens: i32) -> String {
     output.trim_end().to_string()
 }
 
-fn is_redundant(candidate: &str, selected: &[String]) -> bool {
+fn is_redundant(candidate: &str, selected_token_sets: &[HashSet<String>]) -> bool {
     let candidate_tokens = similarity_tokens(candidate);
-    selected.iter().any(|text| {
-        let selected_tokens = similarity_tokens(text);
-        jaccard_similarity(&candidate_tokens, &selected_tokens) >= NEAR_DUPLICATE_THRESHOLD
+    selected_token_sets.iter().any(|selected_tokens| {
+        jaccard_similarity(&candidate_tokens, selected_tokens) >= NEAR_DUPLICATE_THRESHOLD
     })
 }
 
@@ -154,15 +180,6 @@ fn jaccard_similarity(left: &HashSet<String>, right: &HashSet<String>) -> f64 {
     intersection as f64 / union as f64
 }
 
-fn is_cjk(character: char) -> bool {
-    matches!(character,
-        '\u{3400}'..='\u{4DBF}'
-        | '\u{4E00}'..='\u{9FFF}'
-        | '\u{F900}'..='\u{FAFF}'
-        | '\u{2F800}'..='\u{2FA1F}'
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,6 +192,27 @@ mod tests {
     }
 
     #[test]
+    fn incremental_token_counts_match_estimate_tokens_for_every_prefix() {
+        let text = "  ab\u{77e5}\u{8bc6}cd \u{30e6}\u{30fc}\u{30b6}  x  \u{4e00}\u{4e8c}\u{4e09} ";
+        let mut cjk = 0_i32;
+        let mut other = 0_i32;
+        assert_eq!(estimate_tokens_from_counts(cjk, other), estimate_tokens(""));
+        for (index, character) in text.chars().enumerate() {
+            if is_cjk(character) {
+                cjk += 1;
+            } else if !character.is_whitespace() {
+                other += 1;
+            }
+            let prefix: String = text.chars().take(index + 1).collect();
+            assert_eq!(
+                estimate_tokens_from_counts(cjk, other),
+                estimate_tokens(&prefix),
+                "prefix {prefix:?}"
+            );
+        }
+    }
+
+    #[test]
     fn truncation_never_exceeds_the_budget() {
         let truncated = truncate_to_token_budget("a long memory fragment", 2);
         assert!(!truncated.is_empty());
@@ -182,8 +220,29 @@ mod tests {
     }
 
     #[test]
+    fn truncation_matches_the_full_rescan_reference_for_mixed_scripts() {
+        // Pins the incremental loop to the naive per-character full-rescan
+        // result it replaced, so the O(L) rewrite cannot drift per script.
+        let text = "\u{7528}\u{6237}abc \u{30c6}\u{30b9}\u{30c8} token budget \u{4e00}\u{4e8c}tail";
+        let reference = |budget: i32| -> String {
+            let mut output = String::new();
+            for character in text.chars() {
+                output.push(character);
+                if estimate_tokens(&output) > budget {
+                    output.pop();
+                    break;
+                }
+            }
+            output.trim_end().to_string()
+        };
+        for budget in 0..=12 {
+            assert_eq!(truncate_to_token_budget(text, budget), reference(budget));
+        }
+    }
+
+    #[test]
     fn detects_near_duplicate_fragments() {
-        let selected = vec!["user prefers concise technical answers".to_string()];
+        let selected = vec![similarity_tokens("user prefers concise technical answers")];
         assert!(is_redundant(
             "user prefers concise technical answers",
             &selected

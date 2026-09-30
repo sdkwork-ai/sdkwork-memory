@@ -16,5 +16,5 @@ serde.workspace = true
 serde_json.workspace = true
 sdkwork-memory-spi.workspace = true
 thiserror.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["time"] }
 tracing.workspace = true

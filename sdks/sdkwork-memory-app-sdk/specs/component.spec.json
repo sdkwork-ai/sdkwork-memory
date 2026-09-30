@@ -44,7 +44,7 @@
   ],
   "contracts": {
     "apiAuthority": {
-      "name": "sdkwork-memory.app",
+      "name": "sdkwork-memory-app-api",
       "prefix": "/app/v3/api",
       "authorityOpenApi": "openapi/memory-app-api.openapi.json",
       "derivedOpenApi": [

@@ -6,7 +6,7 @@
   "owner": "sdkwork-memory",
   "domain": "intelligence",
   "capability": "memory",
-  "apiAuthority": "sdkwork-memory.app",
+  "apiAuthority": "sdkwork-memory-app-api",
   "sdkFamily": "sdkwork-memory-app-sdk",
   "prefix": "/app/v3/api",
   "source": {
@@ -32,7 +32,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -54,7 +54,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -76,7 +76,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -98,7 +98,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -120,7 +120,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -142,7 +142,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -164,7 +164,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -186,7 +186,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -208,7 +208,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -230,7 +230,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -252,7 +252,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
@@ -275,7 +275,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -297,7 +297,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -319,7 +319,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -341,7 +341,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
@@ -364,7 +364,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -386,7 +386,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -408,7 +408,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -430,7 +430,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -452,7 +452,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -474,7 +474,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -496,7 +496,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -518,7 +518,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -540,7 +540,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -562,7 +562,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -584,7 +584,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -606,7 +606,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -628,7 +628,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -650,7 +650,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -672,7 +672,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -694,7 +694,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -716,7 +716,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -738,7 +738,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
@@ -761,7 +761,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -783,7 +783,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -805,7 +805,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -827,7 +827,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -849,7 +849,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -871,7 +871,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -893,7 +893,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -915,7 +915,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -937,7 +937,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"
@@ -959,7 +959,7 @@
       },
       "ownership": {
         "owner": "sdkwork-memory",
-        "apiAuthority": "sdkwork-memory.app"
+        "apiAuthority": "sdkwork-memory-app-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api"

@@ -132,22 +132,51 @@ impl NativeSqlMemoryStore {
         };
 
         let capability_bindings = if let Some(capability_code) = &query.capability_code {
+            // A capability may be bound to the space (governing every actor in
+            // it) or directly to the actor's subject row. The subject branch
+            // resolves the actor the same way the binding facts above do —
+            // `ai_subject.subject_ref` (plus the trusted subject type when the
+            // context carries one) — with the binding's `target_id` joined as
+            // `ai_subject.id`; the create side stores exactly that internal
+            // numeric id, and a subject's uuid is the same numeric string. A
+            // binding targeting any other subject therefore never applies.
+            // Without an actor the NULL subject_ref join excludes the subject
+            // branch entirely. The combined `LIMIT fact_limit + 1` keeps the
+            // truncation semantics of the previous space-only query intact,
+            // and `idx_ai_capability_target (tenant_id, target_type, ...)`
+            // stays usable for both OR branches.
+            let actor = query.actor.as_ref();
+            let actor_subject_ref = actor.map(|actor| actor.subject_id.as_str());
+            let actor_subject_type = actor.and_then(|actor| actor.subject_type.as_deref());
             let rows = sqlx::query(
                 r#"
-                SELECT uuid, capability_code, mode, priority, status, valid_from, valid_to
-                FROM ai_capability_binding
-                WHERE tenant_id = ?
-                  AND target_type = 'space'
-                  AND target_id = ?
-                  AND capability_code = ?
-                  AND deleted_at IS NULL
-                ORDER BY priority DESC, uuid ASC
+                SELECT cb.uuid, cb.capability_code, cb.mode, cb.priority, cb.status,
+                       cb.valid_from, cb.valid_to
+                FROM ai_capability_binding cb
+                LEFT JOIN ai_subject s
+                  ON s.tenant_id = cb.tenant_id
+                 AND s.id = cb.target_id
+                 AND (? IS NULL OR s.subject_type = ?)
+                 AND s.subject_ref = ?
+                 AND s.status = 'active'
+                 AND s.deleted_at IS NULL
+                WHERE cb.tenant_id = ?
+                  AND cb.capability_code = ?
+                  AND cb.deleted_at IS NULL
+                  AND (
+                    (cb.target_type = 'space' AND cb.target_id = ?)
+                    OR (cb.target_type = 'subject' AND s.id IS NOT NULL)
+                  )
+                ORDER BY cb.priority DESC, cb.uuid ASC
                 LIMIT ?
                 "#,
             )
+            .bind(actor_subject_type)
+            .bind(actor_subject_type)
+            .bind(actor_subject_ref)
             .bind(query.scope.tenant_id)
-            .bind(query.scope.space_id)
             .bind(capability_code)
+            .bind(query.scope.space_id)
             .bind(fact_limit + 1)
             .fetch_all(&mut *transaction)
             .await?;

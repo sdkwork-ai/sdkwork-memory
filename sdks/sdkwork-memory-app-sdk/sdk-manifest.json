@@ -3,7 +3,7 @@
   "sdkName": "sdkwork-memory-app-sdk",
   "packageName": "@sdkwork/memory-app-sdk",
   "sdkOwner": "sdkwork-memory",
-  "apiAuthority": "sdkwork-memory.app",
+  "apiAuthority": "sdkwork-memory-app-api",
   "sdkFamily": "sdkwork-memory-app-sdk",
   "sdkType": "app",
   "sdkSurface": "app",
@@ -105,7 +105,7 @@
       "generatedPath": "sdkwork-memory-app-sdk-typescript/generated/server-openapi",
       "manifestPath": "sdkwork-memory-app-sdk-typescript/generated/server-openapi/package.json",
       "version": "0.1.0",
-      "description": "Generator-owned TypeScript transport SDK for sdkwork-memory.app.",
+      "description": "Generator-owned TypeScript transport SDK for sdkwork-memory-app-api.",
       "consumerSurface": {
         "primaryClient": "SdkworkMemoryAppClient",
         "apiPrefix": "/app/v3/api"

@@ -119,13 +119,13 @@
         "sdkFamily": "sdkwork-memory-sdk"
       },
       {
-        "name": "sdkwork-memory.app",
+        "name": "sdkwork-memory-app-api",
         "prefix": "/app/v3/api",
         "authorityOpenApi": "sdks/sdkwork-memory-app-sdk/openapi/memory-app-api.openapi.json",
         "sdkFamily": "sdkwork-memory-app-sdk"
       },
       {
-        "name": "sdkwork-memory.backend",
+        "name": "sdkwork-memory-backend-api",
         "prefix": "/backend/v3/api",
         "authorityOpenApi": "sdks/sdkwork-memory-backend-sdk/openapi/memory-backend-api.openapi.json",
         "sdkFamily": "sdkwork-memory-backend-sdk"

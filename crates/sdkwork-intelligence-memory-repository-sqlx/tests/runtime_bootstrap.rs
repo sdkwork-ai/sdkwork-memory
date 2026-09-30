@@ -126,12 +126,19 @@ fn retrieval_strategy_env_rejects_unimplemented_schemes() {
 /// This is the one plane that legitimately has no shared node registry to allocate a snowflake
 /// `node_id` from, so the bootstrap must install the env/random node id explicitly rather than
 /// depending on `id_generator`'s deliberately strict lazy path.
+///
+/// `SDKWORK_DATABASE_AUTO_MIGRATE=true` is required: the adopted-pool path
+/// (`from_database_pool`, `apply_migration = false`) verifies the SQLite space-quota
+/// serialization row at startup and fails closed with an actionable error when the embedded
+/// bootstrap never initialized the database, and a fresh in-memory database has no prior
+/// initialization to adopt.
 #[tokio::test]
 #[allow(clippy::await_holding_lock)] // Serializes process-wide environment mutation for the full bootstrap.
 async fn bootstrap_memory_runtime_from_env_with_sqlite() {
     let _guard = env_test_lock();
     let _env = MemoryEnvScope::new(&[
         ("SDKWORK_DATABASE_URL", Some("sqlite::memory:")),
+        ("SDKWORK_DATABASE_AUTO_MIGRATE", Some("true")),
         ("SDKWORK_MEMORY_RUNTIME_TARGET", Some("test-runner")),
         (
             "SDKWORK_MEMORY_IMPLEMENTATION_PROFILE",

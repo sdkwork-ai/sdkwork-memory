@@ -11,9 +11,14 @@ const MAX_OUTBOX_CONCURRENCY: u64 = 64;
 
 pub fn spawn_outbox_publisher(
     store: Arc<NativeSqlMemoryStore>,
+    keepalive_shutdown_tx: tokio::sync::watch::Sender<bool>,
     mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
+        // Keepalive: holding a sender inside the task keeps the watch channel
+        // open even when the process owner drops its MemoryBackgroundWorkers
+        // handle, so workers run until an explicit shutdown or process exit.
+        let _shutdown_keepalive = keepalive_shutdown_tx;
         let config = Arc::new(OutboxDeliveryConfig::from_env());
         if matches!(config.mode, OutboxDeliveryMode::Disabled) {
             tracing::warn!(
@@ -44,10 +49,20 @@ pub fn spawn_outbox_publisher(
 
         loop {
             tokio::select! {
-                _ = shutdown_rx.changed() => {
-                    if *shutdown_rx.borrow() {
-                        tracing::info!("memory outbox publisher shutting down");
-                        break;
+                changed = shutdown_rx.changed() => {
+                    // Err(closed) is defensive: every sender dropped means the
+                    // plane can never be shut down cleanly, so stop instead of
+                    // busy-spinning on the closed channel.
+                    match changed {
+                        Err(_) => {
+                            tracing::info!("memory outbox publisher shutdown channel closed; stopping");
+                            break;
+                        }
+                        Ok(()) if *shutdown_rx.borrow() => {
+                            tracing::info!("memory outbox publisher shutting down");
+                            break;
+                        }
+                        Ok(()) => {}
                     }
                 }
                 _ = tokio::time::sleep(Duration::from_secs(poll_interval)) => {

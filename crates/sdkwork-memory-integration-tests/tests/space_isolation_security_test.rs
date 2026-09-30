@@ -213,6 +213,7 @@ async fn open_api_rejects_cross_space_candidate_retrieve() {
             proposed_payload_json: None,
             evidence_json: None,
             confidence: 0.8,
+            learning_job_uuid: None,
         },
     )
     .await

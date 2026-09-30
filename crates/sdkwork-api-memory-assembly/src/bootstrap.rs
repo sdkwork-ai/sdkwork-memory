@@ -70,6 +70,64 @@ fn memory_route_manifest() -> HttpRouteManifest {
 /// Default maximum concurrent in-flight requests.
 const DEFAULT_MAX_CONCURRENCY: usize = 256;
 
+/// Minimum process pool budget the Memory assembly admits in a production-like
+/// environment. The retention and provider-health workers each hold one
+/// dedicated pool connection for the whole duration of a lease (session-scoped
+/// PostgreSQL advisory locks), so a pool below
+/// retention + provider-health + business concurrency headroom (4) lets those
+/// lease sessions starve every business acquire until the acquire timeout.
+const MIN_DATABASE_POOL_MAX_CONNECTIONS: u32 = 4;
+
+/// Resolves the process pool budget through the exact resolver pool creation
+/// uses (`DatabaseConfig::from_env("MEMORY")`): process override, else the
+/// workspace database-config profile, else the default. Mirroring only the
+/// env override here would let a profile-configured undersized pool pass this
+/// admission and starve the lease workers anyway.
+fn resolved_database_pool_max_connections() -> Result<u32, String> {
+    sdkwork_database_config::DatabaseConfig::from_env("MEMORY")
+        .map(|config| config.max_connections)
+        .map_err(|error| format!("database pool configuration failed: {error}"))
+}
+
+/// Startup admission on the process pool budget: the retention and
+/// provider-health lease sessions each hold one dedicated connection while
+/// business traffic keeps acquiring from the same pool, so a production-like
+/// environment configured below the lease floor is rejected with a named
+/// startup error instead of idling through acquire timeouts at runtime.
+/// Development environments only warn with the same diagnostic.
+fn enforce_minimum_database_pool_capacity_from_env() -> Result<(), String> {
+    let max_connections = resolved_database_pool_max_connections()?;
+    enforce_minimum_database_pool_capacity(
+        max_connections,
+        platform::is_production_like_environment(),
+    )
+}
+
+fn enforce_minimum_database_pool_capacity(
+    max_connections: u32,
+    production_like: bool,
+) -> Result<(), String> {
+    if max_connections >= MIN_DATABASE_POOL_MAX_CONNECTIONS {
+        return Ok(());
+    }
+    let diagnostic = format!(
+        "memory database pool is too small for production-like startup: \
+         SDKWORK_DATABASE_MAX_CONNECTIONS resolves to {max_connections}, but the minimum \
+         admitted budget is {MIN_DATABASE_POOL_MAX_CONNECTIONS}. The retention and \
+         provider-health workers each hold one dedicated pool connection for the whole \
+         duration of a lease (session-scoped advisory locks), so the budget needs room for \
+         retention + provider-health + business concurrency headroom (>= \
+         {MIN_DATABASE_POOL_MAX_CONNECTIONS}); below that the lease sessions starve every \
+         business acquire until the 10s acquire timeout. Raise SDKWORK_DATABASE_MAX_CONNECTIONS \
+         to {MIN_DATABASE_POOL_MAX_CONNECTIONS} or more."
+    );
+    if production_like {
+        return Err(diagnostic);
+    }
+    tracing::warn!("{diagnostic}");
+    Ok(())
+}
+
 /// Builds the complete Memory contribution for `product`, pinned to `readiness`:
 /// every business route, the owner's route manifest, the process endpoints, the
 /// request-body ceiling, and the admission ceiling.
@@ -106,7 +164,14 @@ pub async fn assemble_api_router(
     )
     .clamp(1, 4096);
 
-    let router = Router::new()
+    // The infra probes (/healthz /livez /readyz /metrics) are deliberately
+    // OUTSIDE the concurrency-limit layer: a saturated admission ceiling must
+    // never make health probes queue behind business traffic, or the
+    // orchestrator would start killing an otherwise healthy process exactly
+    // when it needs the probe's verdict. The ceiling applies to business
+    // routers only; the probes keep the panic shield and the product
+    // extension (the metrics renderer reads it).
+    let probe_router = Router::new()
         .route("/metrics", get(metrics))
         .route("/healthz", get(healthz_handler))
         .route("/livez", get(livez_handler))
@@ -117,12 +182,18 @@ pub async fn assemble_api_router(
                 move || async move { readyz_handler(Some(readiness)).await }
             }),
         )
+        .layer(sdkwork_routes_memory_support::MemoryPanicShieldLayer)
+        .layer(Extension(product.clone()));
+
+    let business_router = Router::new()
         .merge(open_router)
         .merge(app_router)
         .merge(backend_router)
         .layer(sdkwork_routes_memory_support::MemoryPanicShieldLayer)
         .layer(Extension(product))
         .layer(ConcurrencyLimitLayer::new(max_concurrency));
+
+    let router = probe_router.merge(business_router);
 
     // The request body limit is deliberately NOT layered here. Each surface
     // applies `memory_request_body_limit_bytes()` as the innermost
@@ -179,6 +250,10 @@ impl ReadinessCheck for MemoryReadinessCheck {
     fn check(&self) -> ReadinessFuture<'_> {
         let service = self.service.clone();
         Box::pin(async move {
+            if !platform::numeric_id_generator_healthy() {
+                memory_domain_metrics().set_serving(false);
+                return Err("memory numeric id generator lease unhealthy".to_owned());
+            }
             if service.ready_check().await.is_err() {
                 memory_domain_metrics().set_serving(false);
                 return Err("memory store not ready".to_owned());
@@ -201,8 +276,9 @@ async fn metrics(Extension(product): Extension<Arc<OpenMemoryService>>) -> impl 
         std::env::var("SDKWORK_MEMORY_RUNTIME_TARGET").unwrap_or_else(|_| "server".to_owned());
     let runtime_profile = product.runtime_profile_label();
     let body = format!(
-        "{}{}",
+        "{}{}{}",
         memory_http_metrics().render_prometheus(),
+        sdkwork_routes_memory_support::render_memory_web_prometheus(),
         render_memory_domain_prometheus(
             "sdkwork-api-memory-standalone-gateway",
             &environment,
@@ -251,6 +327,9 @@ async fn open_memory_service_from_env() -> Result<Arc<OpenMemoryService>, String
     refresh_memory_http_metric_dimensions();
     sdkwork_intelligence_memory_service::platform::validate_runtime_secrets_for_environment()?;
     validate_outbox_runtime_config().await?;
+    // Fail fast on a pool budget the lease workers can starve, before any
+    // connection is opened (see `enforce_minimum_database_pool_capacity`).
+    enforce_minimum_database_pool_capacity_from_env()?;
     let runtime = bootstrap_memory_runtime_from_env().await?;
     info!(
         profile_id = %runtime.core_runtime.profile().profile_id,
@@ -431,4 +510,162 @@ pub async fn web_module() -> Result<WebModule, String> {
     Ok(WebModule::from_contribution(
         assemble_api_router_from_env().await?,
     ))
+}
+
+#[cfg(test)]
+mod database_pool_admission_tests {
+    use super::*;
+
+    /// Serializes process-environment mutations across the test binary's
+    /// threads; a leaked `SDKWORK_*` value would otherwise flip sibling tests
+    /// between the production-like and development admission paths.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Panic-safe environment override that restores every touched key on
+    /// drop — the same isolation pattern as `sdkwork-memory-contract`'s
+    /// `MemoryEnvScope` paired with `env_test_lock`, localized because the
+    /// assembly does not depend on that crate.
+    struct EnvScope(Vec<(String, Option<std::ffi::OsString>)>);
+
+    impl EnvScope {
+        fn new(vars: &[(&str, Option<&str>)]) -> Self {
+            let previous = vars
+                .iter()
+                .map(|(key, _)| ((*key).to_string(), std::env::var_os(key)))
+                .collect();
+            for (key, value) in vars {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
+                }
+            }
+            Self(previous)
+        }
+    }
+
+    impl Drop for EnvScope {
+        fn drop(&mut self) {
+            for (key, value) in &self.0 {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn production_like_environment_rejects_a_pool_below_the_lease_floor() {
+        for max_connections in [0, 1, 2, 3] {
+            let error = enforce_minimum_database_pool_capacity(max_connections, true)
+                .expect_err("below the lease floor, production-like startup must be rejected");
+            assert!(
+                error.contains("SDKWORK_DATABASE_MAX_CONNECTIONS"),
+                "diagnostic must name the operator knob, got: {error}"
+            );
+            assert!(
+                error.contains("retention"),
+                "diagnostic must explain the retention lease connection, got: {error}"
+            );
+            assert!(
+                error.contains("provider-health"),
+                "diagnostic must explain the provider-health lease connection, got: {error}"
+            );
+            let lease_floor = MIN_DATABASE_POOL_MAX_CONNECTIONS.to_string();
+            assert!(
+                error.contains(&lease_floor),
+                "diagnostic must state the minimum admitted budget, got: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn pool_at_or_above_the_lease_floor_is_admitted_in_every_environment() {
+        for max_connections in [MIN_DATABASE_POOL_MAX_CONNECTIONS, 5, 16] {
+            enforce_minimum_database_pool_capacity(max_connections, true)
+                .expect("the lease floor plus headroom must be admitted");
+            enforce_minimum_database_pool_capacity(max_connections, false)
+                .expect("development startup must be admitted too");
+        }
+    }
+
+    #[test]
+    fn development_environment_only_warns_below_the_lease_floor() {
+        // The warn path is the Ok(()) arm: development startup proceeds, and
+        // the operator sees the same diagnostic in the log.
+        enforce_minimum_database_pool_capacity(2, false)
+            .expect("development startup must not be rejected below the lease floor");
+    }
+
+    #[test]
+    fn env_resolver_delegates_to_the_pool_creation_resolver() {
+        let _lock = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _scope = EnvScope::new(&[("SDKWORK_DATABASE_MAX_CONNECTIONS", None)]);
+        // Unset: whatever the canonical resolver resolves (profile or
+        // default) must equal what pool creation will use — the admission
+        // never pins a second default.
+        let unset = resolved_database_pool_max_connections().expect("unset resolves");
+        let canonical = sdkwork_database_config::DatabaseConfig::from_env("MEMORY")
+            .expect("canonical resolver")
+            .max_connections;
+        assert_eq!(unset, canonical);
+
+        {
+            let _scope = EnvScope::new(&[("SDKWORK_DATABASE_MAX_CONNECTIONS", Some("6"))]);
+            assert_eq!(resolved_database_pool_max_connections().ok(), Some(6));
+        }
+        {
+            // An unparseable override is a loud configuration error from the
+            // canonical resolver, not a silent fallback.
+            let _scope = EnvScope::new(&[("SDKWORK_DATABASE_MAX_CONNECTIONS", Some("not-a-number"))]);
+            let error = resolved_database_pool_max_connections()
+                .expect_err("unparseable override must fail loudly");
+            assert!(
+                error.contains("SDKWORK_DATABASE_MAX_CONNECTIONS"),
+                "the resolver error must name the operator knob, got: {error}"
+            );
+        }
+        {
+            let _scope = EnvScope::new(&[("SDKWORK_DATABASE_MAX_CONNECTIONS", Some(" 3 "))]);
+            assert_eq!(
+                resolved_database_pool_max_connections().ok(),
+                Some(3),
+                "surrounding whitespace is trimmed like the pool read"
+            );
+        }
+    }
+
+    #[test]
+    fn env_admission_rejects_production_startup_when_the_override_is_too_small() {
+        let _lock = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _scope = EnvScope::new(&[
+            ("SDKWORK_DATABASE_MAX_CONNECTIONS", Some("2")),
+            ("SDKWORK_MEMORY_ENVIRONMENT", Some("production")),
+            ("SDKWORK_MEMORY_CONFIG_PROFILE", None),
+        ]);
+        let error = enforce_minimum_database_pool_capacity_from_env()
+            .expect_err("production-like startup with a 2-connection pool must be rejected");
+        assert!(
+            error.contains("SDKWORK_DATABASE_MAX_CONNECTIONS"),
+            "startup diagnostic must name the operator knob, got: {error}"
+        );
+    }
+
+    #[test]
+    fn env_admission_allows_development_startup_when_the_override_is_too_small() {
+        let _lock = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _scope = EnvScope::new(&[
+            ("SDKWORK_DATABASE_MAX_CONNECTIONS", Some("2")),
+            ("SDKWORK_MEMORY_ENVIRONMENT", Some("development")),
+            ("SDKWORK_MEMORY_CONFIG_PROFILE", None),
+        ]);
+        enforce_minimum_database_pool_capacity_from_env()
+            .expect("development startup only warns below the lease floor");
+    }
 }

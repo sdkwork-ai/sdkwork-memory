@@ -5,16 +5,13 @@ use std::time::{Duration, Instant};
 
 use futures::stream::{self, StreamExt};
 use sdkwork_memory_contract::{
-    MemoryExtractionRequest, MemoryLearningJob, MemoryMigrationJobRequest, MemoryOpenApi,
-    MemoryOpenApiRequestContext, MemoryRetentionJobRequest, MemoryRetrievalRequest,
-    MemoryServiceError,
+    MemoryExtractionRequest, MemoryLearningJob, MemoryOpenApi, MemoryOpenApiRequestContext,
+    MemoryRetrievalRequest, MemoryServiceError,
 };
 use sdkwork_memory_plugin_native_sql::{
-    ConsolidateDuplicateRecordsCommand, FinishLearningJobCommand, InsertLearningJobCommand,
-    NativeSqlClaimedEvalRun, NativeSqlEvalRunRow, NativeSqlLearningJobRow, NativeSqlMemoryStore,
-    UpdateEvalRunStateCommand,
+    FinishLearningJobCommand, InsertLearningJobCommand, NativeSqlClaimedEvalRun,
+    NativeSqlEvalRunRow, NativeSqlLearningJobRow, NativeSqlMemoryStore, UpdateEvalRunStateCommand,
 };
-use sdkwork_memory_spi::MemoryScopeContext;
 use sdkwork_utils_rust::is_blank;
 use serde::Deserialize;
 use serde_json::Value;
@@ -24,19 +21,28 @@ use crate::platform;
 
 /// Spawns all background workers and returns a shutdown sender.
 ///
-/// The caller MUST keep the sender alive and call `send(true)` during
-/// graceful shutdown so that all workers drain in-flight work and exit.
-/// Dropping the sender also causes receivers to observe a closed channel,
-/// but an explicit `send(true)` ensures a cleaner shutdown with logged
-/// confirmation from each worker.
+/// The caller MUST call [`MemoryBackgroundWorkers::shutdown`] (`send(true)`)
+/// during graceful shutdown so that all workers drain in-flight work and exit.
+///
+/// Every worker task also holds its own keepalive clone of the sender, so
+/// dropping the returned handle does NOT close the channel and does NOT stop
+/// the plane: the workers keep running until process exit or an explicit
+/// shutdown signal, which is exactly the dependency-owned shape an embedded
+/// host expects (`API_ASSEMBLY_SPEC` §6.2.1). Before the keepalive existed, a
+/// dropped handle closed the channel and sent every worker into a busy spin on
+/// the immediately-`Err` `changed()` poll.
 pub fn spawn_background_workers(service: Arc<OpenMemoryService>) -> MemoryBackgroundWorkers {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     let join_handles = vec![
-        crate::outbox_publisher::spawn_outbox_publisher(service.store.clone(), shutdown_rx.clone()),
-        spawn_learning_job_worker(service.clone(), shutdown_rx.clone()),
-        spawn_eval_run_worker(service.clone(), shutdown_rx.clone()),
-        spawn_provider_health_probe(service.clone(), shutdown_rx.clone()),
-        spawn_retention_worker(service, shutdown_rx),
+        crate::outbox_publisher::spawn_outbox_publisher(
+            service.store.clone(),
+            shutdown_tx.clone(),
+            shutdown_rx.clone(),
+        ),
+        spawn_learning_job_worker(service.clone(), shutdown_tx.clone(), shutdown_rx.clone()),
+        spawn_eval_run_worker(service.clone(), shutdown_tx.clone(), shutdown_rx.clone()),
+        spawn_provider_health_probe(service.clone(), shutdown_tx.clone(), shutdown_rx.clone()),
+        spawn_retention_worker(service, shutdown_tx.clone(), shutdown_rx),
     ];
     MemoryBackgroundWorkers {
         shutdown_tx,
@@ -100,11 +106,36 @@ impl MemoryBackgroundWorkers {
     }
 }
 
+/// The shutdown arm body shared by every worker loop: an `Err` from
+/// `changed()` means every sender was dropped, which is treated as a stop
+/// signal (defensively, instead of busy-spinning on a closed channel); `Ok`
+/// stops only on an explicit `true`.
+macro_rules! handle_shutdown_changed {
+    ($result:expr, $shutdown_rx:expr, $worker:literal) => {
+        match $result {
+            Err(_) => {
+                tracing::info!(concat!($worker, " shutdown channel closed; stopping"));
+                break;
+            }
+            Ok(()) if *$shutdown_rx.borrow() => {
+                tracing::info!(concat!($worker, " shutting down"));
+                break;
+            }
+            Ok(()) => {}
+        }
+    };
+}
+
 fn spawn_learning_job_worker(
     service: Arc<OpenMemoryService>,
+    keepalive_shutdown_tx: tokio::sync::watch::Sender<bool>,
     mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
+        // Keepalive: holding a sender inside the task keeps the watch channel
+        // open even when the process owner drops its MemoryBackgroundWorkers
+        // handle, so workers run until an explicit shutdown or process exit.
+        let _shutdown_keepalive = keepalive_shutdown_tx;
         let worker_id = match platform::next_numeric_id() {
             Ok(id) => format!("memory-learning-{id}"),
             Err(error) => {
@@ -118,11 +149,8 @@ fn spawn_learning_job_worker(
             platform::read_env_u64("SDKWORK_MEMORY_JOB_POLL_INTERVAL_SECS", 2).max(1);
         loop {
             tokio::select! {
-                _ = shutdown_rx.changed() => {
-                    if *shutdown_rx.borrow() {
-                        tracing::info!("memory learning job worker shutting down");
-                        break;
-                    }
+                changed = shutdown_rx.changed() => {
+                    handle_shutdown_changed!(changed, shutdown_rx, "memory learning job worker");
                 }
                 _ = tokio::time::sleep(Duration::from_secs(poll_interval)) => {
                     if let Err(error) = process_learning_job_batch(
@@ -140,9 +168,12 @@ fn spawn_learning_job_worker(
 
 fn spawn_eval_run_worker(
     service: Arc<OpenMemoryService>,
+    keepalive_shutdown_tx: tokio::sync::watch::Sender<bool>,
     mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
+        // Keepalive: see spawn_learning_job_worker.
+        let _shutdown_keepalive = keepalive_shutdown_tx;
         let worker_id = match platform::next_numeric_id() {
             Ok(id) => format!("memory-eval-{id}"),
             Err(error) => {
@@ -156,11 +187,8 @@ fn spawn_eval_run_worker(
             platform::read_env_u64("SDKWORK_MEMORY_EVAL_POLL_INTERVAL_SECS", 5).max(1);
         loop {
             tokio::select! {
-                _ = shutdown_rx.changed() => {
-                    if *shutdown_rx.borrow() {
-                        tracing::info!("memory eval run worker shutting down");
-                        break;
-                    }
+                changed = shutdown_rx.changed() => {
+                    handle_shutdown_changed!(changed, shutdown_rx, "memory eval run worker");
                 }
                 _ = tokio::time::sleep(Duration::from_secs(poll_interval)) => {
                     if let Err(error) = process_eval_run_batch(
@@ -178,9 +206,12 @@ fn spawn_eval_run_worker(
 
 fn spawn_retention_worker(
     service: Arc<OpenMemoryService>,
+    keepalive_shutdown_tx: tokio::sync::watch::Sender<bool>,
     mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
+        // Keepalive: see spawn_learning_job_worker.
+        let _shutdown_keepalive = keepalive_shutdown_tx;
         let sweep_interval = Duration::from_secs(
             platform::read_env_u64("SDKWORK_MEMORY_RETENTION_SWEEP_INTERVAL_SECS", 3600).max(60),
         );
@@ -195,11 +226,8 @@ fn spawn_retention_worker(
         );
         loop {
             tokio::select! {
-                _ = shutdown_rx.changed() => {
-                    if *shutdown_rx.borrow() {
-                        tracing::info!("memory retention worker shutting down");
-                        break;
-                    }
+                changed = shutdown_rx.changed() => {
+                    handle_shutdown_changed!(changed, shutdown_rx, "memory retention worker");
                 }
                 _ = tokio::time::sleep(sweep_interval) => {
                     run_retention_sweep(&service, &config).await;
@@ -329,18 +357,18 @@ async fn run_retention_sweep(service: &OpenMemoryService, config: &RetentionConf
 
 fn spawn_provider_health_probe(
     service: Arc<OpenMemoryService>,
+    keepalive_shutdown_tx: tokio::sync::watch::Sender<bool>,
     mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
+        // Keepalive: see spawn_learning_job_worker.
+        let _shutdown_keepalive = keepalive_shutdown_tx;
         let poll_interval =
             platform::read_env_u64("SDKWORK_MEMORY_PROVIDER_HEALTH_PROBE_SECS", 60).max(1);
         loop {
             tokio::select! {
-                _ = shutdown_rx.changed() => {
-                    if *shutdown_rx.borrow() {
-                        tracing::info!("memory provider health probe shutting down");
-                        break;
-                    }
+                changed = shutdown_rx.changed() => {
+                    handle_shutdown_changed!(changed, shutdown_rx, "memory provider health probe");
                 }
                 _ = tokio::time::sleep(Duration::from_secs(poll_interval)) => {
                     if let Err(error) = probe_provider_bindings(&service).await {
@@ -466,7 +494,7 @@ async fn process_claimed_learning_job(
             // only converges to terminal `'failed'` once the attempt ceiling
             // is exhausted (`requeue_failed_learning_job` decides in SQL).
             // The stale-crash sweep remains the path for hard process death.
-            let error_json = serde_json::json!({ "message": error }).to_string();
+            let error_json = serde_json::json!({ "message": error.to_string() }).to_string();
             let max_attempts = platform::read_env_u64("SDKWORK_MEMORY_JOB_MAX_ATTEMPTS", 5).clamp(1, 20);
             let backoff_seconds =
                 platform::read_env_u64("SDKWORK_MEMORY_JOB_RETRY_BACKOFF_SECS", 30);
@@ -573,156 +601,79 @@ fn background_job_context(
     )
 }
 
+/// Typed failure of one claimed learning job.
+///
+/// The queue worker executes exactly one job family: extraction. Governance
+/// jobs (consolidation, retention, migration, index rebuild/sync) run
+/// synchronously on the Backend admin plane, which records their
+/// `ai_audit_log` governance snapshot itself, so they never enter
+/// `ai_learning_job`. A row of any other `job_type` in the queue is an
+/// enqueue-side contract violation and fails closed instead of mutating
+/// tenant scope without a governance audit trail.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+enum LearningJobExecutionError {
+    /// A queued `job_type` the queue worker must never execute.
+    #[error("unsupported learning job type in the extraction queue: {job_type}")]
+    UnsupportedJobType { job_type: String },
+    /// The claimed job itself failed while executing; the message feeds the
+    /// requeue/terminal `error_json`.
+    #[error("{message}")]
+    Execution { message: String },
+}
+
+impl From<String> for LearningJobExecutionError {
+    fn from(message: String) -> Self {
+        Self::Execution { message }
+    }
+}
+
 async fn execute_learning_job(
     service: &OpenMemoryService,
     job: &NativeSqlLearningJobRow,
-) -> Result<String, String> {
-    let input = job
-        .input_json
-        .as_deref()
-        .ok_or_else(|| "learning job input_json is missing".to_string())?;
-    let open_context = background_job_context(job, input);
-    let result = match job.job_type.as_str() {
-        "extract" | "extraction" => {
-            let request: MemoryExtractionRequest = serde_json::from_str(input)
-                .map_err(|error| format!("extraction input decode failed: {error}"))?;
-            let space_id =
-                platform::space_id_i64(request.space_id).map_err(|error| error.detail)?;
-            assert_learning_job_space_id(job, space_id)?;
-            if open_context.actor_id.is_none() {
-                return Err(
-                    "extraction background job requires actorId in input_json for authorization"
-                        .to_string(),
-                );
-            }
-            OpenMemoryService::execute_extraction_work(service, open_context, request)
-                .await
-                .map_err(|error| error.detail)?
-                .to_string()
+) -> Result<String, LearningJobExecutionError> {
+    // Fail closed on any job_type the queue does not own before touching the
+    // payload: governance jobs (consolidation, retention, migration, index
+    // rebuild/sync) are executed synchronously by the Backend admin plane,
+    // which records their ai_audit_log governance snapshot itself, so they
+    // never enter ai_learning_job. Executing one here would mutate tenant
+    // scope without a governance audit trail.
+    let input = match job.job_type.as_str() {
+        "extract" | "extraction" => job
+            .input_json
+            .as_deref()
+            .ok_or_else(|| LearningJobExecutionError::Execution {
+                message: "learning job input_json is missing".to_string(),
+            })?,
+        other => {
+            return Err(LearningJobExecutionError::UnsupportedJobType {
+                job_type: other.to_string(),
+            });
         }
-        "consolidation" => {
-            let request: MemoryExtractionRequest = serde_json::from_str(input)
-                .map_err(|error| format!("consolidation input decode failed: {error}"))?;
-            let tenant_id = job.tenant_id;
-            let space_id =
-                platform::space_id_i64(request.space_id).map_err(|error| error.detail)?;
-            assert_learning_job_space_id(job, space_id)?;
-            let scope = MemoryScopeContext {
-                tenant_id,
-                space_id,
-                organization_id: None,
-                user_id: None,
-            };
-            let consolidation = service
-                .store
-                .consolidate_duplicate_records_in_scope_detailed(
-                    ConsolidateDuplicateRecordsCommand {
-                        scope: &scope,
-                        operation_id: &job.job_uuid,
-                    },
-                )
-                .await
-                .map_err(|error| error.to_string())?;
-            serde_json::json!({
-                "mergedDuplicates": consolidation.superseded_records,
-                "supersededDuplicates": consolidation.superseded_records,
-                "transferredSources": consolidation.transferred_sources,
-                "deduplicatedSources": consolidation.deduplicated_sources,
-                "consolidationMode": "identity_bounded_supersession",
-                "spaceId": request.space_id
-            })
-            .to_string()
-        }
-        "retention" => {
-            let request: MemoryRetentionJobRequest = serde_json::from_str(input)
-                .map_err(|error| format!("retention input decode failed: {error}"))?;
-            let tenant_id = job.tenant_id;
-            let space_id = request
-                .space_id
-                .map(platform::space_id_i64)
-                .transpose()
-                .map_err(|error| error.detail)?
-                .ok_or_else(|| "retention input missing spaceId".to_string())?;
-            assert_learning_job_space_id(job, space_id)?;
-            let scope = MemoryScopeContext {
-                tenant_id,
-                space_id,
-                organization_id: None,
-                user_id: None,
-            };
-            let dry_run = request.dry_run.unwrap_or(false);
-            let deleted = service
-                .store
-                .purge_expired_records_for_scope(&scope, dry_run)
-                .await
-                .map_err(|error| error.to_string())?;
-            serde_json::json!({ "deletedRecords": deleted, "dryRun": dry_run }).to_string()
-        }
-        "index_rebuild" | "index_sync" => {
-            let payload: Value = serde_json::from_str(input)
-                .map_err(|error| format!("index rebuild input decode failed: {error}"))?;
-            let index_id = payload
-                .get("indexId")
-                .and_then(Value::as_u64)
-                .ok_or_else(|| "index rebuild input missing indexId".to_string())?;
-            let index_row = service
-                .store
-                .retrieve_mem_index_for_tenant(job.tenant_id, &index_id.to_string())
-                .await
-                .map_err(|error| error.to_string())?
-                .ok_or_else(|| format!("memory index {index_id} not found for tenant"))?;
-            let rebuilt = if let Some(space_id) = index_row.space_id {
-                service
-                    .store
-                    .rebuild_record_search_indexes_for_space(job.tenant_id, space_id)
-                    .await
-                    .map_err(|error| error.to_string())?
-            } else {
-                service
-                    .store
-                    .rebuild_all_record_search_indexes(job.tenant_id)
-                    .await
-                    .map_err(|error| error.to_string())?
-            };
-            let _ = service
-                .store
-                .update_mem_index_for_tenant(
-                    job.tenant_id,
-                    &index_id.to_string(),
-                    Some("active"),
-                    None,
-                    Some(platform::current_timestamp().as_str()),
-                    None,
-                    None,
-                )
-                .await;
-            serde_json::json!({
-                "indexId": index_id,
-                "spaceId": index_row.space_id,
-                "rebuiltRecords": rebuilt
-            })
-            .to_string()
-        }
-        "migration" => {
-            let request: MemoryMigrationJobRequest = serde_json::from_str(input)
-                .map_err(|error| format!("migration input decode failed: {error}"))?;
-            let preference_id = i64::try_from(service.next_id().map_err(|error| error.detail)?)
-                .map_err(|_| "generated preference id out of range".to_string())?;
-            let result = crate::implementation_migration::execute_implementation_profile_migration(
-                &service.store,
-                preference_id,
-                job.tenant_id,
-                &request,
-                &service.core_runtime.profile().profile_id,
-                service.active_implementation_kind_code(),
-            )
-            .await
-            .map_err(|error| error.detail)?;
-            serde_json::to_string(&result)
-                .map_err(|error| format!("migration result encode failed: {error}"))?
-        }
-        other => return Err(format!("unsupported learning job type: {other}")),
     };
+    let open_context = background_job_context(job, input);
+    let request: MemoryExtractionRequest = serde_json::from_str(input)
+        .map_err(|error| format!("extraction input decode failed: {error}"))?;
+    let space_id = platform::space_id_i64(request.space_id).map_err(|error| error.detail)?;
+    assert_learning_job_space_id(job, space_id)?;
+    if open_context.actor_id.is_none() {
+        return Err(LearningJobExecutionError::Execution {
+            message: "extraction background job requires actorId in input_json for authorization"
+                .to_string(),
+        });
+    }
+    // Attribute the produced candidates to this claimed job so the
+    // extraction linkage (ai_candidate.learning_job_uuid) is traceable
+    // per background run, and a requeued run clears the failed attempt's
+    // pending candidates before re-creating them.
+    let result = OpenMemoryService::execute_extraction_work(
+        service,
+        open_context,
+        request,
+        Some(&job.job_uuid),
+    )
+    .await
+    .map_err(|error| error.detail)?
+    .to_string();
     Ok(result)
 }
 
@@ -1076,11 +1027,17 @@ async fn run_retrieval_quality_eval(
         "degradedRate": degraded_rate,
         "qualityGatePassed": quality_gate_passed,
     });
+    // The raw eval configuration travels with the result so every persisted
+    // score stays reviewable against the exact cases and gates that produced
+    // it, even after the run row's `result_json` is overwritten on completion.
+    let original_config: Value =
+        serde_json::from_str(config_json).unwrap_or(Value::Null);
     let result = serde_json::json!({
         "evalType": "retrieval_quality",
         "status": "completed",
         "datasetRef": row.dataset_ref,
         "profileRef": row.profile_ref,
+        "config": original_config,
         "thresholds": config.thresholds,
         "qualityGatePassed": quality_gate_passed,
         "cases": case_results,
@@ -1404,8 +1361,11 @@ async fn probe_provider_binding_batch<'a>(
 }
 
 async fn probe_binding_endpoint(endpoint_ref: Option<&str>) -> String {
+    // A binding without an endpoint was never probed: reporting "healthy"
+    // would fabricate a passing health check, so the aggregated health state
+    // reads "unknown" instead.
     let Some(url) = endpoint_ref.filter(|value| !is_blank(Some(value))) else {
-        return "healthy".to_string();
+        return "unknown".to_string();
     };
 
     if let Err(reason) = crate::endpoint_validation::validate_outbound_url(url) {
@@ -1436,6 +1396,14 @@ async fn probe_binding_endpoint(endpoint_ref: Option<&str>) -> String {
     }
 }
 
+/// Enqueue one background learning job.
+///
+/// No caller idempotency key: the `Idempotency-Key` HTTP header is owned by
+/// the middleware layer and never reaches this typed boundary, so duplicate
+/// suppression for the HTTP surface happens in the middleware before a job
+/// id is ever generated. The store-level
+/// `InsertLearningJobCommand::idempotency_key` stays a tested store
+/// capability for non-HTTP surfaces.
 pub async fn enqueue_learning_job(
     store: &NativeSqlMemoryStore,
     tenant_id: i64,
@@ -1492,8 +1460,64 @@ pub fn learning_job_from_row(
 use sdkwork_memory_contract::MemoryServiceResult;
 
 #[cfg(test)]
+mod learning_job_execution_tests {
+    use super::*;
+
+    fn learning_job_row(job_type: &str) -> NativeSqlLearningJobRow {
+        NativeSqlLearningJobRow {
+            job_uuid: "101".to_string(),
+            tenant_id: 77,
+            space_id: Some(10),
+            job_type: job_type.to_string(),
+            state: "running".to_string(),
+            priority: 0,
+            input_json: Some(r#"{"spaceId":"10"}"#.to_string()),
+            result_json: None,
+            error_json: None,
+            started_at: None,
+            finished_at: None,
+            lease_owner: None,
+            lease_token: None,
+            lease_expires_at: None,
+            created_at: "2026-09-30T00:00:00.000Z".to_string(),
+            updated_at: "2026-09-30T00:00:00.000Z".to_string(),
+            version: 1,
+        }
+    }
+
+    #[tokio::test]
+    async fn execute_learning_job_fails_closed_on_governance_job_types() {
+        let store = NativeSqlMemoryStore::new_in_memory_sqlite()
+            .await
+            .expect("in-memory sqlite store");
+        let service = OpenMemoryService::new(store);
+        for job_type in [
+            "consolidation",
+            "retention",
+            "index_rebuild",
+            "index_sync",
+            "migration",
+        ] {
+            let error = execute_learning_job(&service, &learning_job_row(job_type))
+                .await
+                .expect_err("governance job types must fail closed in the queue worker");
+            assert_eq!(
+                error,
+                LearningJobExecutionError::UnsupportedJobType {
+                    job_type: job_type.to_string(),
+                }
+            );
+            assert!(error
+                .to_string()
+                .contains("unsupported learning job type in the extraction queue"));
+        }
+    }
+}
+
+#[cfg(test)]
 mod eval_tests {
     use super::*;
+    use sdkwork_memory_spi::MemoryScopeContext;
 
     #[test]
     fn retrieval_quality_config_accepts_string_ids_and_rejects_empty_datasets() {
@@ -1723,12 +1747,19 @@ mod eval_tests {
             .as_str()
             .is_some_and(|value| !value.is_empty() && value != "modal editor"));
         assert!(result["cases"][0].get("query").is_none());
+        // The original eval configuration is merged into the persisted result
+        // so the run stays reviewable against the cases and gates that scored
+        // it.
+        assert_eq!(result["config"]["cases"][0]["query"], "modal editor");
+        assert_eq!(result["config"]["cases"][0]["topK"], 1);
+        assert_eq!(result["config"]["thresholds"]["minRecallAtK"], 1.0);
     }
 }
 
 #[cfg(test)]
 mod shutdown_tests {
     use super::MemoryBackgroundWorkers;
+    use super::*;
     use std::time::{Duration, Instant};
     use tokio::sync::watch;
 
@@ -1826,5 +1857,51 @@ mod shutdown_tests {
     async fn drain_with_no_workers_is_trivially_complete() {
         let mut workers = handle_over(Vec::new());
         assert!(workers.drain(Duration::from_secs(1)).await);
+    }
+
+    /// B1 regression: a worker keeps running after the process owner drops its
+    /// `MemoryBackgroundWorkers` handle, because the worker task holds its own
+    /// keepalive clone of the shutdown sender. Without the keepalive the
+    /// channel closes and the worker either spins on the closed channel or
+    /// dies, silently idling the background plane.
+    #[tokio::test]
+    async fn eval_worker_keeps_running_after_the_owner_handle_is_dropped() {
+        let store = NativeSqlMemoryStore::new_in_memory_sqlite()
+            .await
+            .expect("in-memory store");
+        let service = Arc::new(OpenMemoryService::new(store));
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        let closure_probe = shutdown_rx.clone();
+        let handle = spawn_eval_run_worker(service, shutdown_tx.clone(), shutdown_rx);
+
+        // The process owner drops its whole handle: the sender it held is gone.
+        drop(shutdown_tx);
+        tokio::time::sleep(Duration::from_millis(120)).await;
+
+        assert!(
+            !handle.is_finished(),
+            "the worker must keep running after the owner handle is dropped"
+        );
+        assert!(
+            closure_probe.has_changed().is_ok(),
+            "the worker must hold a keepalive sender so the channel stays open"
+        );
+        handle.abort();
+    }
+
+    /// The explicit stop trigger still terminates a keepalive-holding worker.
+    #[tokio::test]
+    async fn keepalive_worker_stops_on_explicit_shutdown() {
+        let store = NativeSqlMemoryStore::new_in_memory_sqlite()
+            .await
+            .expect("in-memory store");
+        let service = Arc::new(OpenMemoryService::new(store));
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        let handle = spawn_eval_run_worker(service, shutdown_tx.clone(), shutdown_rx);
+        shutdown_tx.send(true).expect("shutdown signal");
+        tokio::time::timeout(Duration::from_secs(5), handle)
+            .await
+            .expect("worker must drain on the explicit shutdown signal")
+            .expect("worker task must not panic");
     }
 }

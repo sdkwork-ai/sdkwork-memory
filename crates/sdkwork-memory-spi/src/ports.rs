@@ -334,6 +334,11 @@ pub struct MarkMemoryOutboxFailedCommand {
     /// [`MarkMemoryOutboxPublishedCommand::lease_owner`].
     pub lease_owner: String,
     pub lease_token: String,
+    /// Retry ceiling shared with the delivery-failure path: the failure
+    /// charges `retry_count` and only lands terminally `'failed'` once the
+    /// ceiling is reached; earlier failures return the event to `'pending'`
+    /// with an exponential backoff `next_attempt_at`.
+    pub max_retries: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -346,6 +351,11 @@ pub struct CreateMemoryCandidateCommand {
     pub proposed_payload_json: Option<String>,
     pub evidence_json: Option<String>,
     pub confidence: f64,
+    /// Job uuid of the learning job that produced this candidate, when the
+    /// extraction ran as a background job. Persists into
+    /// `ai_candidate.learning_job_uuid` so an extraction's output stays
+    /// traceable (and re-runs stay deduplicable) per job.
+    pub learning_job_uuid: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -600,6 +610,10 @@ pub struct MemoryRetrievalTrace {
     pub metadata_json: Option<String>,
     pub hits: Vec<MemoryRetrievalHitDraft>,
     pub context_pack: Option<MemoryContextPackSnapshot>,
+    /// Trace creation timestamp, in the store's canonical datetime text form.
+    pub created_at: String,
+    /// Space the trace ran in, when the row recorded one.
+    pub space_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -57,6 +57,13 @@ pub struct InsertLearningJobCommand<'a> {
     pub job_type: &'a str,
     pub state: &'a str,
     pub priority: i32,
+    /// Store-level idempotency key backed by the partial unique index
+    /// `uk_ai_learning_job_idempotency (tenant_id, job_type, idempotency_key)`.
+    /// The HTTP surface never sets it: the `Idempotency-Key` header is owned
+    /// by the middleware layer before this boundary is reached. Non-HTTP
+    /// surfaces may use it; identical-payload replays resolve to the stored
+    /// job and different-payload key reuse fails with
+    /// [`NativeSqlStoreError::IdempotencyConflict`].
     pub idempotency_key: Option<&'a str>,
     pub input_json: Option<&'a str>,
 }
@@ -112,15 +119,69 @@ impl NativeSqlMemoryStore {
         if let Err(error) = insert_result {
             // The partial unique index on (tenant_id, job_type, idempotency_key)
             // only applies when a key was supplied: a concurrent replica then
-            // enqueued the same logical job first, which is exactly the
-            // idempotent success the key exists to express. Without a key
+            // enqueued a job under the same key. An identical payload is
+            // exactly the idempotent success the key exists to express, while
+            // a different payload reusing the key is a client contract
+            // violation (one key maps to one logical request). Without a key
             // there is nothing idempotent to fall back on, so the constraint
             // error surfaces.
-            if command.idempotency_key.is_none() || !is_unique_violation(&error) {
-                return Err(error.into());
-            }
+            let idempotency_key = match command.idempotency_key {
+                Some(key) if is_unique_violation(&error) => key,
+                _ => return Err(error.into()),
+            };
+            return match self
+                .learning_job_input_for_idempotency_key(
+                    command.tenant_id,
+                    command.job_type,
+                    idempotency_key,
+                )
+                .await?
+            {
+                // Same logical job already stored: the stored row wins and the
+                // replayed enqueue is a success without a second row.
+                Some(Some(existing_input_json))
+                    if Some(existing_input_json.as_str()) == command.input_json =>
+                {
+                    Ok(())
+                }
+                // A row holding this key either stored a different payload or
+                // no comparable payload at all; one key maps to one logical
+                // request, so both are contract conflicts.
+                Some(None) | Some(Some(_)) => Err(NativeSqlStoreError::IdempotencyConflict {
+                    idempotency_key: idempotency_key.to_string(),
+                }),
+                // The violation was not the idempotency index (for example a
+                // duplicate job uuid): surface the original driver error.
+                None => Err(error.into()),
+            };
         }
         Ok(())
+    }
+
+    /// Input payload of the job that already holds this
+    /// (tenant, job_type, idempotency_key) triple. The outer `Option`
+    /// distinguishes "no such row" from "row whose nullable `input_json` is
+    /// NULL", so a NULL row reports a conflict instead of collapsing into the
+    /// not-found branch.
+    async fn learning_job_input_for_idempotency_key(
+        &self,
+        tenant_id: i64,
+        job_type: &str,
+        idempotency_key: &str,
+    ) -> Result<Option<Option<String>>, NativeSqlStoreError> {
+        let input_json: Option<Option<String>> = sqlx::query_scalar(
+            r#"
+            SELECT input_json
+            FROM ai_learning_job
+            WHERE tenant_id = ? AND job_type = ? AND idempotency_key = ?
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(job_type)
+        .bind(idempotency_key)
+        .fetch_optional(self.pool())
+        .await?;
+        Ok(input_json)
     }
 
     pub async fn requeue_stale_running_learning_jobs(
@@ -618,7 +679,8 @@ impl NativeSqlMemoryStore {
                 lease_owner = NULL,
                 lease_token = NULL,
                 lease_expires_at = NULL,
-                updated_at = ?
+                updated_at = ?,
+                version = version + 1
             WHERE tenant_id = ? AND uuid = ? AND state = 'running'
               AND lease_owner = ? AND lease_token = ? AND lease_expires_at > ?
             "#,

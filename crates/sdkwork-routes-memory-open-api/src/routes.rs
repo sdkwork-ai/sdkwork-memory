@@ -6,6 +6,7 @@ use axum::{
 };
 use sdkwork_routes_memory_support::{MemoryJson, MemoryPath};
 use sdkwork_intelligence_memory_service::OpenMemoryService;
+use serde_json::Value;
 use sdkwork_memory_contract::{
     DeleteAllMemoriesRequest, ListCandidatesQuery, ListMemoriesQuery, MemoryContextPackRequest,
     MemoryEventRequest, MemoryExtractionRequest, MemoryFeedbackRequest, MemoryOpenApi,
@@ -265,10 +266,55 @@ async fn retrieve_candidate(
     ok_resource_json(state.api.retrieve_candidate(context, candidate_id).await)
 }
 
+/// Field name the truncation flag is written under, mirroring
+/// `sdkwork_intelligence_memory_service::PROVIDER_HEALTH_BINDINGS_TRUNCATED_FIELD`.
+/// The service's `open_api` module is private, so the name is restated here;
+/// the service documentation pins the wire spelling.
+const PROVIDER_HEALTH_BINDINGS_TRUNCATED_FIELD: &str = "bindingsTruncated";
+
+/// Per-`health_state` counts injected beside the typed `MemoryProviderHealth`
+/// item. The typed DTO has no extension field (see the service's
+/// `ProviderHealthSummary`), so the counts travel as sibling members of the
+/// same `item` object.
+const PROVIDER_HEALTH_STATE_COUNTS_FIELD: &str = "stateCounts";
+
 async fn retrieve_provider_health(
     Extension(state): Extension<OpenState>,
     context: Option<Extension<MemoryOpenApiRequestContext>>,
 ) -> Result<Response, ApiProblem> {
     let context = require_context(context)?;
-    ok_resource_json(state.api.retrieve_provider_health(context).await)
+    let product = state.require_product()?;
+    let summary = product
+        .retrieve_provider_health_summary(context)
+        .await
+        .map_err(ApiProblem::from)?;
+
+    // The aggregation result the typed DTO cannot carry: whether the binding
+    // cap truncated it, and the per-state counts with `unknown` kept out of
+    // `healthy`. `health` itself keeps the declared DTO shape byte for byte.
+    let mut item = serde_json::to_value(&summary.health).map_err(|error| {
+        ApiProblem::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "provider_health_serialization_failed",
+            format!("provider health could not be serialized: {error}"),
+        )
+    })?;
+    if let Some(object) = item.as_object_mut() {
+        object.insert(
+            PROVIDER_HEALTH_BINDINGS_TRUNCATED_FIELD.to_string(),
+            Value::Bool(summary.bindings_truncated),
+        );
+        object.insert(
+            PROVIDER_HEALTH_STATE_COUNTS_FIELD.to_string(),
+            serde_json::json!({
+                "healthy": summary.state_counts.healthy,
+                "degraded": summary.state_counts.degraded,
+                "unhealthy": summary.state_counts.unhealthy,
+                "unknown": summary.state_counts.unknown,
+                "other": summary.state_counts.other,
+                "total": summary.state_counts.total,
+            }),
+        );
+    }
+    ok_resource_json(Ok::<Value, ApiProblem>(item))
 }

@@ -25,7 +25,7 @@ const families = [
   },
   {
     root: "sdks/sdkwork-memory-app-sdk",
-    authority: "sdkwork-memory.app",
+    authority: "sdkwork-memory-app-api",
     authoritySpec: "apis/app-api/memory-app-api.openapi.json",
     input: "openapi/memory-app-api.openapi.json",
     packageName: "@sdkwork/memory-app-sdk",
@@ -35,7 +35,7 @@ const families = [
   },
   {
     root: "sdks/sdkwork-memory-backend-sdk",
-    authority: "sdkwork-memory.backend",
+    authority: "sdkwork-memory-backend-api",
     authoritySpec: "apis/backend-api/memory-backend-api.openapi.json",
     input: "openapi/memory-backend-api.openapi.json",
     packageName: "@sdkwork/memory-backend-sdk",

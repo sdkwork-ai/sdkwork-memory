@@ -1,0 +1,75 @@
+# OPTIONAL egress policies for the Memory standalone gateway.
+#
+# The default policy (networkpolicy.yaml) denies everything except DNS,
+# PostgreSQL, Redis, and OTLP. The two policies below are NOT applied by
+# default: apply them only when the corresponding feature is enabled, because
+# Kubernetes NetworkPolicies are additive — any policy that selects the pods
+# adds its egress to the allow list.
+#
+#   1. sdkwork-memory-outbox-http-egress
+#      REQUIRED when SDKWORK_MEMORY_OUTBOX_DELIVERY_MODE=http (deployment.yaml).
+#      Without it every outbox HTTP delivery times out against the denied
+#      default-deny egress and dead-letters after max retries.
+#
+#   2. sdkwork-memory-drive-s3-egress
+#      REQUIRED when privacy exports use a Drive S3-compatible target
+#      (SDKWORK_MEMORY_DRIVE_S3_ENDPOINT secret sdkwork-memory-drive).
+#
+# Both rules deliberately allow ANY destination on 443 so the manifests stay
+# environment-neutral. PRODUCTION MUST converge them: replace the ipBlock/CIDR
+# below with the concrete egress CIDRs of your delivery endpoint and object
+# store (or replace `to` with namespace/pod selectors for in-cluster sinks), so
+# a compromised pod cannot use these policies as a generic HTTPS exfiltration
+# channel.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sdkwork-memory-outbox-http-egress
+  labels:
+    app.kubernetes.io/name: sdkwork-memory
+    app.kubernetes.io/component: standalone-gateway
+    app.kubernetes.io/part-of: sdkwork-memory
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: sdkwork-memory
+      app.kubernetes.io/component: standalone-gateway
+  policyTypes:
+    - Egress
+  egress:
+    # HTTPS webhook delivery (SDKWORK_MEMORY_OUTBOX_DELIVERY_URL).
+    # Converge the cidr below to your delivery endpoint's egress CIDR in
+    # production; 0.0.0.0/0 is the documented dev/staging convenience.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - port: 443
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sdkwork-memory-drive-s3-egress
+  labels:
+    app.kubernetes.io/name: sdkwork-memory
+    app.kubernetes.io/component: standalone-gateway
+    app.kubernetes.io/part-of: sdkwork-memory
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: sdkwork-memory
+      app.kubernetes.io/component: standalone-gateway
+  policyTypes:
+    - Egress
+  egress:
+    # HTTPS Drive/S3 export upload (SDKWORK_MEMORY_DRIVE_S3_ENDPOINT).
+    # Converge the cidr below to your object store's egress CIDR in
+    # production; 0.0.0.0/0 is the documented dev/staging convenience.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - port: 443
+          protocol: TCP

@@ -54,6 +54,17 @@ const LEARNING_SETTINGS_KEY: &str = "learning_settings";
 /// `forget_memory_scope_reports_no_purged_events_while_space_scope_does` pins it.
 const TARGETED_FORGET_PURGED_EVENTS: u32 = 0;
 
+/// Audit `resource_type` of the pre-scan `forget.request.start` lifecycle row.
+///
+/// It is deliberately not `"forget_job"`: the id-keyed job reads
+/// (`retrieve_governance_job_for_tenant`, `list_governance_jobs_for_tenant`)
+/// match on `(uuid, resource_type)` and must keep resolving exactly the one
+/// terminal `forget_job` row per request. This row records the running state
+/// on the audit surface instead, with `resource_id` still naming the job, so a
+/// request that never reaches its terminal row (timeout, crash mid-sweep) is
+/// still traceable.
+const FORGET_REQUEST_PROGRESS_RESOURCE: &str = "forget_job_progress";
+
 fn default_learning_settings() -> MemoryLearningSettings {
     MemoryLearningSettings {
         auto_promote_candidates: false,
@@ -257,17 +268,50 @@ impl OpenMemoryService {
         action: &str,
         job: &T,
     ) -> MemoryServiceResult<()> {
+        Self::persist_governance_job_row(
+            self,
+            tenant_id,
+            actor_id,
+            &job_id.to_string(),
+            job_id,
+            "accepted",
+            resource_type,
+            action,
+            job,
+        )
+        .await
+    }
+
+    /// Append one governance job audit row with explicit audit identity.
+    ///
+    /// `ai_audit_log` is append-only and enforces `(tenant_id, uuid)`
+    /// uniqueness, so a job's lifecycle rows cannot all carry the job id: the
+    /// row an id-keyed read must find keeps `job_id` as its audit uuid, while
+    /// earlier lifecycle rows derive a distinct audit uuid (for example
+    /// `"{job_id}:start"`) and stay discoverable through the audit surface.
+    /// `job_id` still feeds `resource_id` so every row of a job names it.
+    async fn persist_governance_job_row<T: serde::Serialize>(
+        &self,
+        tenant_id: i64,
+        actor_id: Option<u64>,
+        audit_id: &str,
+        job_id: u64,
+        result: &str,
+        resource_type: &str,
+        action: &str,
+        job: &T,
+    ) -> MemoryServiceResult<()> {
         let metadata = serde_json::to_string(job).map_err(|error| {
             MemoryServiceError::storage(format!("governance job metadata encode failed: {error}"))
         })?;
         self.store
             .append_audit_with_metadata(
                 &Self::governance_scope(tenant_id),
-                &job_id.to_string(),
+                audit_id,
                 action,
                 resource_type,
                 &job_id.to_string(),
-                "accepted",
+                result,
                 &metadata,
                 actor_id.map(|value| value.to_string()).as_deref(),
             )
@@ -473,6 +517,57 @@ impl OpenMemoryService {
         Ok(writer.bytes)
     }
 
+    /// Rejects a malformed forget request before any governance row is
+    /// persisted, so a validation failure cannot strand a phantom running job.
+    fn validate_forget_request_shape(request: &MemoryForgetRequest) -> MemoryServiceResult<()> {
+        match request.scope.as_str() {
+            "memory" => {
+                let memory_ids = request.memory_ids.as_ref().ok_or_else(|| {
+                    MemoryServiceError::validation("memoryIds is required when scope is memory")
+                })?;
+                if memory_ids.is_empty() {
+                    return Err(MemoryServiceError::validation(
+                        "memoryIds must not be empty when scope is memory",
+                    ));
+                }
+                let max_memory_ids = platform::MAX_FORGET_MEMORY_IDS;
+                if memory_ids.len() > max_memory_ids {
+                    return Err(MemoryServiceError::validation(format!(
+                        "memoryIds must not exceed {max_memory_ids} entries per forget request"
+                    )));
+                }
+                request.space_id.ok_or_else(|| {
+                    MemoryServiceError::validation("spaceId is required when scope is memory")
+                })?;
+                Ok(())
+            }
+            "space" => {
+                request.space_id.ok_or_else(|| {
+                    MemoryServiceError::validation("spaceId is required when scope is space")
+                })?;
+                Ok(())
+            }
+            "user" => Ok(()),
+            "query" => {
+                request.space_id.ok_or_else(|| {
+                    MemoryServiceError::validation("spaceId is required when scope is query")
+                })?;
+                let query = request.query.as_deref().ok_or_else(|| {
+                    MemoryServiceError::validation("query is required when scope is query")
+                })?;
+                if is_blank(Some(query)) {
+                    return Err(MemoryServiceError::validation(
+                        "query must not be empty when scope is query",
+                    ));
+                }
+                Ok(())
+            }
+            _ => Err(MemoryServiceError::validation(
+                "scope must be one of memory, space, user, or query",
+            )),
+        }
+    }
+
     async fn assert_habit_actor_access(
         &self,
         context: &MemoryAppRequestContext,
@@ -539,7 +634,8 @@ impl MemoryAppApi for OpenMemoryService {
         let space_id = i64::try_from(self.next_id()?)
             .map_err(|_| MemoryServiceError::storage("generated space id out of range"))?;
         let owner_subject_id = request.owner_subject_id.clone();
-        let quota_limits = crate::tenant_quota::MemoryQuotaLimits::from_env();
+        let quota_limits =
+            crate::tenant_quota::resolve_quota_limits(&self.store, tenant_id).await?;
         let admission = self
             .runtime_data_plane
             .create_space_atomic_with_quota(
@@ -749,23 +845,39 @@ impl MemoryAppApi for OpenMemoryService {
         let tenant_id = platform::tenant_id_i64(context.tenant_id)?;
         let job_id = self.next_id()?;
         let now = platform::current_timestamp();
+        Self::validate_forget_request_shape(&request)?;
+
+        // Persist the running job row BEFORE the destructive sweep: a timeout
+        // or crash mid-scan then still leaves a traceable "running" audit row
+        // behind, and the request is observable from the moment it is accepted.
+        // Audit rows are append-only, so the terminal row below never rewrites
+        // this one; it is a distinct audit uuid under a lifecycle-only
+        // resource type (see `FORGET_REQUEST_PROGRESS_RESOURCE`).
+        let running_job = MemoryForgetJob {
+            forget_request_id: job_id,
+            state: "running".to_string(),
+            result: Some(serde_json::json!({
+                "scope": request.scope.clone(),
+                "reason": request.reason.clone(),
+            })),
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        };
+        self.persist_governance_job_row(
+            tenant_id,
+            context.actor_id,
+            &format!("{job_id}:start"),
+            job_id,
+            "running",
+            FORGET_REQUEST_PROGRESS_RESOURCE,
+            "forget.request.start",
+            &running_job,
+        )
+        .await?;
 
         let stats = match request.scope.as_str() {
             "memory" => {
-                let memory_ids = request.memory_ids.as_ref().ok_or_else(|| {
-                    MemoryServiceError::validation("memoryIds is required when scope is memory")
-                })?;
-                if memory_ids.is_empty() {
-                    return Err(MemoryServiceError::validation(
-                        "memoryIds must not be empty when scope is memory",
-                    ));
-                }
-                let max_memory_ids = platform::MAX_FORGET_MEMORY_IDS;
-                if memory_ids.len() > max_memory_ids {
-                    return Err(MemoryServiceError::validation(format!(
-                        "memoryIds must not exceed {max_memory_ids} entries per forget request"
-                    )));
-                }
+                let memory_ids = request.memory_ids.as_deref().unwrap_or_default();
                 let space_id = request.space_id.ok_or_else(|| {
                     MemoryServiceError::validation("spaceId is required when scope is memory")
                 })?;
@@ -860,11 +972,6 @@ impl MemoryAppApi for OpenMemoryService {
                 let query = request.query.as_deref().ok_or_else(|| {
                     MemoryServiceError::validation("query is required when scope is query")
                 })?;
-                if is_blank(Some(query)) {
-                    return Err(MemoryServiceError::validation(
-                        "query must not be empty when scope is query",
-                    ));
-                }
                 let scope = MemoryScopeContext {
                     tenant_id,
                     space_id: platform::space_id_i64(space_id)?,
@@ -883,14 +990,11 @@ impl MemoryAppApi for OpenMemoryService {
             }
         };
 
-        let state = if stats.deleted_records == 0
-            && stats.purged_events == 0
-            && stats.rejected_candidates == 0
-        {
-            "failed"
-        } else {
-            "succeeded"
-        };
+        // A sweep that matched nothing is a legal completed outcome — an
+        // idempotent replay or a request with no matches — not a failure. Real
+        // faults surface through the store error paths above and never reach a
+        // terminal row.
+        let state = "succeeded";
 
         let job = MemoryForgetJob {
             forget_request_id: job_id,
@@ -1838,7 +1942,7 @@ impl MemoryBackendApi for OpenMemoryService {
         &self,
         context: MemoryBackendRequestContext,
         candidate_id: u64,
-        _request: MemoryReviewRequest,
+        request: MemoryReviewRequest,
     ) -> MemoryServiceResult<MemoryCandidate> {
         let tenant_id = platform::tenant_id_i64(context.tenant_id)?;
         let existing = self
@@ -1855,15 +1959,55 @@ impl MemoryBackendApi for OpenMemoryService {
             organization_id: None,
             user_id: context.operator_id.map(|value| value as i64),
         };
-        self.approve_candidate_with_promotion(tenant_id, scope, candidate_id, context.operator_id)
-            .await
+        let candidate = self
+            .approve_candidate_with_promotion(
+                tenant_id,
+                scope.clone(),
+                candidate_id,
+                context.operator_id,
+            )
+            .await?;
+        // The operator's review note is destructive-operation evidence: it
+        // belongs in the persisted audit trail (same rule as the index
+        // rebuild job), on its own candidate-keyed row so the promotion audit
+        // record stays purely mechanical.
+        if request.reason.is_some() || request.reviewer_note.is_some() {
+            let review = serde_json::json!({
+                "candidateId": candidate_id,
+                "reason": request.reason,
+                "reviewerNote": request.reviewer_note,
+            });
+            let metadata = serde_json::to_string(&review).map_err(|error| {
+                MemoryServiceError::storage(format!(
+                    "candidate review metadata encode failed: {error}"
+                ))
+            })?;
+            let audit_id = self.next_id()?;
+            self.store
+                .append_audit_with_metadata(
+                    &scope,
+                    &audit_id.to_string(),
+                    "memory.candidate.approved",
+                    "memory_candidate",
+                    &candidate_id.to_string(),
+                    "accepted",
+                    &metadata,
+                    context
+                        .operator_id
+                        .map(|value| value.to_string())
+                        .as_deref(),
+                )
+                .await
+                .map_err(OpenMemoryService::map_store_error)?;
+        }
+        Ok(candidate)
     }
 
     async fn reject_candidate(
         &self,
         context: MemoryBackendRequestContext,
         candidate_id: u64,
-        _request: MemoryReviewRequest,
+        request: MemoryReviewRequest,
     ) -> MemoryServiceResult<MemoryCandidate> {
         let tenant_id = platform::tenant_id_i64(context.tenant_id)?;
         let existing = self
@@ -1882,11 +2026,14 @@ impl MemoryBackendApi for OpenMemoryService {
             organization_id: None,
             user_id: context.operator_id.map(|value| value as i64),
         };
+        // The typed review reason (falling back to the free-form reviewer
+        // note) is the decision evidence the candidate row persists.
+        let decision_reason = request.reason.or(request.reviewer_note);
         self.runtime_data_plane
             .reject_candidate(RejectMemoryCandidateCommand {
                 scope,
                 candidate_id: candidate_id.to_string(),
-                decision_reason: None,
+                decision_reason,
                 decided_by: context.operator_id.map(|value| value as i64),
             })
             .await?;
@@ -1952,16 +2099,21 @@ impl MemoryBackendApi for OpenMemoryService {
             .await
             .map_err(OpenMemoryService::map_store_error)?
             .ok_or_else(|| MemoryServiceError::not_found("retrieval trace not found"))?;
+        // Surface the stored row values: the trace's own creation timestamp and
+        // its recorded space, not read-time placeholders.
         Ok(MemoryRetrievalTrace {
             trace_id,
-            space_id: None,
+            space_id: trace
+                .space_id
+                .map(|value| platform::non_negative_i64_as_u64(value, "spaceId"))
+                .transpose()?,
             retrieval_profile_id: None,
             actor_id: trace.actor_id,
             query_text: trace.query_text,
             query_hash: trace.query_hash,
             result_count: trace.result_count as i32,
             degraded: trace.degraded,
-            created_at: platform::current_timestamp(),
+            created_at: trace.created_at,
         })
     }
 
@@ -2281,10 +2433,13 @@ fn map_audit_log(row: NativeSqlAuditLogRow) -> MemoryServiceResult<MemoryAuditLo
         action: row.action,
         resource_type: row.resource_type,
         resource_id: Some(row.resource_id),
-        trace_id: None,
+        trace_id: row.trace_id,
         result: row.result,
-        reason: None,
-        metadata: None,
+        reason: row.reason,
+        metadata: row
+            .metadata_json
+            .as_deref()
+            .and_then(|value| serde_json::from_str(value).ok()),
         created_at: row.created_at,
     })
 }
@@ -2292,18 +2447,32 @@ fn map_audit_log(row: NativeSqlAuditLogRow) -> MemoryServiceResult<MemoryAuditLo
 
 const ABSOLUTE_MAX_EXPORT_BYTES: usize = 256 * 1024 * 1024;
 
+/// Inline exports are encoded in and streamed from the API process itself, so
+/// their configured cap is additionally clamped to this tighter absolute
+/// ceiling regardless of the environment value; only drive uploads may use the
+/// full 256 MiB budget.
+const INLINE_ABSOLUTE_MAX_EXPORT_BYTES: usize = 32 * 1024 * 1024;
+
 fn export_payload_byte_limit(drive_export: bool) -> usize {
-    let (key, default) = if drive_export {
-        ("SDKWORK_MEMORY_DRIVE_EXPORT_MAX_BYTES", 64 * 1024 * 1024)
+    let (key, default, absolute_max) = if drive_export {
+        (
+            "SDKWORK_MEMORY_DRIVE_EXPORT_MAX_BYTES",
+            64 * 1024 * 1024,
+            ABSOLUTE_MAX_EXPORT_BYTES,
+        )
     } else {
-        ("SDKWORK_MEMORY_INLINE_EXPORT_MAX_BYTES", 4 * 1024 * 1024)
+        (
+            "SDKWORK_MEMORY_INLINE_EXPORT_MAX_BYTES",
+            4 * 1024 * 1024,
+            INLINE_ABSOLUTE_MAX_EXPORT_BYTES,
+        )
     };
     std::env::var(key)
         .ok()
         .and_then(|value| sdkwork_utils_rust::parse_int(&value))
         .and_then(|value| usize::try_from(value).ok())
         .unwrap_or(default)
-        .clamp(1_024, ABSOLUTE_MAX_EXPORT_BYTES)
+        .clamp(1_024, absolute_max)
 }
 
 struct ExportSizeGuard {

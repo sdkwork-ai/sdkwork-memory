@@ -1104,7 +1104,7 @@ App test assertions:
 ```rust
 assert_eq!(manifest.package_name, "sdkwork-routes-memory-app-api");
 assert_eq!(manifest.surface, "app-api");
-assert_eq!(manifest.api_authority, "sdkwork-memory.app");
+assert_eq!(manifest.api_authority, "sdkwork-memory-app-api"); // early drafts showed the retired dotted alias sdkwork-memory.app
 assert_eq!(manifest.sdk_family, "sdkwork-memory-app-sdk");
 assert_eq!(manifest.prefix, "/app/v3/api");
 assert!(manifest.routes.iter().all(|route| route.auth_mode == "dual-token"));
@@ -1115,7 +1115,7 @@ Backend test assertions:
 ```rust
 assert_eq!(manifest.package_name, "sdkwork-routes-memory-backend-api");
 assert_eq!(manifest.surface, "backend-api");
-assert_eq!(manifest.api_authority, "sdkwork-memory.backend");
+assert_eq!(manifest.api_authority, "sdkwork-memory-backend-api"); // early drafts showed the retired dotted alias sdkwork-memory.backend
 assert_eq!(manifest.sdk_family, "sdkwork-memory-backend-sdk");
 assert_eq!(manifest.prefix, "/backend/v3/api");
 assert!(manifest.routes.iter().all(|route| route.auth_mode == "dual-token"));

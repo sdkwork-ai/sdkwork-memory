@@ -860,6 +860,48 @@ pub struct MemoryPolicyAssignmentList {
 }
 
 // ---------------------------------------------------------------------------
+// Usage metering
+// ---------------------------------------------------------------------------
+
+/// One cumulative usage fact: the signed delta charged on `(tenant, day,
+/// metric)` over the whole UTC day. `record.delete` charges negative deltas;
+/// the other metrics charge positive ones.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryUsageEntry {
+    /// UTC calendar day (`YYYY-MM-DD`) the charge belongs to.
+    pub day: String,
+    /// Metered metric (for example `record.create`, `retrieval.count`).
+    pub metric: String,
+    /// Cumulative signed charge for the day.
+    pub delta: i64,
+    /// Last time the counter was charged.
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryUsageList {
+    pub items: Vec<MemoryUsageEntry>,
+    pub page_info: crate::dto::PageInfo,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ListUsageQuery {
+    #[serde(
+        skip_deserializing,
+        serialize_with = "serialize_u64_as_string",
+        deserialize_with = "deserialize_u64_from_string_or_number"
+    )]
+    pub tenant_id: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_size: Option<i32>,
+}
+
+// ---------------------------------------------------------------------------
 // Commercial readiness
 // ---------------------------------------------------------------------------
 

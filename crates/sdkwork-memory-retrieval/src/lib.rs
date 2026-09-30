@@ -4,6 +4,7 @@ pub mod entities;
 pub mod lemmatization;
 pub mod retrieval;
 pub mod scoring;
+mod text;
 
 pub use bm25::{
     get_bm25_params, normalize_bm25, normalized_keyword_scores, Bm25Document, Bm25Index, BM25_B,

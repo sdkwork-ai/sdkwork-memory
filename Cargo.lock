@@ -2891,6 +2891,7 @@ name = "sdkwork-api-memory-assembly"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "sdkwork-database-config",
  "sdkwork-intelligence-memory-repository-sqlx",
  "sdkwork-intelligence-memory-service",
  "sdkwork-memory-database-host",
@@ -3114,6 +3115,7 @@ dependencies = [
  "async-trait",
  "sdkwork-drive-config",
  "serde",
+ "tokio",
 ]
 
 [[package]]

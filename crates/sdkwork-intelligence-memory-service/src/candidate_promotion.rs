@@ -103,7 +103,8 @@ impl OpenMemoryService {
             audit_resource_id: requested_memory_id.clone(),
             audit_result: "accepted".to_string(),
         };
-        let quota_limits = crate::tenant_quota::MemoryQuotaLimits::from_env();
+        let quota_limits =
+            crate::tenant_quota::resolve_quota_limits(&self.store, tenant_id).await?;
         let admission = self
             .runtime_data_plane
             .promote_candidate_atomic_with_quota_and_journal(

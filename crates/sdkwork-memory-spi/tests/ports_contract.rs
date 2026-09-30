@@ -25,6 +25,7 @@ fn candidate_lifecycle_port_contract_types_are_public_and_scoped() {
         proposed_payload_json: Some(r#"{"preference":"concise"}"#.to_string()),
         evidence_json: Some(r#"{"source":"event"}"#.to_string()),
         confidence: 0.91,
+        learning_job_uuid: None,
     };
     let retrieve = RetrieveMemoryCandidateQuery {
         scope: scope.clone(),
@@ -191,12 +192,15 @@ fn retrieval_trace_port_contract_types_are_public_and_bounded() {
         metadata_json: append.metadata_json,
         hits: append.hits,
         context_pack: append.context_pack,
+        created_at: "2026-09-30T00:00:00.000Z".to_string(),
+        space_id: Some(10),
     };
 
     assert_eq!(retrieve.trace_id, "trace-1");
     assert_eq!(trace.hits.len(), 1);
     assert_eq!(trace.result_count, 1);
     assert!(!trace.degraded);
+    assert_eq!(trace.space_id, Some(10));
 }
 
 #[test]

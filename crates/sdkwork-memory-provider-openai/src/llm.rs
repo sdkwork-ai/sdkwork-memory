@@ -63,17 +63,13 @@ impl LanguageModelPort for OpenAiLlm {
 
     async fn generate(&self, command: LanguageModelCommand) -> MemorySpiResult<String> {
         let payload = build_chat_request(&self.config.chat_model, &command.prompt);
-        let response = self
+        let builder = self
             .http
             .post(self.url())
             .bearer_auth(&self.config.api_key)
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|error| MemorySpiError::PortOperationFailed {
-                port: "LanguageModelPort".to_string(),
-                message: format!("completion request failed: {error}"),
-            })?;
+            .json(&payload);
+        let response =
+            crate::retry::send_with_retries(&builder, "completion", "LanguageModelPort").await?;
         let status = response.status();
         let body = crate::response::read_body_capped(response).await.map_err(
             |error: MemorySpiError| MemorySpiError::PortOperationFailed {

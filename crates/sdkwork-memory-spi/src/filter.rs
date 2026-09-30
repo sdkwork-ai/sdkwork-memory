@@ -82,6 +82,12 @@
 //!    ASCII only, a needle containing non-ASCII characters is refused with
 //!    [`MetadataFilterError::DialectCannotExpressOperator`] rather than silently matching
 //!    less than PostgreSQL would.
+//! 9. **A filter above the structural budgets is an error.** One filter carries at most
+//!    [`MAX_FILTER_CONDITION_NODES`] conditions and one set at most
+//!    [`MAX_FILTER_SET_VALUES`] values. The wire form is untrusted input and every store
+//!    renders one predicate per condition, so an oversized filter is refused with
+//!    [`MetadataFilterError::InvalidValueShape`] at parse time instead of being translated
+//!    into an arbitrarily large SQL predicate.
 
 use serde_json::{Map, Value};
 use thiserror::Error;
@@ -94,6 +100,16 @@ pub const LOGICAL_OR: &str = "OR";
 pub const LOGICAL_NOT: &str = "NOT";
 /// Bare wildcard value asserting that a field exists.
 pub const WILDCARD: &str = "*";
+
+/// Upper bound on the leaf conditions one filter may carry.
+///
+/// A filter is untrusted wire input and every store implementation renders one predicate
+/// per condition, so a filter that would exceed this budget is refused at parse time
+/// (see the module documentation, deviation 9).
+pub const MAX_FILTER_CONDITION_NODES: usize = 256;
+
+/// Upper bound on the values a single `in`/`nin` membership set may list.
+pub const MAX_FILTER_SET_VALUES: usize = 1024;
 
 /// Every operator accepted inside an operator object such as `{"eq": "t1"}`.
 ///
@@ -807,7 +823,8 @@ pub fn parse_metadata_filter(
         return Ok(None);
     }
 
-    let mut children = parse_object_conditions(object)?;
+    let mut budget = ParseBudget::default();
+    let mut children = parse_object_conditions(object, &mut budget)?;
 
     // The object was non-empty and every branch contributes at least one child, so this is a
     // defensive check rather than a reachable one; it refuses to turn a parse gap into a
@@ -830,6 +847,7 @@ pub fn parse_metadata_filter(
 /// key literally named `AND`.
 fn parse_object_conditions(
     object: &Map<String, Value>,
+    budget: &mut ParseBudget,
 ) -> Result<Vec<MetadataFilterExpression>, MetadataFilterError> {
     let mut children: Vec<MetadataFilterExpression> = Vec::new();
     for (key, value) in object {
@@ -839,14 +857,15 @@ fn parse_object_conditions(
                 // is exactly equivalent because each entry is itself a conjunction, and the
                 // surrounding context is already a conjunction.
                 for entry in logical_entries(LOGICAL_AND, value)? {
-                    children.extend(logical_group(LOGICAL_AND, entry)?);
+                    children.extend(logical_group(LOGICAL_AND, entry, budget)?);
                 }
             }
             LOGICAL_OR => {
                 let groups = logical_entries(LOGICAL_OR, value)?
                     .into_iter()
                     .map(|entry| {
-                        logical_group(LOGICAL_OR, entry).map(MetadataFilterExpression::All)
+                        logical_group(LOGICAL_OR, entry, budget)
+                            .map(MetadataFilterExpression::All)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 children.push(MetadataFilterExpression::Any(groups));
@@ -857,17 +876,53 @@ fn parse_object_conditions(
                 let groups = logical_entries(LOGICAL_NOT, value)?
                     .into_iter()
                     .map(|entry| {
-                        logical_group(LOGICAL_NOT, entry).map(MetadataFilterExpression::All)
+                        logical_group(LOGICAL_NOT, entry, budget)
+                            .map(MetadataFilterExpression::All)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 children.push(MetadataFilterExpression::Not(Box::new(
                     MetadataFilterExpression::Any(groups),
                 )));
             }
-            field => children.extend(parse_field_condition(field, value)?),
+            field => children.push(parse_field_condition(field, value, budget)?),
         }
     }
     Ok(children)
+}
+
+/// Mutable budget bounding how many conditions one parsed filter may carry.
+///
+/// The wire form is untrusted input and every condition becomes a rendered SQL predicate,
+/// so the parser refuses a filter that would push the count past
+/// [`MAX_FILTER_CONDITION_NODES`] instead of handing stores an arbitrarily large tree.
+#[derive(Default)]
+struct ParseBudget {
+    condition_nodes: usize,
+}
+
+impl ParseBudget {
+    /// Charges one leaf condition against the budget.
+    ///
+    /// `field` and `operator` identify the condition that broke the budget so the typed
+    /// rejection names the offending leaf.
+    fn charge_condition(
+        &mut self,
+        field: &str,
+        operator: &str,
+    ) -> Result<(), MetadataFilterError> {
+        self.condition_nodes += 1;
+        if self.condition_nodes > MAX_FILTER_CONDITION_NODES {
+            return Err(MetadataFilterError::InvalidValueShape {
+                field: field.to_string(),
+                operator: operator.to_string(),
+                reason: format!(
+                    "condition {} exceeds the filter limit of {MAX_FILTER_CONDITION_NODES} conditions",
+                    self.condition_nodes
+                ),
+            });
+        }
+        Ok(())
+    }
 }
 
 /// Validates a logical key's value and returns its entries.
@@ -902,6 +957,7 @@ fn logical_entries<'a>(
 fn logical_group(
     logical: &'static str,
     group: &Map<String, Value>,
+    budget: &mut ParseBudget,
 ) -> Result<Vec<MetadataFilterExpression>, MetadataFilterError> {
     if group.is_empty() {
         return Err(MetadataFilterError::LogicalEntryNotObject {
@@ -909,14 +965,19 @@ fn logical_group(
             found: "empty object",
         });
     }
-    parse_object_conditions(group)
+    parse_object_conditions(group, budget)
 }
 
-/// Parses the condition(s) attached to a single field.
+/// Parses the condition attached to a single field.
+///
+/// Every accepted shape produces exactly one leaf condition, which is charged against the
+/// parse budget before it is returned so an oversized filter is refused here rather than
+/// at translation time.
 fn parse_field_condition(
     field: &str,
     value: &Value,
-) -> Result<Vec<MetadataFilterExpression>, MetadataFilterError> {
+    budget: &mut ParseBudget,
+) -> Result<MetadataFilterExpression, MetadataFilterError> {
     if field.trim().is_empty() {
         return Err(MetadataFilterError::BlankFieldName);
     }
@@ -924,11 +985,11 @@ fn parse_field_condition(
     // Bare wildcard: presence test. Checked before the operator-object branch precisely
     // because the reference only grants wildcard meaning to the bare form.
     if value.as_str() == Some(WILDCARD) {
-        return Ok(vec![MetadataFilterExpression::Condition(
-            MetadataFilterCondition::Exists {
-                field: field.to_string(),
-            },
-        )]);
+        let condition = MetadataFilterCondition::Exists {
+            field: field.to_string(),
+        };
+        budget.charge_condition(field, condition.operator_name())?;
+        return Ok(MetadataFilterExpression::Condition(condition));
     }
 
     if let Some(operators) = value.as_object() {
@@ -948,25 +1009,25 @@ fn parse_field_condition(
                 field: field.to_string(),
             });
         };
-        return Ok(vec![MetadataFilterExpression::Condition(
-            parse_operator_condition(field, operator, operand)?,
-        )]);
+        let condition = parse_operator_condition(field, operator, operand)?;
+        budget.charge_condition(field, condition.operator_name())?;
+        return Ok(MetadataFilterExpression::Condition(condition));
     }
 
     // A bare array is implicit `in`, mirroring the reference.
     if let Some(items) = value.as_array() {
-        return Ok(vec![MetadataFilterExpression::Condition(
-            parse_set_condition(field, SetFilterOperator::In, items)?,
-        )]);
+        let condition = parse_set_condition(field, SetFilterOperator::In, items)?;
+        budget.charge_condition(field, condition.operator_name())?;
+        return Ok(MetadataFilterExpression::Condition(condition));
     }
 
-    Ok(vec![MetadataFilterExpression::Condition(
-        MetadataFilterCondition::Scalar {
-            field: field.to_string(),
-            operator: ScalarFilterOperator::Eq,
-            value: parse_scalar(field, "eq", value)?,
-        },
-    )])
+    let condition = MetadataFilterCondition::Scalar {
+        field: field.to_string(),
+        operator: ScalarFilterOperator::Eq,
+        value: parse_scalar(field, "eq", value)?,
+    };
+    budget.charge_condition(field, condition.operator_name())?;
+    Ok(MetadataFilterExpression::Condition(condition))
 }
 
 /// Builds a condition from an explicit operator.
@@ -1028,6 +1089,16 @@ fn parse_set_condition(
             field: field.to_string(),
             operator: operator.as_str().to_string(),
             reason: "requires at least one value".to_string(),
+        });
+    }
+    if items.len() > MAX_FILTER_SET_VALUES {
+        return Err(MetadataFilterError::InvalidValueShape {
+            field: field.to_string(),
+            operator: operator.as_str().to_string(),
+            reason: format!(
+                "carries {} values, above the limit of {MAX_FILTER_SET_VALUES}",
+                items.len()
+            ),
         });
     }
     let values = items

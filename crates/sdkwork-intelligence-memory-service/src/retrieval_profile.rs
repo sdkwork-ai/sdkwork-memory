@@ -18,6 +18,38 @@ const SUPPORTED_RETRIEVERS: &[&str] = &[
     "vector",
 ];
 
+/// Upper bound on retrieval query length, in characters (not bytes).
+///
+/// A query is embedded, hashed, traced, and pushed into store searches; an
+/// unbounded one lets a single request dominate every one of those paths. The
+/// bound is generous for legitimate semantic search while failing oversized
+/// input fast, before any store or provider work.
+pub const MAX_RETRIEVAL_QUERY_CHARS: usize = 8192;
+
+/// Upper bound on the retrieval context budget, in tokens.
+///
+/// Mirrors the warehouse ceiling on `topK`: without a cap a single request
+/// could name a budget that no assembly step can honor, and the over-budget
+/// packing would silently degrade instead of failing the request.
+pub const MAX_CONTEXT_BUDGET_TOKENS: i32 = 100_000;
+
+/// Validate one retrieval query's presence and length.
+///
+/// Shared by the `create_retrieval` entry and the eval case loader so a query
+/// the HTTP surface would reject cannot enter an eval run through a different
+/// door.
+pub fn validate_retrieval_query(query: &str) -> MemoryServiceResult<()> {
+    if query.trim().is_empty() {
+        return Err(MemoryServiceError::validation("query must not be blank"));
+    }
+    if query.chars().count() > MAX_RETRIEVAL_QUERY_CHARS {
+        return Err(MemoryServiceError::validation(format!(
+            "query must not exceed {MAX_RETRIEVAL_QUERY_CHARS} characters"
+        )));
+    }
+    Ok(())
+}
+
 pub fn validate_retrieval_limits(
     top_k: i32,
     context_budget_tokens: i32,
@@ -32,6 +64,11 @@ pub fn validate_retrieval_limits(
         return Err(MemoryServiceError::validation(
             "contextBudgetTokens must be at least 1",
         ));
+    }
+    if context_budget_tokens > MAX_CONTEXT_BUDGET_TOKENS {
+        return Err(MemoryServiceError::validation(format!(
+            "contextBudgetTokens must not exceed {MAX_CONTEXT_BUDGET_TOKENS}"
+        )));
     }
     Ok(())
 }
@@ -237,5 +274,33 @@ mod tests {
         assert!(validate_retrieval_limits(0, 1).is_err());
         assert!(validate_retrieval_limits(101, 1).is_err());
         assert!(validate_retrieval_limits(1, 0).is_err());
+        assert!(validate_retrieval_limits(1, MAX_CONTEXT_BUDGET_TOKENS).is_ok());
+        assert!(validate_retrieval_limits(1, MAX_CONTEXT_BUDGET_TOKENS + 1).is_err());
+    }
+
+    #[test]
+    fn rejects_blank_and_oversized_retrieval_queries() {
+        validate_retrieval_query("needle in the haystack").expect("a normal query must pass");
+        for blank in ["", "   ", "\n\t "] {
+            let error = validate_retrieval_query(blank)
+                .expect_err("a blank query must fail validation");
+            assert_eq!(error.detail, "query must not be blank");
+        }
+        let boundary = "a".repeat(MAX_RETRIEVAL_QUERY_CHARS);
+        validate_retrieval_query(&boundary)
+            .expect("a query at the character bound must pass");
+        let oversized = "a".repeat(MAX_RETRIEVAL_QUERY_CHARS + 1);
+        let error = validate_retrieval_query(&oversized)
+            .expect_err("a query past the character bound must fail");
+        assert!(
+            error.detail.contains("8192"),
+            "the failure must name the bound: {}",
+            error.detail
+        );
+        // Multi-byte characters count as characters, not bytes: a query of the
+        // same character count with wide glyphs must pass the same bound.
+        let wide = "界".repeat(MAX_RETRIEVAL_QUERY_CHARS);
+        validate_retrieval_query(&wide)
+            .expect("character counting must not penalize multi-byte queries");
     }
 }

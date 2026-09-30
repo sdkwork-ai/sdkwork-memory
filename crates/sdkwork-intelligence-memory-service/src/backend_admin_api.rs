@@ -1357,7 +1357,9 @@ impl OpenMemoryService {
                 "spaceId": request.space_id,
             }),
         )?;
-        let quota_limits = crate::tenant_quota::MemoryQuotaLimits::from_env();
+        let quota_limits =
+            crate::tenant_quota::resolve_quota_limits(&self.store, context.tenant_id as i64)
+                .await?;
         let quota_scope = scope.clone();
         let admission = self
             .runtime_data_plane

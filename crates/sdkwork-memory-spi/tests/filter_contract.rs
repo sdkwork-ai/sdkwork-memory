@@ -7,9 +7,10 @@
 use sdkwork_memory_spi::{
     parse_metadata_filter, MetadataFilterCondition, MetadataFilterError, MetadataFilterExpression,
     MetadataFilterScalar, NumericLiteral, OrderingFilterOperator, ScalarFilterOperator,
-    SetFilterOperator, INFIX_OPERATORS, LOGICAL_AND, LOGICAL_NOT, LOGICAL_OR, WILDCARD,
+    SetFilterOperator, INFIX_OPERATORS, LOGICAL_AND, LOGICAL_NOT, LOGICAL_OR,
+    MAX_FILTER_CONDITION_NODES, MAX_FILTER_SET_VALUES, WILDCARD,
 };
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 /// Parses a filter that is expected to carry at least one condition.
 fn parse_ok(filter: Value) -> MetadataFilterExpression {
@@ -564,6 +565,96 @@ fn stored_metadata_must_be_valid_json() {
         .matches(Some("not json"))
         .expect_err("malformed metadata is refused");
     assert!(matches!(error, MetadataFilterError::MetadataNotJson { .. }));
+}
+
+// ---------------------------------------------------------------------------------------
+// Structural budgets
+// ---------------------------------------------------------------------------------------
+
+/// Builds a filter object carrying `conditions` scalar-equality fields.
+fn flat_filter(conditions: usize) -> Value {
+    let mut object = Map::new();
+    for index in 0..conditions {
+        object.insert(format!("field-{index}"), json!("1"));
+    }
+    Value::Object(object)
+}
+
+#[test]
+fn a_filter_at_the_condition_budget_still_parses() {
+    let parsed = parse_ok(flat_filter(MAX_FILTER_CONDITION_NODES));
+    assert_eq!(
+        parsed.referenced_fields().len(),
+        MAX_FILTER_CONDITION_NODES,
+        "every condition at the budget boundary must survive the parse"
+    );
+}
+
+#[test]
+fn a_filter_above_the_condition_budget_is_rejected() {
+    let error = parse_err(flat_filter(MAX_FILTER_CONDITION_NODES + 1));
+    let MetadataFilterError::InvalidValueShape { reason, .. } = error else {
+        panic!("expected a budget rejection, got {error:?}");
+    };
+    assert!(
+        reason.contains(&MAX_FILTER_CONDITION_NODES.to_string()),
+        "the rejection must name the budget, got: {reason}"
+    );
+}
+
+#[test]
+fn the_condition_budget_covers_nested_groups() {
+    // The budget is filter-wide, so a filter cannot dodge it by hiding conditions inside
+    // logical groups.
+    let mut object = match flat_filter(MAX_FILTER_CONDITION_NODES) {
+        Value::Object(object) => object,
+        _ => panic!("flat_filter builds an object"),
+    };
+    object.insert(LOGICAL_AND.to_string(), json!([{"one-condition-too-many": "1"}]));
+    assert!(matches!(
+        parse_err(Value::Object(object)),
+        MetadataFilterError::InvalidValueShape { .. }
+    ));
+}
+
+#[test]
+fn a_set_at_the_value_budget_still_parses() {
+    let values: Vec<Value> = (0..MAX_FILTER_SET_VALUES)
+        .map(|index| json!(index.to_string()))
+        .collect();
+    let parsed = parse_ok(json!({"tag": {"in": values}}));
+    let MetadataFilterExpression::Condition(MetadataFilterCondition::Set { values, .. }) = parsed
+    else {
+        panic!("a single set field parses into a single set condition");
+    };
+    assert_eq!(values.len(), MAX_FILTER_SET_VALUES);
+}
+
+#[test]
+fn a_set_above_the_value_budget_is_rejected() {
+    let values: Vec<Value> = (0..=MAX_FILTER_SET_VALUES)
+        .map(|index| json!(index.to_string()))
+        .collect();
+    let error = parse_err(json!({"tag": {"in": values}}));
+    let MetadataFilterError::InvalidValueShape {
+        field,
+        operator,
+        reason,
+    } = error
+    else {
+        panic!("expected a budget rejection, got {error:?}");
+    };
+    assert_eq!(field, "tag");
+    assert_eq!(operator, "in");
+    assert!(
+        reason.contains(&MAX_FILTER_SET_VALUES.to_string()),
+        "the rejection must name the budget, got: {reason}"
+    );
+    // The bare-array implicit `in` form is bounded by the same budget.
+    assert!(matches!(
+        parse_err(json!({"tag": values})),
+        MetadataFilterError::InvalidValueShape { .. }
+    ));
 }
 
 // ---------------------------------------------------------------------------------------

@@ -129,6 +129,7 @@ const SURFACES = [
       'edges.list': 'ListEdgesQuery',
       'policies.list': 'ListPoliciesQuery',
       'policyAssignments.list': 'ListPolicyAssignmentsQuery',
+      'usage.list': 'ListUsageQuery',
     },
   },
 ];
@@ -191,6 +192,13 @@ for (const surface of SURFACES) {
         }
         const operationId = operation?.operationId;
         if (!operationId?.endsWith('.list')) {
+          continue;
+        }
+        // Vendor compatibility wire operations (API_SPEC §4.5.2, e.g. the mem0
+        // platform surface) mirror the upstream wire's own pagination
+        // vocabulary and are exempt from the SDKWork list contract this gate
+        // enforces; the same exemption is applied by tools/verify_phase1.ps1.
+        if (operation['x-sdkwork-wire-protocol'] === 'external') {
           continue;
         }
         assert.ok(

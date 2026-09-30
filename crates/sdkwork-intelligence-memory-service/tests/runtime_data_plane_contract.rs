@@ -1086,6 +1086,7 @@ async fn outbox_candidates_and_habits_do_not_cross_scope_boundaries() {
             proposed_payload_json: None,
             evidence_json: None,
             confidence: 0.9,
+            learning_job_uuid: None,
         })
         .await
         .unwrap();
@@ -1099,6 +1100,7 @@ async fn outbox_candidates_and_habits_do_not_cross_scope_boundaries() {
             proposed_payload_json: None,
             evidence_json: None,
             confidence: 0.8,
+            learning_job_uuid: None,
         })
         .await
         .unwrap();

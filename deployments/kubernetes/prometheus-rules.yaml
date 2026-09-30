@@ -35,6 +35,22 @@ spec:
               Authorization denials exceeded 50 in 15 minutes. Review
               RUNBOOK-tenant-isolation-incident.md and audit logs for abuse or
               misconfigured clients.
+        # memory_rate_limit_rejections_total is rendered by
+        # crates/sdkwork-routes-memory-support/src/metrics.rs on /metrics.
+        - alert: MemoryRateLimitRejectionSpike
+          expr: increase(memory_rate_limit_rejections_total{service="sdkwork-api-memory-standalone-gateway"}[15m]) > 100
+          for: 5m
+          labels:
+            severity: warning
+            service: sdkwork-api-memory-standalone-gateway
+          annotations:
+            summary: Memory rate-limit rejections are spiking
+            description: >-
+              Rate-limit rejections exceeded 100 in 15 minutes. This usually
+              means one or more clients are bursting past the shared Redis
+              buckets. Review RUNBOOK-rate-limit-quota.md, the pre-auth
+              aggregate bucket, and per-tenant buckets before raising any
+              limit.
         - alert: MemoryQuotaExceededSpike
           expr: increase(memory_quota_exceeded_total{service="sdkwork-api-memory-standalone-gateway"}[15m]) > 20
           for: 10m
@@ -46,6 +62,31 @@ spec:
             description: >-
               Quota rejections exceeded 20 in 15 minutes. Review
               RUNBOOK-rate-limit-quota.md and SDKWORK_MEMORY_MAX_* limits.
+        # Writes are the PRD's 500 ms p99 budget. The histogram bucket le="0.5"
+        # is a real exported bound (WRITE_REQUEST_DURATION_BOUNDS_SECONDS in
+        # crates/sdkwork-routes-memory-support/src/metrics.rs), so the ratio
+        # below is the share of writes slower than the budget over 5 minutes;
+        # more than 1% means the p99 breached it.
+        - alert: MemoryWriteP99BudgetBreach
+          expr: >-
+            1 - (
+              sum by (method) (rate(memory_write_request_duration_seconds_bucket{service="sdkwork-api-memory-standalone-gateway",le="0.5"}[5m]))
+              /
+              sum by (method) (rate(memory_write_request_duration_seconds_count{service="sdkwork-api-memory-standalone-gateway"}[5m]))
+            ) > 0.01
+          for: 10m
+          labels:
+            severity: warning
+            service: sdkwork-api-memory-standalone-gateway
+          annotations:
+            summary: More than 1% of Memory writes exceed the 500 ms budget
+            description: >-
+              The share of write requests (POST/PUT/PATCH/DELETE) slower than
+              0.5 s stayed above 1% for 10 minutes, which breaches the PRD p99
+              write budget. Check database pool saturation, Redis admission
+              latency, and the slow-query evidence in
+              RUNBOOK-rate-limit-quota.md / RUNBOOK-outbox-backlog.md before
+              scaling.
     - name: sdkwork-memory.outbox
       rules:
         - alert: MemoryOutboxDeliveryFailures
@@ -158,3 +199,26 @@ spec:
               container logs, and PostgreSQL connection budget headroom
               (replicas x SDKWORK_DATABASE_MAX_CONNECTIONS + reserve <=
               max_connections, see hpa.yaml).
+        # Dependency readiness: Memory exports NO Redis-specific metric. Shared
+        # Redis (rate limiting, idempotency, admission) and IAM database
+        # readiness are folded into /readyz by
+        # crates/sdkwork-routes-memory-support/src/{readiness,web_runtime}.rs,
+        # so a sustained kube-level readiness failure on the gateway pods is
+        # the observable Redis-dependency symptom. kube-state-metrics required.
+        - alert: MemoryGatewayReadinessLost
+          expr: >-
+            kube_pod_status_ready{pod=~"sdkwork-api-memory-standalone-gateway(-[0-9a-z]+)*-[0-9a-z]{5}",condition="false"}
+            > 0
+          for: 5m
+          labels:
+            severity: warning
+            service: sdkwork-api-memory-standalone-gateway
+          annotations:
+            summary: SDKWork Memory gateway pods stopped reporting ready
+            description: >-
+              Gateway readiness (/readyz) has been failing for 5 minutes. The
+              readiness check combines IAM database readiness and the shared
+              Redis check (SDKWORK_MEMORY_WEB_REDIS_URL), so verify Redis
+              reachability and the IAM database first, then `kubectl describe
+              pod` for probe payloads. Traffic is drained from these pods while
+              not-ready.

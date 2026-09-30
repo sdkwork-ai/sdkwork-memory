@@ -759,7 +759,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "api-key",
         "x-sdkwork-audit-event": "memory.open.record.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over uuid ascending (default sort). Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "memories.create",
@@ -2932,7 +2933,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "api-key",
         "x-sdkwork-audit-event": "memory.open.candidate.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over uuid ascending (default sort). Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       }
     },
     "/mem/v3/api/memory/candidates/{candidateId}": {
@@ -3485,7 +3487,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "api-key",
         "x-sdkwork-audit-event": "memory.open.entity.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over uuid ascending (default sort). Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "entities.create",
@@ -4244,7 +4247,8 @@
         "x-sdkwork-data-scope": "owner",
         "x-sdkwork-auth-mode": "api-key",
         "x-sdkwork-audit-event": "memory.open.edge.list",
-        "x-sdkwork-idempotent": false
+        "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over uuid ascending (default sort). Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC."
       },
       "post": {
         "operationId": "edges.create",
@@ -5462,6 +5466,24 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "org_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Accepted and ignored (upstream org routing hint; this surface scopes every request by the API key's tenant)."
+            }
+          },
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Accepted and ignored (upstream project routing hint; this surface scopes every request by the API key's tenant)."
+            }
           }
         ],
         "responses": {
@@ -5563,7 +5585,7 @@
         "x-sdkwork-auth-mode": "api-key",
         "x-sdkwork-audit-event": "memory.open.record.deleted",
         "x-sdkwork-idempotent": false,
-        "x-sdkwork-rate-limit-tier": "openApiDefault",
+        "x-sdkwork-rate-limit-tier": "authCritical",
         "x-sdkwork-wire-protocol": "external",
         "x-sdkwork-external-protocol-id": "mem0-platform"
       }
@@ -6056,6 +6078,7 @@
         "x-sdkwork-auth-mode": "api-key",
         "x-sdkwork-audit-event": "memory.open.event.read",
         "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over a keyset-stable order. Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC.",
         "x-sdkwork-wire-protocol": "external",
         "x-sdkwork-external-protocol-id": "mem0-platform"
       }
@@ -6183,6 +6206,7 @@
         "x-sdkwork-auth-mode": "api-key",
         "x-sdkwork-audit-event": "memory.open.entity.list",
         "x-sdkwork-idempotent": false,
+        "description": "Lists in pagination mode `cursor` over a keyset-stable order. Default page size 20; maximum 200. Maximum practical volume class P1 (interactive CRUD and lists) per PERFORMANCE_SPEC.",
         "x-sdkwork-wire-protocol": "external",
         "x-sdkwork-external-protocol-id": "mem0-platform"
       }
@@ -8497,7 +8521,9 @@
         ],
         "properties": {
           "query": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 8192,
+            "description": "Natural-language query text. Requests past 8192 characters are rejected as invalid parameters."
           },
           "spaceIds": {
             "type": "array",
@@ -8575,7 +8601,8 @@
           "contextBudgetTokens": {
             "type": "integer",
             "format": "int32",
-            "minimum": 1
+            "minimum": 1,
+            "maximum": 100000
           },
           "showExpired": {
             "type": "boolean"
@@ -11262,9 +11289,7 @@
             "type": "string",
             "enum": [
               "subject",
-              "space",
-              "binding",
-              "memory"
+              "space"
             ]
           },
           "targetId": {
@@ -11424,6 +11449,18 @@
             "format": "int64",
             "pattern": "^[0-9]+$",
             "x-sdkwork-int64-string": true
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Opaque server-issued keyset cursor (pagination mode `cursor`, PAGINATION_SPEC section 3). Pass `data.pageInfo.nextCursor` from the previous page; omit for the first page. Client-constructed or forged cursors are rejected as invalid parameters."
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 20,
+            "description": "Page size for this cursor-mode listing: default 20, maximum 200. Page boundaries are stable keyset positions, not ordinal page numbers."
           }
         }
       },
@@ -12467,6 +12504,51 @@
           }
         }
       },
+      "MemoryUsageEntry": {
+        "type": "object",
+        "required": [
+          "day",
+          "metric",
+          "delta",
+          "updatedAt"
+        ],
+        "properties": {
+          "day": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "UTC calendar day (YYYY-MM-DD) the charge belongs to."
+          },
+          "metric": {
+            "type": "string"
+          },
+          "delta": {
+            "type": "integer",
+            "description": "Cumulative signed charge for the day (record.delete accumulates negative deltas)."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MemoryUsageList": {
+        "type": "object",
+        "required": [
+          "items",
+          "pageInfo"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemoryUsageEntry"
+            }
+          },
+          "pageInfo": {
+            "$ref": "#/components/schemas/PageInfo"
+          }
+        }
+      },
       "Mem0Message": {
         "type": "object",
         "required": [
@@ -13004,13 +13086,19 @@
             "type": [
               "integer",
               "null"
-            ]
+            ],
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Maximum hits requested. Values outside 1..100 are rejected as invalid parameters."
           },
           "threshold": {
             "type": [
               "number",
               "null"
-            ]
+            ],
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Minimum fused score for a hit, on the 0..1 confidence scale."
           },
           "explain": {
             "type": [

@@ -112,13 +112,42 @@ pub(crate) fn sql_placeholders(count: usize) -> String {
         .join(", ")
 }
 
-/// Embedded PostgreSQL compatibility bootstrap. The consolidated baseline folds every
-/// post-GA migration (each block carries a `-- source:` marker), so one entry covers
-/// the dialect; the initialization guard keys on this list's final entry.
-const POSTGRES_EMBEDDED_PHASE1_MIGRATIONS: &[(&str, &str)] = &[(
-    "baseline",
-    include_str!("../../../database/ddl/baseline/postgres/0001_memory_baseline.sql"),
-)];
+/// Embedded PostgreSQL compatibility bootstrap, applied in order. The
+/// consolidated baseline carries the full snapshot DDL; the `0001`.. entries
+/// replay the post-GA `database/migrations/postgres/` deltas so an embedded
+/// PG initialization converges to the same schema as SQLite. The
+/// initialization guard keys on this list's final entry, and the structural
+/// guard test asserts this list never trails the migrations directory.
+const POSTGRES_EMBEDDED_PHASE1_MIGRATIONS: &[(&str, &str)] = &[
+    (
+        "baseline",
+        include_str!("../../../database/ddl/baseline/postgres/0001_memory_baseline.sql"),
+    ),
+    (
+        "0001",
+        include_str!("../../../database/migrations/postgres/0001_organization_id_not_null.up.sql"),
+    ),
+    (
+        "0002",
+        include_str!(
+            "../../../database/migrations/postgres/0002_claim_order_and_keyset_indexes.up.sql"
+        ),
+    ),
+    (
+        "0003",
+        include_str!(
+            "../../../database/migrations/postgres/0003_hard_delete_cleanup_indexes.up.sql"
+        ),
+    ),
+    (
+        "0004",
+        include_str!("../../../database/migrations/postgres/0004_candidate_job_linkage.up.sql"),
+    ),
+    (
+        "0005",
+        include_str!("../../../database/migrations/postgres/0005_usage_daily.up.sql"),
+    ),
+];
 
 /// Embedded SQLite compatibility bootstrap, applied in order. Appending a migration
 /// here automatically advances the initialization guard, which derives its key from
@@ -212,6 +241,18 @@ const SQLITE_EMBEDDED_PHASE1_MIGRATIONS: &[(&str, &str)] = &[
         "0016",
         include_str!(
             "../../../tests/fixtures/database/sqlite/migrations/0016_hard_delete_cleanup_indexes.up.sql"
+        ),
+    ),
+    (
+        "0017",
+        include_str!(
+            "../../../tests/fixtures/database/sqlite/migrations/0017_candidate_job_linkage.up.sql"
+        ),
+    ),
+    (
+        "0018",
+        include_str!(
+            "../../../tests/fixtures/database/sqlite/migrations/0018_usage_daily.up.sql"
         ),
     ),
 ];
@@ -370,7 +411,16 @@ impl NativeSqlMemoryStore {
         id_generator: SnowflakeIdGenerator,
     ) -> Result<Self, NativeSqlStoreError> {
         let config = crate::pool_backend::normalize_memory_database_config(pool.config().clone());
-        Self::open_pool_with_id_generator(&config, false, id_generator).await
+        let store = Self::open_pool_with_id_generator(&config, false, id_generator).await?;
+        // Adopted pools skip the embedded migration runner (apply_migration =
+        // false), so a SQLite database initialized outside this plugin would
+        // otherwise fail only at the first quota-admitted space creation. The
+        // serialization row is verified once at startup instead; PostgreSQL
+        // admission uses an advisory lock and the probe skips that dialect.
+        store
+            .ensure_space_quota_serialization_row_installed()
+            .await?;
+        Ok(store)
     }
 
     pub async fn install_sqlite_phase1_schema(pool: &AnyPool) -> Result<(), NativeSqlStoreError> {
@@ -487,6 +537,22 @@ impl NativeSqlMemoryStore {
                 if statement.is_empty() {
                     continue;
                 }
+                // The embedded bootstrap wraps every entry in one outer
+                // transaction. Postgres delta files carry their own
+                // BEGIN/COMMIT for the root lifecycle runner; inside this
+                // wrapper those markers are skipped, otherwise a COMMIT would
+                // close the wrapper mid-list.
+                let executable_lines: Vec<&str> = statement
+                    .lines()
+                    .map(str::trim)
+                    .filter(|line| !line.is_empty() && !line.starts_with("--"))
+                    .collect();
+                if executable_lines.len() == 1
+                    && (executable_lines[0].eq_ignore_ascii_case("begin")
+                        || executable_lines[0].eq_ignore_ascii_case("commit"))
+                {
+                    continue;
+                }
                 sqlx::query(statement).execute(&mut *transaction).await?;
             }
 
@@ -599,6 +665,254 @@ impl NativeSqlMemoryStore {
         }
 
         Ok(())
+    }
+
+    /// Append one accepted OpenAPI event and its governance audit row in a
+    /// single transaction (`ai_event` INSERT + `ai_audit_log` INSERT commit
+    /// together, explicit rollback on any failure). PRD requires every
+    /// accepted request to carry an audit record, so the two statements must
+    /// not be separable by a crash between them. Idempotent replays (same
+    /// event id and payload) write only the new request's audit line, and a
+    /// conflicting replay fails with [`NativeSqlStoreError::EventConflict`]
+    /// without leaving any audit row behind.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn append_open_api_event_with_audit(
+        &self,
+        scope: &MemoryScopeContext,
+        event_id: &str,
+        event_type: &str,
+        source_type: &str,
+        event_time: &str,
+        payload: &Value,
+        sensitivity_level: &str,
+        audit_id: &str,
+        audit_action: &str,
+        audit_resource_type: &str,
+        audit_resource_id: &str,
+        audit_result: &str,
+    ) -> Result<(), NativeSqlStoreError> {
+        self.ensure_space(scope).await?;
+        let payload_json = payload.to_string();
+        let payload_hash = stable_hash(&payload_json);
+
+        if let Some(existing) = self
+            .retrieve_event_idempotency_state(scope, event_id)
+            .await?
+        {
+            if existing.space_id == scope.space_id
+                && existing.payload_json == payload_json
+                && existing.payload_hash == payload_hash
+            {
+                // The event row already exists from an earlier accepted
+                // call: only this request's audit line is still owed.
+                return self
+                    .append_open_api_event_audit_atomic(
+                        scope,
+                        audit_id,
+                        audit_action,
+                        audit_resource_type,
+                        audit_resource_id,
+                        audit_result,
+                    )
+                    .await;
+            }
+
+            return Err(NativeSqlStoreError::EventConflict {
+                tenant_id: scope.tenant_id,
+                event_id: event_id.to_string(),
+            });
+        }
+
+        let (actor_type, actor_id) = match scope.user_id {
+            Some(user_id) => ("user", Some(user_id.to_string())),
+            None => ("system", None),
+        };
+        let mut tx = self.begin_tx().await?;
+        let insert_result = sqlx::query(
+            r#"
+            INSERT INTO ai_event (
+              id,
+              uuid,
+              tenant_id,
+              space_id,
+              user_id,
+              actor_type,
+              actor_id,
+              event_type,
+              source_type,
+              event_time,
+              payload_json,
+              payload_hash,
+              sensitivity_level,
+              ingestion_status,
+              created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'received', ?)
+            "#,
+        )
+        .bind(self.next_row_id()?)
+        .bind(event_id)
+        .bind(scope.tenant_id)
+        .bind(scope.space_id)
+        .bind(scope.user_id)
+        .bind(actor_type)
+        .bind(actor_id.as_deref())
+        .bind(event_type)
+        .bind(source_type)
+        .bind(event_time)
+        .bind(payload_json.as_str())
+        .bind(payload_hash.as_str())
+        .bind(sensitivity_level)
+        .bind(now_text())
+        .execute(&mut *tx)
+        .await;
+        // A concurrent replica can win the insert between the pre-check and
+        // this statement. The failed statement aborts the transaction (on
+        // PostgreSQL outright), so roll back before re-deriving the
+        // idempotent verdict from the stored row instead of surfacing a raw
+        // constraint error.
+        if let Err(error) = insert_result {
+            tx.rollback().await.map_err(NativeSqlStoreError::from)?;
+            if !is_unique_violation(&error) {
+                return Err(error.into());
+            }
+            match self.retrieve_event_idempotency_state(scope, event_id).await? {
+                Some(existing)
+                    if existing.space_id == scope.space_id
+                        && existing.payload_json == payload_json
+                        && existing.payload_hash == payload_hash =>
+                {
+                    return self
+                        .append_open_api_event_audit_atomic(
+                            scope,
+                            audit_id,
+                            audit_action,
+                            audit_resource_type,
+                            audit_resource_id,
+                            audit_result,
+                        )
+                        .await;
+                }
+                _ => {
+                    return Err(NativeSqlStoreError::EventConflict {
+                        tenant_id: scope.tenant_id,
+                        event_id: event_id.to_string(),
+                    });
+                }
+            }
+        }
+        if let Err(error) = self
+            .append_open_api_event_audit_on_tx(
+                &mut tx,
+                scope,
+                audit_id,
+                audit_action,
+                audit_resource_type,
+                audit_resource_id,
+                audit_result,
+            )
+            .await
+        {
+            // Explicit (not Drop-driven) rollback: the event row must never
+            // outlive its failed audit line.
+            tx.rollback().await.map_err(NativeSqlStoreError::from)?;
+            return Err(error);
+        }
+        // Events bypass the mutation journal (they are evidence ingest, not a
+        // canonical mutation), so the usage fact is charged here, inside the
+        // same transaction as the event itself.
+        self.bump_usage_daily_on_tx(
+            &mut tx,
+            scope.tenant_id,
+            crate::commercial_store::USAGE_METRIC_EVENT_CREATE,
+            1,
+            &crate::commercial_store::usage_day_text(),
+        )
+        .await?;
+        tx.commit().await.map_err(NativeSqlStoreError::from)
+    }
+
+    /// Append the audit row of one accepted OpenAPI event within the
+    /// caller's transaction (see `append_open_api_event_with_audit`).
+    #[allow(clippy::too_many_arguments)]
+    async fn append_open_api_event_audit_on_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Any>,
+        scope: &MemoryScopeContext,
+        audit_id: &str,
+        audit_action: &str,
+        audit_resource_type: &str,
+        audit_resource_id: &str,
+        audit_result: &str,
+    ) -> Result<(), NativeSqlStoreError> {
+        let (actor_type, actor_id) = match scope.user_id {
+            Some(user_id) => ("user", Some(user_id.to_string())),
+            None => ("system", None),
+        };
+        sqlx::query(
+            r#"
+            INSERT INTO ai_audit_log (
+              id,
+              uuid,
+              tenant_id,
+              actor_type,
+              actor_id,
+              action,
+              resource_type,
+              resource_id,
+              result,
+              created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(self.next_row_id()?)
+        .bind(audit_id)
+        .bind(scope.tenant_id)
+        .bind(actor_type)
+        .bind(actor_id.as_deref())
+        .bind(audit_action)
+        .bind(audit_resource_type)
+        .bind(audit_resource_id)
+        .bind(audit_result)
+        .bind(now_text())
+        .execute(&mut **tx)
+        .await?;
+        Ok(())
+    }
+
+    /// Append the audit row of one accepted OpenAPI event in its own short
+    /// transaction. Used on the idempotent-replay paths where the event row
+    /// already exists and only the audit line for the replayed request is
+    /// owed (the same observable behavior the previous two-statement service
+    /// sequence had).
+    #[allow(clippy::too_many_arguments)]
+    async fn append_open_api_event_audit_atomic(
+        &self,
+        scope: &MemoryScopeContext,
+        audit_id: &str,
+        audit_action: &str,
+        audit_resource_type: &str,
+        audit_resource_id: &str,
+        audit_result: &str,
+    ) -> Result<(), NativeSqlStoreError> {
+        let mut tx = self.begin_tx().await?;
+        if let Err(error) = self
+            .append_open_api_event_audit_on_tx(
+                &mut tx,
+                scope,
+                audit_id,
+                audit_action,
+                audit_resource_type,
+                audit_resource_id,
+                audit_result,
+            )
+            .await
+        {
+            tx.rollback().await.map_err(NativeSqlStoreError::from)?;
+            return Err(error);
+        }
+        tx.commit().await.map_err(NativeSqlStoreError::from)
     }
 
     pub async fn retrieve_open_api_event_for_tenant(
@@ -1684,54 +1998,29 @@ impl NativeSqlMemoryStore {
         content: &str,
     ) -> Result<(), NativeSqlStoreError> {
         self.ensure_space(scope).await?;
-        sqlx::query(
-            r#"
-            INSERT INTO ai_record (
-              id,
-              uuid,
-              tenant_id,
-              space_id,
-              scope,
-              memory_type,
-              subject,
-              predicate,
-              object_text,
-              canonical_text,
-              confidence,
-              evidence_count,
-              contradiction_count,
-              importance_score,
-              recency_score,
-              status,
-              sensitivity_level,
-              created_at,
-              updated_at
-            )
-            VALUES (?, ?, ?, ?, 'user', 'semantic', ?, 'is', ?, ?, 1.0, 1, 0, 0.5, 0.5, 'active', 'internal', ?, ?)
-            "#,
-        )
-        .bind(self.next_row_id()?)
-        .bind(memory_id)
-        .bind(scope.tenant_id)
-        .bind(scope.space_id)
-        .bind(subject)
-        .bind(content)
-        .bind(content)
-        .bind(now_text())
-        .bind(now_text())
-        .execute(&self.pool)
-        .await?;
-
-        self.sync_record_fts_entry(
+        // The record row and its SQLite full-text index entry commit or roll
+        // back together, exactly like the open-api create path: a partial
+        // commit would leave a row that keyword search cannot see (or an fts
+        // entry pointing at a row that does not exist).
+        let mut tx = self.begin_tx().await?;
+        create_record_open_api_on_tx(
+            &mut *tx,
+            self.dialect(),
             scope,
+            self.next_row_id()?,
             memory_id,
-            content,
-            content,
+            "user",
+            "semantic",
             Some(subject),
             Some("is"),
+            content,
+            content,
+            "internal",
+            None,
+            None,
         )
         .await?;
-
+        tx.commit().await.map_err(NativeSqlStoreError::from)?;
         Ok(())
     }
 
@@ -3616,37 +3905,33 @@ impl NativeSqlMemoryStore {
 
     /// Marks an event failed under the caller's live lease (see the fencing
     /// note on [`Self::mark_outbox_published`]).
+    ///
+    /// Same retry semantics as [`Self::record_outbox_delivery_failure`]: the
+    /// failure charges `retry_count`, earlier attempts return the event to
+    /// `'pending'` with an exponential-backoff `next_attempt_at`, and only the
+    /// attempt that reaches `max_retries` lands terminally `'failed'`. The
+    /// lease triple plus expiry is still compared inside the transaction, so a
+    /// fenced worker updates nothing.
     pub async fn mark_outbox_failed(
         &self,
         scope: &MemoryScopeContext,
         outbox_id: &str,
         lease_owner: &str,
         lease_token: &str,
+        max_retries: u32,
     ) -> Result<Option<NativeSqlMemoryOutboxEvent>, NativeSqlStoreError> {
-        let timestamp = now_text();
-        let updated = sqlx::query(
-            r#"
-            UPDATE ai_outbox_event
-            SET publish_state = 'failed',
-                retry_count = retry_count + 1,
-                updated_at = ?
-            WHERE tenant_id = ? AND uuid = ? AND publish_state = 'processing'
-              AND lease_owner = ? AND lease_token = ? AND lease_expires_at > ?
-            "#,
-        )
-        .bind(&timestamp)
-        .bind(scope.tenant_id)
-        .bind(outbox_id)
-        .bind(lease_owner)
-        .bind(lease_token)
-        .bind(&timestamp)
-        .execute(&self.pool)
-        .await?;
-
-        if updated.rows_affected() == 0 {
+        let updated = self
+            .fail_outbox_delivery(
+                scope.tenant_id,
+                outbox_id,
+                lease_owner,
+                lease_token,
+                max_retries,
+            )
+            .await?;
+        if !updated {
             return Ok(None);
         }
-
         self.retrieve_outbox_event(scope, outbox_id).await
     }
 
@@ -3706,6 +3991,37 @@ impl NativeSqlMemoryStore {
         lease_token: &str,
         max_retries: u32,
     ) -> Result<Option<NativeSqlMemoryOutboxEvent>, NativeSqlStoreError> {
+        let updated = self
+            .fail_outbox_delivery(tenant_id, outbox_id, lease_owner, lease_token, max_retries)
+            .await?;
+        if !updated {
+            return Ok(None);
+        }
+        self.retrieve_outbox_event(
+            &MemoryScopeContext {
+                tenant_id,
+                space_id: 0,
+                organization_id: None,
+                user_id: None,
+            },
+            outbox_id,
+        )
+        .await
+    }
+
+    /// Shared body of [`Self::record_outbox_delivery_failure`] and
+    /// [`Self::mark_outbox_failed`]: charge the attempt inside one fenced
+    /// transaction, schedule an exponential-backoff retry while attempts
+    /// remain, and land terminally `'failed'` at the ceiling. Returns whether
+    /// the caller still owned the row (`false` = fenced, nothing written).
+    async fn fail_outbox_delivery(
+        &self,
+        tenant_id: i64,
+        outbox_id: &str,
+        lease_owner: &str,
+        lease_token: &str,
+        max_retries: u32,
+    ) -> Result<bool, NativeSqlStoreError> {
         let timestamp = now_text();
         let mut transaction = self.pool.begin().await?;
         let retry_query = if self.dialect == MemorySqlDialect::Postgres {
@@ -3732,7 +4048,7 @@ impl NativeSqlMemoryStore {
             .await?;
         let Some(current_retry) = current_retry else {
             transaction.rollback().await?;
-            return Ok(None);
+            return Ok(false);
         };
         let next_retry = current_retry.saturating_add(1);
         let failed = next_retry >= i64::from(max_retries.max(1));
@@ -3764,20 +4080,10 @@ impl NativeSqlMemoryStore {
         .await?;
         if updated.rows_affected() == 0 {
             transaction.rollback().await?;
-            return Ok(None);
+            return Ok(false);
         }
         transaction.commit().await?;
-
-        self.retrieve_outbox_event(
-            &MemoryScopeContext {
-                tenant_id,
-                space_id: 0,
-                organization_id: None,
-                user_id: None,
-            },
-            outbox_id,
-        )
-        .await
+        Ok(true)
     }
 
     /// Requeues stale `'processing'` outbox events whose lease expired. The
@@ -3919,6 +4225,33 @@ impl NativeSqlMemoryStore {
         Ok(updated.rows_affected() == 1)
     }
 
+    /// Removes the pending candidates a previous extraction attempt created
+    /// under one learning job, so a requeued run re-creates them instead of
+    /// duplicating them. Only `decision_state = 'pending'` rows are touched:
+    /// reviewed candidates are never reachable through this path. The
+    /// `learning_job_uuid` partial index serves the lookup; a job's candidate
+    /// count is bounded by the extraction input caps, so one statement is
+    /// bounded work.
+    pub async fn delete_pending_candidates_for_learning_job(
+        &self,
+        tenant_id: i64,
+        learning_job_uuid: &str,
+    ) -> Result<u64, NativeSqlStoreError> {
+        let result = sqlx::query(
+            r#"
+            DELETE FROM ai_candidate
+            WHERE tenant_id = ?
+              AND learning_job_uuid = ?
+              AND decision_state = 'pending'
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(learning_job_uuid)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+
     pub async fn create_candidate(
         &self,
         command: &CreateMemoryCandidateCommand,
@@ -3938,11 +4271,12 @@ impl NativeSqlMemoryStore {
               proposed_payload_json,
               evidence_json,
               confidence,
+              learning_job_uuid,
               decision_state,
               created_at,
               updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
             "#,
         )
         .bind(self.next_row_id()?)
@@ -3956,6 +4290,7 @@ impl NativeSqlMemoryStore {
         .bind(&command.proposed_payload_json)
         .bind(&command.evidence_json)
         .bind(command.confidence)
+        .bind(command.learning_job_uuid.as_deref())
         .bind(now_text())
         .bind(now_text())
         .execute(&self.pool)
@@ -4343,6 +4678,24 @@ impl NativeSqlMemoryStore {
 
         transaction.commit().await?;
 
+        // Usage metering is best-effort and shares the trace-append semantics:
+        // the retrieval already succeeded, so a metering failure degrades the
+        // usage facts (debug log only) and must never fail the retrieval.
+        if let Err(error) = self
+            .bump_usage_daily(
+                command.scope.tenant_id,
+                crate::commercial_store::USAGE_METRIC_RETRIEVAL_COUNT,
+                1,
+            )
+            .await
+        {
+            tracing::debug!(
+                tenant_id = command.scope.tenant_id,
+                metering_error = %error,
+                "retrieval usage metering failed; retrieval response is unaffected"
+            );
+        }
+
         self.retrieve_retrieval_trace(&command.scope, &command.trace_id)
             .await?
             .ok_or_else(|| NativeSqlStoreError::InvariantViolation {
@@ -4437,6 +4790,7 @@ impl NativeSqlMemoryStore {
             SELECT
               id,
               uuid,
+              space_id,
               actor_id,
               query_text,
               query_hash,
@@ -4444,7 +4798,8 @@ impl NativeSqlMemoryStore {
               latency_ms,
               result_count,
               degraded,
-              metadata_json
+              metadata_json,
+              created_at
             FROM ai_retrieval_trace
             WHERE tenant_id = ? AND space_id = ?
             ORDER BY created_at DESC, id DESC
@@ -4652,6 +5007,8 @@ impl NativeSqlMemoryStore {
             metadata_json: row.get("metadata_json"),
             hits,
             context_pack,
+            created_at: row.get("created_at"),
+            space_id: row.try_get("space_id").ok(),
         })
     }
 
@@ -4750,9 +5107,13 @@ impl NativeSqlMemoryStore {
                 FROM ai_retrieval_trace
                 WHERE tenant_id = ?
                   AND space_id = ?
-                  AND id < COALESCE(
-                    (SELECT id FROM ai_retrieval_trace t2 WHERE t2.tenant_id = ? AND t2.uuid = ? LIMIT 1),
-                    9223372036854775807
+                  AND (
+                    ? = ''
+                    -- a purged cursor row ends the window (fail-closed)
+                    OR id < COALESCE(
+                      (SELECT id FROM ai_retrieval_trace t2 WHERE t2.tenant_id = ? AND t2.uuid = ? LIMIT 1),
+                      0
+                    )
                   )
                 ORDER BY id DESC
                 LIMIT ?
@@ -4760,6 +5121,7 @@ impl NativeSqlMemoryStore {
             )
             .bind(tenant_id)
             .bind(space_id)
+            .bind(cursor)
             .bind(tenant_id)
             .bind(cursor)
             .bind(page_size + 1)
@@ -4771,15 +5133,20 @@ impl NativeSqlMemoryStore {
                 SELECT uuid, space_id, query_text, query_hash, result_count, degraded, created_at
                 FROM ai_retrieval_trace
                 WHERE tenant_id = ?
-                  AND id < COALESCE(
-                    (SELECT id FROM ai_retrieval_trace t2 WHERE t2.tenant_id = ? AND t2.uuid = ? LIMIT 1),
-                    9223372036854775807
+                  AND (
+                    ? = ''
+                    -- a purged cursor row ends the window (fail-closed)
+                    OR id < COALESCE(
+                      (SELECT id FROM ai_retrieval_trace t2 WHERE t2.tenant_id = ? AND t2.uuid = ? LIMIT 1),
+                      0
+                    )
                   )
                 ORDER BY id DESC
                 LIMIT ?
                 "#,
             )
             .bind(tenant_id)
+            .bind(cursor)
             .bind(tenant_id)
             .bind(cursor)
             .bind(page_size + 1)
@@ -4935,6 +5302,16 @@ impl NativeSqlMemoryStore {
     ) -> Result<Vec<NativeSqlMemorySpaceRow>, NativeSqlStoreError> {
         let page_size = clamp_list_page_size(page_size);
         let rows = if let Some(actor_id) = actor_id {
+            // The actor sees its own spaces plus spaces a memory binding grants
+            // it. The binding predicate uses the same gates as the governance
+            // evaluation: only access/share/ownership kinds authorize (the
+            // reference/provision kinds never do), the binding window must be
+            // current at this instant (fixed-width timestamps compare
+            // lexicographically), an active source subject matching the
+            // actor's subject_ref is bound to the space, and neither side is
+            // soft-deleted. The keyset predicate (`id > ?`) and LIMIT stay
+            // outside the OR so shared spaces page in the same ordered window
+            // as owned ones.
             sqlx::query(
                 r#"
                 SELECT id, uuid, tenant_id, owner_subject_type, owner_subject_id, space_type,
@@ -4943,8 +5320,26 @@ impl NativeSqlMemoryStore {
                 WHERE tenant_id = ?
                   AND id > ?
                   AND lifecycle_status <> 'deleted'
-                  AND owner_subject_type = 'user'
-                  AND owner_subject_id = ?
+                  AND (
+                    (owner_subject_type = 'user' AND owner_subject_id = ?)
+                    OR EXISTS (
+                      SELECT 1
+                      FROM ai_memory_binding b
+                      INNER JOIN ai_subject s
+                        ON s.tenant_id = b.tenant_id
+                       AND s.id = b.source_subject_id
+                       AND s.subject_ref = ?
+                       AND s.status = 'active'
+                       AND s.deleted_at IS NULL
+                      WHERE b.tenant_id = ai_space.tenant_id
+                        AND b.target_space_id = ai_space.id
+                        AND b.status = 'active'
+                        AND b.deleted_at IS NULL
+                        AND b.binding_kind IN ('access', 'share', 'ownership')
+                        AND (b.valid_from IS NULL OR b.valid_from <= ?)
+                        AND (b.valid_to IS NULL OR b.valid_to >= ?)
+                    )
+                  )
                 ORDER BY id ASC
                 LIMIT ?
                 "#,
@@ -4952,6 +5347,9 @@ impl NativeSqlMemoryStore {
             .bind(tenant_id)
             .bind(cursor_space_id)
             .bind(actor_id)
+            .bind(actor_id)
+            .bind(now_text())
+            .bind(now_text())
             .bind(page_size + 1)
             .fetch_all(&self.pool)
             .await?
@@ -5555,9 +5953,13 @@ impl NativeSqlMemoryStore {
                 OR source.source_role LIKE ? ESCAPE '\'
                 OR event.uuid LIKE ? ESCAPE '\'
               )
-              AND source.id < COALESCE(
-                (SELECT s2.id FROM ai_record_source s2 WHERE s2.tenant_id = ? AND s2.uuid = ? LIMIT 1),
-                9223372036854775807
+              AND (
+                ? = ''
+                -- a purged cursor row ends the window (fail-closed)
+                OR source.id < COALESCE(
+                  (SELECT s2.id FROM ai_record_source s2 WHERE s2.tenant_id = ? AND s2.uuid = ? LIMIT 1),
+                  0
+                )
               )
             ORDER BY source.id DESC
             LIMIT ?
@@ -5568,6 +5970,7 @@ impl NativeSqlMemoryStore {
         .bind(like_pattern.as_deref())
         .bind(like_pattern.as_deref())
         .bind(like_pattern.as_deref())
+        .bind(cursor)
         .bind(tenant_id)
         .bind(cursor)
         .bind(page_size + 1)
@@ -5598,7 +6001,8 @@ impl NativeSqlMemoryStore {
         let cursor = cursor.unwrap_or("");
         let rows = sqlx::query(
             r#"
-            SELECT uuid, actor_type, actor_id, action, resource_type, resource_id, result, created_at
+            SELECT uuid, actor_type, actor_id, action, resource_type, resource_id, result,
+                   metadata_json, trace_id, reason, created_at
             FROM ai_audit_log
             WHERE tenant_id = ?
               AND (? IS NULL OR action = ?)
@@ -5626,6 +6030,9 @@ impl NativeSqlMemoryStore {
                 resource_id: row.get("resource_id"),
                 result: row.get("result"),
                 created_at: row.get("created_at"),
+                metadata_json: row.get("metadata_json"),
+                trace_id: row.get("trace_id"),
+                reason: row.get("reason"),
             })
             .collect())
     }
@@ -6085,6 +6492,7 @@ impl MemoryOutboxStorePort for NativeSqlMemoryStore {
                 &command.outbox_id,
                 &command.lease_owner,
                 &command.lease_token,
+                command.max_retries,
             )
             .await
             .map_err(|err| port_error("MemoryOutboxStorePort", err))?;
@@ -6573,6 +6981,12 @@ pub struct NativeSqlAuditLogRow {
     pub resource_id: String,
     pub result: String,
     pub created_at: String,
+    /// Free-form audit metadata (`ai_audit_log.metadata_json`), when recorded.
+    pub metadata_json: Option<String>,
+    /// Correlation trace id (`ai_audit_log.trace_id`), when recorded.
+    pub trace_id: Option<String>,
+    /// Human-readable failure or decision reason (`ai_audit_log.reason`).
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -6887,6 +7301,7 @@ fn retrieval_trace_select_sql() -> &'static str {
     SELECT
       id,
       uuid,
+      space_id,
       actor_id,
       query_text,
       query_hash,
@@ -6894,7 +7309,8 @@ fn retrieval_trace_select_sql() -> &'static str {
       latency_ms,
       result_count,
       degraded,
-      metadata_json
+      metadata_json,
+      created_at
     FROM ai_retrieval_trace
     WHERE tenant_id = ? AND space_id = ? AND uuid = ?
     "#
@@ -7105,6 +7521,7 @@ pub(crate) fn split_sql_statements(sql: &str) -> Vec<String> {
 #[cfg(test)]
 mod embedded_migration_guard_tests {
     use super::*;
+    use std::collections::BTreeSet;
 
     // The initialization guard derives its key from the final list entry; these tests
     // pin the structural invariants so a hand-pinned guard key can never return.
@@ -7115,7 +7532,7 @@ mod embedded_migration_guard_tests {
             .expect("sqlite embedded migration list is never empty");
         // Deliberately pinned: adding a fixture migration updates the list and
         // this expectation together, so the guard can never silently trail.
-        assert_eq!(*last_version, "0016");
+        assert_eq!(*last_version, "0018");
         assert!(!last_sql.is_empty());
     }
 
@@ -7124,7 +7541,7 @@ mod embedded_migration_guard_tests {
         let (last_version, last_sql) = POSTGRES_EMBEDDED_PHASE1_MIGRATIONS
             .last()
             .expect("postgres embedded migration list is never empty");
-        assert_eq!(*last_version, "baseline");
+        assert_eq!(*last_version, "0005");
         assert!(!last_sql.is_empty());
     }
 
@@ -7141,6 +7558,70 @@ mod embedded_migration_guard_tests {
             }
             previous = Some(version);
         }
+    }
+
+    /// Extracts the zero-padded version prefix of a `<version>_<name>.up.sql` file.
+    fn migration_version_of(file_name: &str) -> Option<&str> {
+        file_name.strip_suffix(".up.sql").map(|stem| &stem[..4])
+    }
+
+    /// Structural guard for the SQLite bootstrap: the embedded list must cover
+    /// exactly the fixture migrations on disk — a new fixture without an
+    /// embedded entry (or vice versa) fails here instead of leaving test and
+    /// production databases on divergent schemas.
+    #[test]
+    fn sqlite_embedded_list_covers_every_fixture_migration_on_disk() {
+        let migrations_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/database/sqlite/migrations");
+        let on_disk: BTreeSet<String> = std::fs::read_dir(&migrations_dir)
+            .unwrap_or_else(|error| {
+                panic!("sqlite fixture migrations directory must be readable at {migrations_dir:?}: {error}")
+            })
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.ends_with(".up.sql"))
+            .filter_map(|name| migration_version_of(&name).map(str::to_string))
+            .collect();
+        let embedded: BTreeSet<String> = SQLITE_EMBEDDED_PHASE1_MIGRATIONS
+            .iter()
+            .map(|(version, _)| version.to_string())
+            .collect();
+        assert_eq!(
+            embedded, on_disk,
+            "sqlite embedded bootstrap must cover exactly the fixture migrations on disk"
+        );
+    }
+
+    /// Same structural guard for the PostgreSQL bootstrap: every post-GA delta
+    /// in `database/migrations/postgres/` must be embedded (the `baseline`
+    /// snapshot entry is exempt from the directory comparison but must stay
+    /// first).
+    #[test]
+    fn postgres_embedded_list_covers_every_delta_migration_on_disk() {
+        let migrations_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../database/migrations/postgres");
+        let on_disk: BTreeSet<String> = std::fs::read_dir(&migrations_dir)
+            .unwrap_or_else(|error| {
+                panic!("postgres migrations directory must be readable at {migrations_dir:?}: {error}")
+            })
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.ends_with(".up.sql"))
+            .filter_map(|name| migration_version_of(&name).map(str::to_string))
+            .collect();
+        let embedded: BTreeSet<String> = POSTGRES_EMBEDDED_PHASE1_MIGRATIONS
+            .iter()
+            .filter(|(version, _)| *version != "baseline")
+            .map(|(version, _)| version.to_string())
+            .collect();
+        assert_eq!(
+            embedded, on_disk,
+            "postgres embedded bootstrap must cover exactly the delta migrations on disk"
+        );
+        assert_eq!(
+            POSTGRES_EMBEDDED_PHASE1_MIGRATIONS[0].0, "baseline",
+            "the consolidated baseline snapshot must stay the first embedded entry"
+        );
     }
 }
 

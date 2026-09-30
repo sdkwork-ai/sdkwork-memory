@@ -503,6 +503,131 @@ async fn mem0_wire_refuses_untranslatable_parameters_by_name() {
             StatusCode::NOT_IMPLEMENTED,
             "filtered delete_all",
         ),
+        // `metadata` narrows the deletion just as much as a `filters` dict, so
+        // it gets the same named refusal instead of being dropped.
+        (
+            "DELETE",
+            "/v1/memories/?metadata=%7B%27topic%27%3A+%27batch%27%7D".to_owned(),
+            None,
+            StatusCode::NOT_IMPLEMENTED,
+            "filtered delete_all",
+        ),
+        // --- the add surface's remaining upstream switches -------------------
+        (
+            "POST",
+            "/v3/memories/add/".to_owned(),
+            Some(json!({
+                "messages": [{ "role": "user", "content": "Pinned memory" }],
+                "immutable": true
+            })),
+            StatusCode::NOT_IMPLEMENTED,
+            "immutable",
+        ),
+        (
+            "POST",
+            "/v3/memories/add/".to_owned(),
+            Some(json!({
+                "messages": [{ "role": "user", "content": "Pinned memory" }],
+                "includes": ["names"]
+            })),
+            StatusCode::NOT_IMPLEMENTED,
+            "includes",
+        ),
+        (
+            "POST",
+            "/v3/memories/add/".to_owned(),
+            Some(json!({
+                "messages": [{ "role": "user", "content": "Pinned memory" }],
+                "excludes": ["small talk"]
+            })),
+            StatusCode::NOT_IMPLEMENTED,
+            "excludes",
+        ),
+        (
+            "POST",
+            "/v3/memories/add/".to_owned(),
+            Some(json!({
+                "messages": [{ "role": "user", "content": "Pinned memory" }],
+                "enable_graph": true
+            })),
+            StatusCode::NOT_IMPLEMENTED,
+            "enable_graph",
+        ),
+        (
+            "POST",
+            "/v3/memories/add/".to_owned(),
+            Some(json!({
+                "messages": [{ "role": "user", "content": "Pinned memory" }],
+                "output_format": "v1.1"
+            })),
+            StatusCode::NOT_IMPLEMENTED,
+            "output_format",
+        ),
+        (
+            "POST",
+            "/v3/memories/add/".to_owned(),
+            Some(json!({
+                "messages": [{ "role": "user", "content": "Pinned memory" }],
+                "prompt_profile_id": "profile-1"
+            })),
+            StatusCode::NOT_IMPLEMENTED,
+            "prompt_profile_id",
+        ),
+        (
+            "POST",
+            "/v3/memories/add/".to_owned(),
+            Some(json!({
+                "messages": [{ "role": "user", "content": "Pinned memory" }],
+                "temporal_reasoning": true
+            })),
+            StatusCode::NOT_IMPLEMENTED,
+            "temporal_reasoning",
+        ),
+        (
+            "POST",
+            "/v3/memories/add/".to_owned(),
+            Some(json!({
+                "messages": [{ "role": "user", "content": "Pinned memory" }],
+                "timezone": "UTC"
+            })),
+            StatusCode::NOT_IMPLEMENTED,
+            "timezone",
+        ),
+        (
+            "POST",
+            "/v3/memories/add/".to_owned(),
+            Some(json!({
+                "messages": [{ "role": "user", "content": "Pinned memory" }],
+                "observation_datetime": "2026-01-01T00:00:00Z"
+            })),
+            StatusCode::NOT_IMPLEMENTED,
+            "observation_datetime",
+        ),
+        (
+            "POST",
+            "/v3/memories/add/".to_owned(),
+            Some(json!({
+                "messages": [{ "role": "user", "content": "Pinned memory" }],
+                "observation_date": "2026-01-01"
+            })),
+            StatusCode::NOT_IMPLEMENTED,
+            "observation_date",
+        ),
+        // --- the listing's projection and keyword narrowings -----------------
+        (
+            "POST",
+            "/v3/memories/".to_owned(),
+            Some(json!({ "fields": ["id", "memory"] })),
+            StatusCode::NOT_IMPLEMENTED,
+            "fields",
+        ),
+        (
+            "POST",
+            "/v3/memories/".to_owned(),
+            Some(json!({ "keywords": ["pinned"] })),
+            StatusCode::NOT_IMPLEMENTED,
+            "keywords",
+        ),
     ];
 
     for (method, uri, body, status, expected) in cases {
@@ -519,6 +644,109 @@ async fn mem0_wire_refuses_untranslatable_parameters_by_name() {
             response.detail()
         );
     }
+}
+
+/// `GET /v1/memories/{memory_id}/history/` refuses a journal it can only serve
+/// as a prefix.
+///
+/// The compatibility history is a single bounded page — the platform's maximum
+/// list page size (200) — and a journal that fills it means the page could be
+/// a prefix rather than the log. mem0's `history` is defined as the memory's
+/// *whole* history, so the endpoint refuses by name and points at the canonical
+/// events API, exactly like a truncated entity listing, instead of answering
+/// with a subset that is indistinguishable from a complete one.
+#[tokio::test]
+async fn mem0_wire_refuses_a_truncated_history_instead_of_serving_a_prefix() {
+    let _env = lock_integration_test_env().await;
+    let app = build_app().await;
+
+    let add = send(
+        &app,
+        "POST",
+        "/v3/memories/add/",
+        Some(json!({
+            "messages": [{ "role": "user", "content": "History beyond one page" }],
+            "user_id": "alice"
+        })),
+        true,
+    )
+    .await;
+    assert_eq!(add.status, StatusCode::OK, "add: {:?}", add.body);
+    let memory_id = add.item()["id"].as_str().expect("id").to_owned();
+
+    // The creation is journal entry one and each accepted update adds one
+    // more; 199 updates bring the journal to the 200-entry history bound, at
+    // which point the read cannot look past a full page and must refuse.
+    for index in 0..199 {
+        let updated = send(
+            &app,
+            "PUT",
+            &format!("/v1/memories/{memory_id}/"),
+            Some(json!({ "text": format!("Rewrite {index}") })),
+            true,
+        )
+        .await;
+        assert_eq!(
+            updated.status,
+            StatusCode::OK,
+            "update {index}: {:?}",
+            updated.body
+        );
+    }
+
+    let history = send(
+        &app,
+        "GET",
+        &format!("/v1/memories/{memory_id}/history/"),
+        None,
+        true,
+    )
+    .await;
+    assert_eq!(
+        history.status,
+        StatusCode::NOT_IMPLEMENTED,
+        "history: {:?}",
+        history.body
+    );
+    history.assert_json_media_type("truncated history");
+    let detail = history.detail();
+    assert!(detail.contains("history"), "{detail}");
+    assert!(detail.contains("whole event log"), "{detail}");
+    assert!(
+        detail.contains("/mem/v3/api/memory/events"),
+        "the refusal must point at the canonical events API: {detail}"
+    );
+
+    // A journal under the bound stays answerable, unchanged.
+    let other = send(
+        &app,
+        "POST",
+        "/v3/memories/add/",
+        Some(json!({
+            "messages": [{ "role": "user", "content": "History within one page" }],
+            "user_id": "alice"
+        })),
+        true,
+    )
+    .await;
+    assert_eq!(other.status, StatusCode::OK, "add: {:?}", other.body);
+    let other_id = other.item()["id"].as_str().expect("id").to_owned();
+    let short = send(
+        &app,
+        "GET",
+        &format!("/v1/memories/{other_id}/history/"),
+        None,
+        true,
+    )
+    .await;
+    assert_eq!(short.status, StatusCode::OK, "history: {:?}", short.body);
+    assert_eq!(
+        short.body.as_ref().expect("history body")
+            .as_array()
+            .expect("history is a JSON array")
+            .len(),
+        1
+    );
 }
 
 /// Malformed input is answered in the mem0 dialect too, not as a problem
@@ -601,10 +829,13 @@ async fn mem0_wire_scopes_memories_to_the_authenticated_principal() {
 /// `POST /v1/feedback/` and `PUT`/`DELETE /v1/batch/`.
 ///
 /// The batch half exists because upstream's 200 carries **only** a count message
-/// — there is no per-item result channel — so a partially applied batch could
-/// not be reported as anything but a success. The pre-flight is therefore part
-/// of the contract, and this test pins it by giving a batch one entry that does
-/// not exist and asserting the *other* entry was not written either.
+/// — there is no per-item result channel. Every entry's shape is therefore
+/// validated before anything runs, the service layer resolves existence for the
+/// whole batch in one precheck read, and a failing entry is answered with *its*
+/// error naming the id exactly as the caller sent it — a caller never mistakes
+/// a partially applied batch for a complete one. Each entry commits atomically
+/// with its own journal, so the entries before a failure stay applied and the
+/// error message says exactly how many did.
 #[tokio::test]
 async fn mem0_wire_serves_feedback_and_batches() {
     let _env = lock_integration_test_env().await;
@@ -708,8 +939,11 @@ async fn mem0_wire_serves_feedback_and_batches() {
         "Successfully updated 1 memories"
     );
 
-    // 4. The pre-flight. One unknown id must abort the whole batch *before* the
-    //    known id is written — 404, and the memory still reads back unchanged.
+    // 4. An entry the store cannot resolve fails the batch with its own error:
+    //    404, naming the id exactly as the caller sent it. The resolvable
+    //    entry *is* written — the batched precheck read and the writes are one
+    //    service call and each entry commits atomically — and the failure
+    //    message says so instead of pretending nothing happened.
     let unknown = "999999999999999999";
     let aborted = send(
         &app,
@@ -731,11 +965,11 @@ async fn mem0_wire_serves_feedback_and_batches() {
         "the refusal must name the entry that could not be resolved: {}",
         aborted.detail()
     );
-    let untouched = send(&app, "GET", &format!("/v1/memories/{second}/"), None, true).await;
+    let applied = send(&app, "GET", &format!("/v1/memories/{second}/"), None, true).await;
     assert_eq!(
-        untouched.body.as_ref().expect("get body")["memory"],
-        "Second, rewritten",
-        "a batch that cannot be fully resolved must not write any of its entries"
+        applied.body.as_ref().expect("get body")["memory"],
+        "Must not be written",
+        "the resolvable entry is applied: the batch is per-item atomic, not all-or-nothing"
     );
 
     // 5. An update entry with neither payload is refused before anything runs.

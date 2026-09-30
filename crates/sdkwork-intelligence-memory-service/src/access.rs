@@ -1016,25 +1016,16 @@ mod tests {
             .await
             .expect("future deny must not be active");
 
-        store
-            .insert_capability_binding(
-                702,
-                "cap-invalid-time",
-                100_001,
-                CAPABILITY_MEMORY_WRITE,
-                "space",
-                5,
-                "deny",
-                20,
-                Some("not-a-timestamp"),
-                None,
-                None,
-            )
-            .await
-            .unwrap();
-        let error = assert_actor_can_access_space_for_write(&data_plane, &context, 5)
-            .await
-            .expect_err("malformed governance timestamps must fail closed");
+        // The store write path now normalizes validity bounds, so malformed
+        // timestamps cannot arrive through this plugin's writers. The access
+        // layer keeps its own last-line-of-defense parse — assert it directly:
+        // any unparseable bound in stored facts must fail closed.
+        let error = fact_is_current(
+            &Some("not-a-timestamp".to_string()),
+            &None,
+            &sdkwork_utils_rust::format_datetime(sdkwork_utils_rust::now(), None),
+        )
+        .expect_err("malformed governance timestamps must fail closed");
         assert_eq!(error.code, "storage_error");
     }
 

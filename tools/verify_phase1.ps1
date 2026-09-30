@@ -131,8 +131,8 @@ if ($null -eq $rootSpec.contracts.dependencyApiSurfaces) {
 
 foreach ($family in @(
     @{ Path = "sdks/sdkwork-memory-sdk"; Authority = "sdkwork-memory-open-api"; Prefix = "/mem/v3/api"; Spec = "openapi/memory-open-api.openapi.json"; Client = "SdkworkMemoryOpenClient" },
-    @{ Path = "sdks/sdkwork-memory-app-sdk"; Authority = "sdkwork-memory.app"; Prefix = "/app/v3/api"; Spec = "openapi/memory-app-api.openapi.json"; Client = "SdkworkMemoryAppClient" },
-    @{ Path = "sdks/sdkwork-memory-backend-sdk"; Authority = "sdkwork-memory.backend"; Prefix = "/backend/v3/api"; Spec = "openapi/memory-backend-api.openapi.json"; Client = "SdkworkMemoryBackendClient" }
+    @{ Path = "sdks/sdkwork-memory-app-sdk"; Authority = "sdkwork-memory-app-api"; Prefix = "/app/v3/api"; Spec = "openapi/memory-app-api.openapi.json"; Client = "SdkworkMemoryAppClient" },
+    @{ Path = "sdks/sdkwork-memory-backend-sdk"; Authority = "sdkwork-memory-backend-api"; Prefix = "/backend/v3/api"; Spec = "openapi/memory-backend-api.openapi.json"; Client = "SdkworkMemoryBackendClient" }
 )) {
     $manifest = Read-JsonFile (Join-Path $family.Path "sdk-manifest.json")
     $component = Read-JsonFile (Join-Path $family.Path "specs/component.spec.json")
@@ -328,7 +328,7 @@ function Verify-OpenApi {
 $appOpenApiCheck = @{
     Path = "sdks/sdkwork-memory-app-sdk/openapi/memory-app-api.openapi.json"
     Prefix = "/app/v3/api"
-    Authority = "sdkwork-memory.app"
+    Authority = "sdkwork-memory-app-api"
     SdkFamily = "sdkwork-memory-app-sdk"
     AuthMode = "dual-token"
     ExpectedApiSurface = "app-api"
@@ -384,7 +384,7 @@ Verify-OpenApi @openApiCheck
 $backendOpenApiCheck = @{
     Path = "sdks/sdkwork-memory-backend-sdk/openapi/memory-backend-api.openapi.json"
     Prefix = "/backend/v3/api"
-    Authority = "sdkwork-memory.backend"
+    Authority = "sdkwork-memory-backend-api"
     SdkFamily = "sdkwork-memory-backend-sdk"
     AuthMode = "dual-token"
     ExpectedApiSurface = "backend-api"

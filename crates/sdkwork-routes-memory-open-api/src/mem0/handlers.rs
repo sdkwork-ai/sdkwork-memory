@@ -15,7 +15,7 @@ use sdkwork_intelligence_memory_service::OpenMemoryService;
 use sdkwork_memory_contract::{
     DeleteAllMemoriesRequest, ListEntitiesQuery, ListMemoriesQuery, MemoryFeedbackRequest,
     MemoryOpenApi, MemoryOpenApiRequestContext, MemoryRecordPatch, MemoryRecordRequest,
-    MemoryRetrievalRequest, MemoryServiceErrorKind, MemoryType,
+    MemoryRetrievalRequest, MemoryServiceError, MemoryServiceErrorKind, MemoryType,
 };
 use sdkwork_utils_rust::MAX_LIST_PAGE_SIZE;
 use serde_json::{Map, Value};
@@ -308,6 +308,65 @@ pub(crate) async fn add_memory(
         "structured extraction is not a write shape on this surface; the literal conversation \
          text is what gets filed",
     )?;
+    refuse_unsupported_field(
+        request.immutable.as_ref(),
+        "immutable",
+        "this surface has no immutability flag; canonical records are rewritten by the ordinary \
+         update operation",
+    )?;
+    refuse_unsupported_field(
+        request.includes.as_ref(),
+        "includes",
+        "extraction instructions are deployment configuration, and this surface files the \
+         literal text without an extraction step",
+    )?;
+    refuse_unsupported_field(
+        request.excludes.as_ref(),
+        "excludes",
+        "extraction instructions are deployment configuration, and this surface files the \
+         literal text without an extraction step",
+    )?;
+    refuse_unsupported_field(
+        request.enable_graph.as_ref(),
+        "enable_graph",
+        "the canonical record has no graph-memory variant; entity scopes are registered on \
+         every write",
+    )?;
+    refuse_unsupported_field(
+        request.output_format.as_ref(),
+        "output_format",
+        "a response-shape switch would change the response contract, and the mem0 memory shape \
+         on this surface is fixed",
+    )?;
+    refuse_unsupported_field(
+        request.prompt_profile_id.as_ref(),
+        "prompt_profile_id",
+        "the extraction model profile is deployment configuration, not a per-request switch",
+    )?;
+    refuse_unsupported_field(
+        request.temporal_reasoning.as_ref(),
+        "temporal_reasoning",
+        "temporal reasoning derives caller-supplied instants, and the canonical record keeps \
+         the store's own creation and update instants",
+    )?;
+    refuse_unsupported_field(
+        request.timezone.as_ref(),
+        "timezone",
+        "a timezone only matters for interpreting caller-supplied instants, and this surface \
+         stamps its own instead",
+    )?;
+    refuse_unsupported_field(
+        request.observation_datetime.as_ref(),
+        "observation_datetime",
+        "the canonical record keeps the store's own creation and update instants and does not \
+         accept a caller-supplied observation instant",
+    )?;
+    refuse_unsupported_field(
+        request.observation_date.as_ref(),
+        "observation_date",
+        "the canonical record keeps the store's own creation and update instants and does not \
+         accept a caller-supplied observation instant",
+    )?;
     let expiration_date = match request.expiration_date.as_ref() {
         None => None,
         Some(Value::String(value)) if !value.trim().is_empty() => Some(value.clone()),
@@ -550,14 +609,21 @@ pub(crate) async fn list_memories(
         ("start_date", request.start_date.as_ref()),
         ("end_date", request.end_date.as_ref()),
         ("categories", request.categories.as_ref()),
+        ("keywords", request.keywords.as_ref()),
     ] {
         refuse_unsupported_field(
             value,
             field,
-            "the canonical listing has no date or category narrowing; use POST \
+            "the canonical listing has no date, category, or keyword narrowing; use POST \
              /v3/memories/search/ with `filters`, which applies conditions to candidate selection",
         )?;
     }
+    refuse_unsupported_field(
+        request.fields.as_ref(),
+        "fields",
+        "a projection changes the response contract, and the mem0 memory shape on this surface \
+         is fixed",
+    )?;
     if request.latest_only == Some(true) {
         return Err(Mem0Error::unsupported(
             "latest_only",
@@ -763,6 +829,11 @@ pub(crate) async fn delete_all_memories(
 /// trail is refused by name rather than answered with the representable subset:
 /// a partial event log would be indistinguishable from a complete one, and
 /// mem0's `history` is defined as the memory's whole history.
+///
+/// The same completeness rule refuses a *truncated* trail: the compatibility
+/// history is a single bounded page, and a journal longer than that bound means
+/// the page is a prefix, not the history. Like `GET /v1/entities/`, the response
+/// is refused by name instead of reporting a subset as complete.
 pub(crate) async fn memory_history(
     Extension(state): Extension<OpenState>,
     context: Option<Extension<MemoryOpenApiRequestContext>>,
@@ -777,6 +848,19 @@ pub(crate) async fn memory_history(
         .mem0_memory_history(&context, space_id, id, MEM0_HISTORY_PAGE_SIZE)
         .await
         .map_err(Mem0Error::from)?;
+
+    if history.truncated {
+        return Err(Mem0Error::unsupported(
+            "memory history",
+            format!(
+                "this memory's journal holds more events than the {MEM0_HISTORY_PAGE_SIZE}-entry \
+                 history bound, and mem0's `history` is defined as the memory's whole event log \
+                 rather than a page of it, so a truncated log cannot be answered. The full \
+                 journal for this record is available on the canonical surface at \
+                 /mem/v3/api/memory/events"
+            ),
+        ));
+    }
 
     let mut entries = Vec::with_capacity(history.events.len());
     for event in &history.events {
@@ -967,29 +1051,26 @@ struct Mem0BatchTarget {
     metadata: Option<Value>,
 }
 
-/// Validates a whole batch and proves every entry exists **before** any of it is
-/// applied.
+/// Validates a whole batch's shape **before** any of it is applied.
 ///
-/// This is the load-bearing part of the batch contract. Upstream's 200 carries
-/// only `{"message": "Successfully updated N memories"}` — there is no per-item
-/// result channel — so a batch that partially applied and then failed could not
-/// be reported as anything but a success. Everything that can be checked without
-/// mutating is therefore checked first:
+/// Upstream's 200 carries only `{"message": "Successfully updated N memories"}`
+/// — there is no per-item result channel. Everything that can be checked
+/// without touching the store is therefore checked first:
 ///
-/// * every `memory_id` must name something the canonical store can address;
+/// * every `memory_id` must name an identity the canonical store can address;
 /// * an update entry must carry `text` or `metadata` (the canonical update
-///   refuses an empty patch, and one such entry must not be discovered after its
-///   predecessors were already written);
+///   refuses an empty patch);
 /// * duplicate `memory_id`s are collapsed to their first occurrence. Repeating
 ///   an id is not an upstream error, and without collapsing, a repeated delete
 ///   would fail *after* the first occurrence had already removed the record.
 ///
-/// What remains afterwards is a genuine race (the record vanishes between the
-/// check and the write). Those failures surface as errors, never as a count.
-async fn resolve_batch_targets(
-    product: &OpenMemoryService,
-    context: &MemoryOpenApiRequestContext,
-    space_id: u64,
+/// Existence is proven by the service layer's batched precheck read inside
+/// [`OpenMemoryService::update_memories_batch`], which applies the resolvable
+/// entries atomically (each with its own mutation journal) and reports a
+/// per-item `NotFound` for the rest, results in input order. The handler turns
+/// the first failing slot into the batch's single error, naming the entry as
+/// the caller sent it.
+fn resolve_batch_targets(
     items: Vec<Mem0BatchItem>,
     require_payload: bool,
 ) -> Result<Vec<Mem0BatchTarget>, Mem0Error> {
@@ -1020,27 +1101,51 @@ async fn resolve_batch_targets(
         });
     }
 
-    for target in &targets {
-        product
-            .retrieve_memory(context.clone(), target.id, space_id)
-            .await
-            .map_err(|error| match error.kind {
-                // The pre-flight can only fail with "addressable" honestly when
-                // the store says the record does not exist; every other cause
-                // (storage outage, authorization, quota) keeps its own status
-                // and detail instead of masquerading as a vanished memory.
-                MemoryServiceErrorKind::NotFound => Mem0Error::new(
-                    StatusCode::NOT_FOUND,
-                    format!("memory {} not found", target.raw_id),
-                ),
-                _ => Mem0Error::from(error),
-            })?;
-    }
-
     Ok(targets)
 }
 
+/// The batch's single error for its first failing slot, in the wire's own
+/// dialect.
+///
+/// `NotFound` keeps the spelling the per-entry pre-flight used to answer with:
+/// 404 naming the id exactly as the caller sent it. Every other cause (storage
+/// outage, authorization, quota) keeps its own kind and the count-honest
+/// conflict message, instead of masquerading as a vanished memory. `detail` is
+/// the caller-safe authored text (`MemoryServiceError` docs); raw store causes
+/// are masked before they ever reach it.
+fn batch_slot_error(
+    target: &Mem0BatchTarget,
+    error: MemoryServiceError,
+    verb: &str,
+    participle: &str,
+    applied: usize,
+    total: usize,
+) -> Mem0Error {
+    match error.kind {
+        MemoryServiceErrorKind::NotFound => Mem0Error::new(
+            StatusCode::NOT_FOUND,
+            format!("memory {} not found", target.raw_id),
+        ),
+        _ => Mem0Error::new(
+            StatusCode::CONFLICT,
+            format!(
+                "memory {} failed to {verb} after {applied} of {total} entries were {participle}; \
+                 the batch is not atomic and was not rolled back: {}",
+                target.raw_id, error.detail
+            ),
+        ),
+    }
+}
+
 /// `PUT /v1/batch/`.
+///
+/// One service-level batched call does the whole thing: a single space
+/// authorization, one batched precheck read of every addressed record, and one
+/// atomic (individually journalled) update per entry, results in input order.
+/// The first failing slot becomes the batch's single error — 404 naming the
+/// entry the caller sent when the store has no such memory, the count-honest
+/// conflict message for every other cause — and the entries before it stay
+/// applied, exactly as the message says.
 pub(crate) async fn batch_update_memories(
     Extension(state): Extension<OpenState>,
     context: Option<Extension<MemoryOpenApiRequestContext>>,
@@ -1050,16 +1155,13 @@ pub(crate) async fn batch_update_memories(
     let context = require_context(context)?;
     let space_id = space_id(&product, &context).await?;
 
-    let targets =
-        resolve_batch_targets(&product, &context, space_id, request.memories, true).await?;
+    let targets = resolve_batch_targets(request.memories, true)?;
 
-    let mut updated = 0usize;
-    for target in &targets {
-        product
-            .update_memory(
-                context.clone(),
+    let updates = targets
+        .iter()
+        .map(|target| {
+            (
                 target.id,
-                space_id,
                 MemoryRecordPatch {
                     canonical_text: target.text.clone(),
                     subject: None,
@@ -1067,25 +1169,28 @@ pub(crate) async fn batch_update_memories(
                     metadata: target.metadata.clone(),
                 },
             )
-            .await
-            .map_err(|error| {
-                // Reached only when the record changed underneath the pre-flight
-                // check. The count is reported because by now it is the only
-                // truthful thing this surface can say. `detail` is the
-                // caller-safe authored text (`MemoryServiceError` docs);
-                // raw store causes are masked before they ever reach it.
-                Mem0Error::new(
-                    StatusCode::CONFLICT,
-                    format!(
-                        "memory {} failed to update after {updated} of {} entries were written; \
-                         the batch is not atomic and was not rolled back: {}",
-                        target.raw_id,
-                        targets.len(),
-                        error.detail
-                    ),
-                )
-            })?;
-        updated += 1;
+        })
+        .collect();
+
+    let mut updated = 0usize;
+    for (target, result) in targets.iter().zip(
+        product
+            .update_memories_batch(context.clone(), space_id, updates)
+            .await,
+    ) {
+        match result {
+            Ok(_) => updated += 1,
+            Err(error) => {
+                return Err(batch_slot_error(
+                    target,
+                    error,
+                    "update",
+                    "written",
+                    updated,
+                    targets.len(),
+                ))
+            }
+        }
     }
 
     Ok(Json(Mem0BatchAck {
@@ -1094,6 +1199,10 @@ pub(crate) async fn batch_update_memories(
 }
 
 /// `DELETE /v1/batch/`.
+///
+/// Deletion has no service-level batch, so the entries are removed one by one
+/// with the same per-item error mapping as the update batch: the first failing
+/// slot is the batch's single error, and the entries before it stay removed.
 pub(crate) async fn batch_delete_memories(
     Extension(state): Extension<OpenState>,
     context: Option<Extension<MemoryOpenApiRequestContext>>,
@@ -1103,27 +1212,26 @@ pub(crate) async fn batch_delete_memories(
     let context = require_context(context)?;
     let space_id = space_id(&product, &context).await?;
 
-    let targets =
-        resolve_batch_targets(&product, &context, space_id, request.memories, false).await?;
+    let targets = resolve_batch_targets(request.memories, false)?;
 
     let mut deleted = 0usize;
     for target in &targets {
-        product
+        match product
             .delete_memory(context.clone(), target.id, space_id)
             .await
-            .map_err(|error| {
-                Mem0Error::new(
-                    StatusCode::CONFLICT,
-                    format!(
-                        "memory {} failed to delete after {deleted} of {} entries were removed; \
-                         the batch is not atomic and was not rolled back: {}",
-                        target.raw_id,
-                        targets.len(),
-                        error.detail
-                    ),
-                )
-            })?;
-        deleted += 1;
+        {
+            Ok(()) => deleted += 1,
+            Err(error) => {
+                return Err(batch_slot_error(
+                    target,
+                    error,
+                    "delete",
+                    "removed",
+                    deleted,
+                    targets.len(),
+                ))
+            }
+        }
     }
 
     Ok(Json(Mem0BatchAck {
@@ -1270,6 +1378,16 @@ mod add_field_tests {
             agent_custom_instructions: None,
             structured_data_schema: None,
             infer: None,
+            immutable: None,
+            includes: None,
+            excludes: None,
+            enable_graph: None,
+            output_format: None,
+            prompt_profile_id: None,
+            temporal_reasoning: None,
+            timezone: None,
+            observation_datetime: None,
+            observation_date: None,
         }
     }
 

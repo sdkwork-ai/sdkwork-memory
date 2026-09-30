@@ -19,6 +19,14 @@
 //! the lemma, to survive noun/verb ambiguity (`meeting` is both a noun and a verb
 //! form). [`lemmatize_for_bm25`] preserves that duplication so a keyword query for
 //! `meeting` still matches a document that stored `meet`.
+//!
+//! CJK text has no whitespace boundaries, so a CJK run is segmented into
+//! adjacent-pair bigrams ([`crate::text`]) instead of kept as one unmatchable
+//! blob. Emitting the same bigrams for queries and documents keeps the additive
+//! keyword signal symmetric with the RRF tokenizer, which already segments CJK
+//! this way.
+
+use crate::text::{flush_cjk_run, is_cjk};
 
 /// English stopwords dropped from lemmatized output.
 ///
@@ -283,7 +291,9 @@ fn restore_after_suffix_strip(stem: &str) -> String {
 ///
 /// Returns space-joined lemmas. Punctuation and stopwords are dropped; a token
 /// ending in `-ing` is emitted **twice** (lemma first, then the original surface
-/// form) to preserve noun/verb ambiguity, matching upstream behaviour.
+/// form) to preserve noun/verb ambiguity, matching upstream behaviour. CJK runs
+/// are emitted as space-separated bigrams (a lone CJK character as itself), so
+/// lemmatized output stays whitespace-tokenizable by [`crate::bm25::bm25_terms`].
 ///
 /// # Examples
 ///
@@ -292,6 +302,7 @@ fn restore_after_suffix_strip(stem: &str) -> String {
 ///
 /// assert_eq!(lemmatize_for_bm25("The team is attending meetings"), "team attend attending meeting");
 /// assert_eq!(lemmatize_for_bm25("organization"), "organization");
+/// assert_eq!(lemmatize_for_bm25("用户偏好"), "用户 户偏 偏好");
 /// ```
 #[must_use]
 pub fn lemmatize_for_bm25(text: &str) -> String {
@@ -319,8 +330,9 @@ pub fn lemmatize_for_bm25(text: &str) -> String {
 /// Underscores are kept so identifiers survive as single tokens
 /// (`claude_3` stays `claude_3` and can be matched exactly). Hyphens are treated as
 /// separators, so `gpt-4o` contributes `gpt` and `4o`, which keeps each fragment
-/// independently searchable. Word order is preserved because
-/// [`lemmatize_for_bm25`] emits lemmas in token order.
+/// independently searchable. CJK runs have no whitespace boundaries, so each run
+/// is flushed as adjacent-pair bigrams via [`crate::text::flush_cjk_run`]; word
+/// order is preserved because [`lemmatize_for_bm25`] emits lemmas in token order.
 ///
 /// This is intentionally **not** identical to [`crate::retrieval`]'s query tokenizer,
 /// which splits on every non-alphanumeric character. The retrieval tokenizer feeds
@@ -328,13 +340,23 @@ pub fn lemmatize_for_bm25(text: &str) -> String {
 fn tokenize(text: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();
+    let mut cjk_run: Vec<char> = Vec::new();
     for character in text.chars() {
-        if character.is_alphanumeric() || character == '_' {
-            current.push(character);
-        } else if !current.is_empty() {
-            tokens.push(std::mem::take(&mut current));
+        if is_cjk(character) {
+            if !current.is_empty() {
+                tokens.push(std::mem::take(&mut current));
+            }
+            cjk_run.push(character);
+        } else {
+            flush_cjk_run(&mut cjk_run, &mut tokens);
+            if character.is_alphanumeric() || character == '_' {
+                current.push(character);
+            } else if !current.is_empty() {
+                tokens.push(std::mem::take(&mut current));
+            }
         }
     }
+    flush_cjk_run(&mut cjk_run, &mut tokens);
     if !current.is_empty() {
         tokens.push(current);
     }
@@ -460,6 +482,36 @@ mod tests {
         assert_eq!(lemmatize_for_bm25(""), "");
         assert_eq!(lemmatize_for_bm25("   ...   "), "");
         assert_eq!(lemmatize_for_bm25("the and of"), "");
+    }
+
+    #[test]
+    fn cjk_runs_are_emitted_as_space_separated_bigrams() {
+        assert_eq!(lemmatize_for_bm25("用户偏好"), "用户 户偏 偏好");
+        // A lone CJK character has no pair and stays a unigram.
+        assert_eq!(lemmatize_for_bm25("知"), "知");
+    }
+
+    #[test]
+    fn mixed_latin_and_cjk_text_keeps_both_tokenizations() {
+        assert_eq!(
+            lemmatize_for_bm25("wine 用户偏好 table"),
+            "wine 用户 户偏 偏好 table"
+        );
+    }
+
+    #[test]
+    fn lemmatized_cjk_text_stays_stable_through_bm25_term_expansion() {
+        // Indexing and querying both run bm25_terms over already-lemmatized
+        // text, so re-expanding bigram tokens must not re-segment them.
+        let once = lemmatize_for_bm25("用户偏好");
+        assert_eq!(
+            crate::bm25::bm25_terms(&once),
+            vec!["用户".to_string(), "户偏".to_string(), "偏好".to_string()]
+        );
+        assert_eq!(
+            crate::bm25::bm25_terms("用户偏好"),
+            crate::bm25::bm25_terms(&once)
+        );
     }
 
     #[test]
