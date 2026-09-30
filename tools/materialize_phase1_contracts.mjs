@@ -3343,8 +3343,8 @@ function openOperation(args) {
 //   PUT    /v1/batch/
 //   DELETE /v1/batch/
 //
-// and, under `/v2/`, the shapes the same clients build that this surface
-// refuses by name rather than implements:
+// and, under `/v2/`, `/v1/`, and `/api/v1/`, the shapes the same clients build
+// that this surface refuses by name rather than implements:
 //
 //   DELETE /v2/entities/{entity_type}/{entity_id}/          entity-scope erasure
 //   GET    /v2/entities/{entity_type}/{entity_id}/profile/  derived profile text
@@ -3352,12 +3352,23 @@ function openOperation(args) {
 //   GET    /v2/profiles/jobs/{job_id}/                      job state
 //   GET    /v2/profiles/settings/                           project-level settings
 //   POST   /v2/profiles/settings/                           project-level settings
+//   DELETE /v1/entities/{entity_type}/{entity_id}/          deprecated v1 erasure spelling
+//   POST   /v1/exports/                                     schema-driven export job
+//   POST   /v1/exports/get/                                 export data retrieval
+//   POST   /v1/summary/                                     LLM memory summary
+//   GET    /api/v1/webhooks/projects/{project_id}/          webhook registry
+//   POST   /api/v1/webhooks/projects/{project_id}/          webhook registration
+//   PUT    /api/v1/webhooks/{webhook_id}/                   webhook update
+//   DELETE /api/v1/webhooks/{webhook_id}/                   webhook removal
+//   GET    /api/v1/orgs/organizations/{org_id}/projects/{project_id}/    project document
+//   PATCH  /api/v1/orgs/organizations/{org_id}/projects/{project_id}/    project update
 //
-// `/v2/` is declared (`paths::MEM0_PATH_PREFIXES`) even though nothing under it
-// is implemented: a prefix outside that list is answered by the framework's
-// surface classifier before either mem0 bridge runs, so the caller gets a `401`
-// whose body the clients cannot parse. Declaring it makes the refusal land in
-// the mem0 dialect. The runtime half is
+// `/v2/` and `/api/v1/` are declared (`paths::MEM0_PATH_PREFIXES`) even though
+// nothing under them is implemented: a prefix outside that list is answered by
+// the framework's surface classifier before either mem0 bridge runs, so the
+// caller gets a `401` whose body the clients cannot parse and whose message
+// misdirects a correctly credentialed caller toward their key. Declaring them
+// makes every refusal land in the mem0 dialect. The runtime half is
 // `crates/sdkwork-routes-memory-open-api/src/paths.rs` (`MEM0_REFUSED_PATHS`) and
 // the handlers it names in `src/mem0/handlers.rs`.
 //
@@ -3402,6 +3413,20 @@ const MEM0_OPERATION_METADATA = {
   "mem0.profile.job.retrieve": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
   "mem0.profile.settings.retrieve": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
   "mem0.profile.settings.update": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
+  // The `/v1/` and `/api/v1/` refusals ride the same triple for the same two
+  // reasons. Refusing is what these operations *do*: a capability probe, not a
+  // mutation — and an audit trail entry for an effect that was refused would be
+  // false, while `memory.open.capabilities.read` is true.
+  "mem0.entity.remove": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
+  "mem0.export.create": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
+  "mem0.export.retrieve": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
+  "mem0.summary.create": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
+  "mem0.webhook.list": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
+  "mem0.webhook.create": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
+  "mem0.webhook.update": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
+  "mem0.webhook.remove": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
+  "mem0.project.retrieve": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
+  "mem0.project.update": { permission: "memory.open.capabilities.read", auditEvent: "memory.open.capabilities.read", resource: "capabilities" },
 };
 
 function mem0Schemas() {
@@ -3963,6 +3988,92 @@ function mem0Paths(paths) {
     operationId: "mem0.profile.settings.update",
     refusal: true
   }));
+
+  // -------------------------------------------------------------------------
+  // `/v1/` and `/api/v1/` refusals, on the same terms as the `/v2/` set:
+  // mem0's export-job and LLM-summary subsystems, the deprecated v1 spelling of
+  // the entity-scope erasure (upstream `entities_delete_v1` — the TypeScript
+  // client's deprecated `deleteUser` still builds it), and the platform-account
+  // plane (webhook registry, org/project administration). Declaring them is
+  // what drives the official clients' last `unrouted` calls into the contract:
+  // each becomes a named `501` in the mem0 dialect instead of a bare 404 (the
+  // `/v1/` shapes) or a mis-framed 401 (the `/api/v1/` shapes, which sit
+  // outside every previously declared prefix). Upstream operationIds for the
+  // mapping: exports_create, exports_list, summary_create, entities_delete_v1,
+  // get_project_webhooks, create_webhook, update_webhook, delete_webhook,
+  // get_project, update_project.
+  // -------------------------------------------------------------------------
+  const mem0ProjectParams = [
+    { name: "org_id", in: "path", required: true, schema: { type: "string" } },
+    { name: "project_id", in: "path", required: true, schema: { type: "string" } }
+  ];
+
+  addPath(paths, "/v1/entities/{entity_type}/{entity_id}/", "delete", mem0Operation({
+    method: "delete",
+    operationId: "mem0.entity.remove",
+    pathParams: mem0V2EntityParams,
+    refusal: true
+  }));
+
+  addPath(paths, "/v1/exports/", "post", mem0Operation({
+    method: "post",
+    operationId: "mem0.export.create",
+    refusal: true
+  }));
+
+  addPath(paths, "/v1/exports/get/", "post", mem0Operation({
+    method: "post",
+    operationId: "mem0.export.retrieve",
+    refusal: true
+  }));
+
+  addPath(paths, "/v1/summary/", "post", mem0Operation({
+    method: "post",
+    operationId: "mem0.summary.create",
+    refusal: true
+  }));
+
+  addPath(paths, "/api/v1/webhooks/projects/{project_id}/", "get", mem0Operation({
+    method: "get",
+    operationId: "mem0.webhook.list",
+    pathParams: [{ name: "project_id", in: "path", required: true, schema: { type: "string" } }],
+    refusal: true
+  }));
+
+  addPath(paths, "/api/v1/webhooks/projects/{project_id}/", "post", mem0Operation({
+    method: "post",
+    operationId: "mem0.webhook.create",
+    pathParams: [{ name: "project_id", in: "path", required: true, schema: { type: "string" } }],
+    refusal: true
+  }));
+
+  addPath(paths, "/api/v1/webhooks/{webhook_id}/", "put", mem0Operation({
+    method: "put",
+    operationId: "mem0.webhook.update",
+    pathParams: [{ name: "webhook_id", in: "path", required: true, schema: { type: "string" } }],
+    refusal: true
+  }));
+
+  addPath(paths, "/api/v1/webhooks/{webhook_id}/", "delete", mem0Operation({
+    method: "delete",
+    operationId: "mem0.webhook.remove",
+    pathParams: [{ name: "webhook_id", in: "path", required: true, schema: { type: "string" } }],
+    refusal: true
+  }));
+
+  addPath(paths, "/api/v1/orgs/organizations/{org_id}/projects/{project_id}/", "get", mem0Operation({
+    method: "get",
+    operationId: "mem0.project.retrieve",
+    pathParams: mem0ProjectParams,
+    refusal: true
+  }));
+
+  addPath(paths, "/api/v1/orgs/organizations/{org_id}/projects/{project_id}/", "patch", mem0Operation({
+    method: "patch",
+    operationId: "mem0.project.update",
+    pathParams: mem0ProjectParams,
+    refusal: true
+  }));
 }
 
 function writeOpenApi() {
@@ -4455,6 +4566,9 @@ function writeHttpRouteManifestRust(crateDir, fnName, routes) {
       route.permission ? `.with_required_permission("${route.permission}")` : "",
       route.idempotent ? ".with_idempotent(true)" : "",
       rateLimitTierRustSuffix(route.rateLimitTier),
+      route.wireProtocol === "external"
+        ? `.with_external_wire_protocol("${route.externalProtocolId ?? "external"}")`
+        : "",
     ].join("");
     lines.push(`    HttpRoute::${auth}(`);
     lines.push(`        HttpMethod::${httpMethodRust(route.method)},`);

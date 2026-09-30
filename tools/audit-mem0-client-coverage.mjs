@@ -59,7 +59,7 @@ const ROUTE_VERBS = {
   MEM0_LIST: ["POST"],
   MEM0_FEEDBACK: ["POST"],
   MEM0_BATCH: ["PUT", "DELETE"],
-  // `/v2/` — refusal-only constants. Named in `paths::MEM0_REFUSED_PATHS`, so a
+  // Refusal-only constants. Named in `paths::MEM0_REFUSED_PATHS`, so a
   // call landing on one of them is `refused`, not `served`: the route exists but
   // answers `501 by name`, which is a third outcome and must not be counted as an
   // implementation. `main` fails if a declared route constant has no entry here,
@@ -69,6 +69,13 @@ const ROUTE_VERBS = {
   MEM0_V2_PROFILE_JOBS: ["POST"],
   MEM0_V2_PROFILE_JOB: ["GET"],
   MEM0_V2_PROFILE_SETTINGS: ["GET", "POST"],
+  MEM0_V1_ENTITIES: ["DELETE"],
+  MEM0_EXPORTS: ["POST"],
+  MEM0_EXPORTS_GET: ["POST"],
+  MEM0_SUMMARY: ["POST"],
+  MEM0_PROJECT_WEBHOOKS: ["GET", "POST"],
+  MEM0_WEBHOOK: ["PUT", "DELETE"],
+  MEM0_PROJECT: ["GET", "PATCH"],
 };
 
 // The prefixes the surface declares as the mem0 compatibility wire, read from
@@ -90,8 +97,9 @@ function readDeclaredPrefixes() {
  * Whether a client-built path is under a declared mem0 prefix.
  *
  * Anchored at the start on purpose. `/api/v1/webhooks/...` sits beside `/v1/...`
- * and is *not* part of the compatibility wire, so a substring test would report
- * the platform-account family as bridged and hide exactly the gap this dimension
+ * and only became part of the compatibility wire when `/api/v1/` was declared as
+ * its own prefix — a substring test would have reported the platform-account
+ * family as bridged back when it was not, hiding exactly the gap this dimension
  * exists to record.
  */
 function isUnderAnyPrefix(rawPath, prefixes) {
@@ -168,18 +176,16 @@ function readRefusedPaths(routes) {
 // `mem0/client/utils.py` only unwraps `detail` when the content type starts with
 // `application/json` (`startswith`, so `application/problem+json` misses).
 //
-// `/v2/` has since been declared, which is why no `/v2/` call is left in this set.
-// What remains is mem0's **platform-account plane** — projects, organisations and
-// webhooks under `/api/v1/`. That plane is not this service's to own: it is mem0's
-// account administration, not memory, and declaring `/api/v1/` would mean
-// claiming a path space this surface has no operations for. The set is recorded
-// rather than filtered so the boundary stays visible, and a *new* path landing
-// there goes red instead of quietly widening the gap.
+// `/v2/` and `/api/v1/` have since been declared, and every path the clients
+// build under the previously undeclared `/api/v1/` platform-account plane is
+// now answered by a named refusal — so nothing is left in this set. The set is
+// recorded rather than filtered so the boundary stays visible, and a *new* path
+// landing there goes red instead of quietly widening the gap.
 const EXPECTED = {
   // Read from `paths.rs`. Pinned by value because the declared prefix set is what
   // decides framing for every call below: a prefix appearing or disappearing here
   // changes what the account means, so it is drift and must be reported.
-  prefixes: ["/v1/", "/v2/", "/v3/"],
+  prefixes: ["/v1/", "/v2/", "/v3/", "/api/v1/"],
   python: {
     served: [
       "add",
@@ -196,34 +202,26 @@ const EXPECTED = {
       "users",
     ],
     refused: [
+      "create_memory_export",
+      "create_webhook",
       "delete_users",
+      "delete_webhook",
       "generate_profile",
+      "get_memory_export",
       "get_profile",
       "get_profile_job",
       "get_profile_settings",
-      "sample_profiles",
-      "update_profile_settings",
-    ],
-    unrouted: [
-      "create_memory_export",
-      "create_webhook",
-      "delete_webhook",
-      "get_memory_export",
       "get_project",
       "get_summary",
       "get_webhooks",
+      "sample_profiles",
+      "update_profile_settings",
       "update_project",
       "update_webhook",
     ],
+    unrouted: [],
     unparsed: [],
-    unbridged: [
-      "DELETE /api/v1/webhooks/{id}/",
-      "GET /api/v1/orgs/organizations/{id}/projects/{id}/",
-      "GET /api/v1/webhooks/projects/{id}/",
-      "PATCH /api/v1/orgs/organizations/{id}/projects/{id}/",
-      "POST /api/v1/webhooks/projects/{id}/",
-      "PUT /api/v1/webhooks/{id}/",
-    ],
+    unbridged: [],
     inert: ["chat", "reset"],
     classes: ["MemoryClient", "AsyncMemoryClient"],
   },
@@ -244,33 +242,25 @@ const EXPECTED = {
       "users",
     ],
     refused: [
-      "deleteUsers",
-      "generateProfile",
-      "getProfile",
-      "getProfileSettings",
-      "sampleProfiles",
-      "updateProfileSettings",
-    ],
-    unrouted: [
       "createMemoryExport",
       "createWebhook",
       "deleteUser",
+      "deleteUsers",
       "deleteWebhook",
+      "generateProfile",
       "getMemoryExport",
+      "getProfile",
+      "getProfileSettings",
       "getProject",
       "getWebhooks",
+      "sampleProfiles",
+      "updateProfileSettings",
       "updateProject",
       "updateWebhook",
     ],
+    unrouted: [],
     unparsed: ["getProfileJob"],
-    unbridged: [
-      "DELETE /api/v1/webhooks/{id}/",
-      "GET /api/v1/orgs/organizations/{id}/projects/{id}/",
-      "GET /api/v1/webhooks/projects/{id}/",
-      "PATCH /api/v1/orgs/organizations/{id}/projects/{id}/",
-      "POST /api/v1/webhooks/projects/{id}/",
-      "PUT /api/v1/webhooks/{id}/",
-    ],
+    unbridged: [],
     inert: ["constructor"],
     classes: ["client"],
   },
@@ -800,6 +790,12 @@ function selfTest() {
     ["the settings pair refuses on write", "/v2/profiles/settings/", "POST", false, true],
     ["the v2 entity delete is refused", "/v2/entities/{id}/{id}/", "DELETE", false, true],
     ["an implemented route is served, not refused", "/v1/ping/", "GET", true, false],
+    ["the deprecated v1 entity delete is refused", "/v1/entities/{id}/{id}/", "DELETE", false, true],
+    ["the v1 entity collection keeps serving its listing", "/v1/entities/", "GET", true, false],
+    ["a webhook read is refused", "/api/v1/webhooks/projects/{id}/", "GET", false, true],
+    ["a webhook registration is refused", "/api/v1/webhooks/projects/{id}/", "POST", false, true],
+    ["the project pair refuses on read", "/api/v1/orgs/organizations/{id}/projects/{id}/", "GET", false, true],
+    ["the project pair refuses on patch", "/api/v1/orgs/organizations/{id}/projects/{id}/", "PATCH", false, true],
   ];
   for (const [name, p, verb, wantServed, wantRefused] of refusalCases) {
     const got = classifyCall(p, verb, routes, refusals);
@@ -817,7 +813,11 @@ function selfTest() {
     if (!refusals.has(p)) failures.push(`/v2/ route ${name} is not listed in MEM0_REFUSED_PATHS`);
   }
   if (v2Routes === 0) failures.push("no /v2/ route is declared, so the refusal axis is untested");
-  if (refusals.size !== v2Routes) {
+  // The refusal set grew beyond `/v2/` (the `/v1/` export/summary/entity shapes
+  // and the `/api/v1/` platform-account plane joined it), so it must now be a
+  // superset of the `/v2/` routes — every refusal path it names must still be a
+  // declared route constant, which `readRefusedPaths` already enforces.
+  if (refusals.size < v2Routes) {
     failures.push(`MEM0_REFUSED_PATHS holds ${refusals.size} paths but ${v2Routes} /v2/ routes exist`);
   }
 
@@ -847,15 +847,16 @@ function selfTest() {
   }
 
   // Framing: prefix membership decides whether either mem0 bridge runs, so the
-  // test is anchored at the start and must not fold the platform-account family in.
+  // test is anchored at the start and must not fold unrelated path spaces in.
   // The prefix list is the one `paths.rs` declares — a fixture here would let the
   // test pass against a set the service does not use.
   const probePrefixes = readDeclaredPrefixes();
   const prefixCases = [
     ["declared /v1/ path is bridged", "/v1/ping/", true],
     ["declared /v3/ path is bridged", "/v3/memories/add/", true],
-    ["the platform-account family is not under /v1/", "/api/v1/webhooks/projects/{id}/", false],
+    ["the platform-account family is now bridged under /api/v1/", "/api/v1/webhooks/projects/{id}/", true],
     ["a longer segment is not the prefix", "/v10/thing/", false],
+    ["a sibling api version is not declared", "/api/v2/webhooks/projects/{id}/", false],
   ];
   for (const [name, p, want] of prefixCases) {
     const got = isUnderAnyPrefix(p, probePrefixes);
@@ -864,7 +865,7 @@ function selfTest() {
   // Structural invariant: the prefix set that drives both halves of the mem0
   // exemption is pinned by value, because a version appearing or disappearing
   // here silently changes the framing of every call under it.
-  for (const required of ["/v1/", "/v2/", "/v3/"]) {
+  for (const required of ["/v1/", "/v2/", "/v3/", "/api/v1/"]) {
     if (!probePrefixes.includes(required)) {
       failures.push(`paths.rs does not declare ${required} as a mem0 prefix`);
     }

@@ -418,6 +418,136 @@ async fn mem0_wire_reports_authentication_failures_in_its_own_dialect() {
         "the framework's own failure must carry a readable detail: {:?}",
         response.body
     );
+
+    // The `/api/v1/` platform-account plane is under a declared prefix now, so
+    // an unauthenticated call there is mem0-framed too. Before the declaration
+    // this exact call was answered `401` with `application/problem+json` — a
+    // body the Python client renders as raw JSON text — which is why the
+    // declaration exists.
+    let plane = send(&app, "GET", "/api/v1/webhooks/projects/p-1/", None, false).await;
+    assert_eq!(plane.status, StatusCode::UNAUTHORIZED, "{:?}", plane.body);
+    plane.assert_json_media_type("unauthenticated platform-account probe");
+    assert!(
+        !plane.detail().is_empty(),
+        "the framework's own failure must carry a readable detail: {:?}",
+        plane.body
+    );
+}
+
+/// Every operation the official clients reach that this surface does not
+/// implement is answered with its own named `501` in the mem0 dialect — never a
+/// bare 404 (`/v1/` export/summary/entity shapes) and never the framework's
+/// mis-framed 401 (`/api/v1/` platform-account plane, before its prefix was
+/// declared).
+///
+/// The URIs and bodies below are the shapes the clients build: mem0's
+/// `create_memory_export` / `get_memory_export` / `get_summary` on the Python
+/// side, `createMemoryExport` / `getMemoryExport` / `deleteUser` on the
+/// TypeScript side, and the webhook/org-project family both sides call.
+#[tokio::test]
+async fn mem0_wire_refuses_the_unowned_operations_by_name() {
+    let _env = lock_integration_test_env().await;
+    let app = build_app().await;
+
+    // (method, uri, body, expected substring of the named reason)
+    let cases: Vec<(&str, String, Option<Value>, &str)> = vec![
+        // --- `/v1/`: mem0 subsystems this surface does not carry -------------
+        (
+            "POST",
+            "/v1/exports/".to_owned(),
+            Some(json!({ "schema": { "memory": "string" } })),
+            "schema-driven export creation",
+        ),
+        (
+            "POST",
+            "/v1/exports/get/".to_owned(),
+            Some(json!({ "filters": { "user_id": "alice" } })),
+            "export retrieval",
+        ),
+        (
+            "POST",
+            "/v1/summary/".to_owned(),
+            Some(json!({ "filters": { "user_id": "alice" } })),
+            "memory summarization",
+        ),
+        // The deprecated v1 spelling of the entity-scope erasure — the exact
+        // path the TypeScript client's deprecated `deleteUser` builds.
+        (
+            "DELETE",
+            "/v1/entities/user/42/".to_owned(),
+            None,
+            "entity deletion",
+        ),
+        // --- `/api/v1/`: mem0's platform-account plane -----------------------
+        (
+            "GET",
+            "/api/v1/webhooks/projects/p-1/".to_owned(),
+            None,
+            "project webhook listing",
+        ),
+        (
+            "POST",
+            "/api/v1/webhooks/projects/p-1/".to_owned(),
+            Some(json!({
+                "name": "pipeline",
+                "url": "https://example.test/hook",
+                "event_types": ["memory_add"]
+            })),
+            "webhook creation",
+        ),
+        (
+            "PUT",
+            "/api/v1/webhooks/w-1/".to_owned(),
+            Some(json!({ "name": "renamed" })),
+            "webhook update",
+        ),
+        (
+            "DELETE",
+            "/api/v1/webhooks/w-1/".to_owned(),
+            None,
+            "webhook deletion",
+        ),
+        (
+            "GET",
+            "/api/v1/orgs/organizations/o-1/projects/p-1/".to_owned(),
+            None,
+            "project retrieval",
+        ),
+        (
+            "PATCH",
+            "/api/v1/orgs/organizations/o-1/projects/p-1/".to_owned(),
+            Some(json!({ "custom_instructions": ["Be concise"] })),
+            "project update",
+        ),
+    ];
+
+    for (method, uri, body, expected) in cases {
+        let response = send(&app, method, &uri, body, true).await;
+        assert_eq!(
+            response.status,
+            StatusCode::NOT_IMPLEMENTED,
+            "{method} {uri} must be refused by name, got {:?}",
+            response.body
+        );
+        response.assert_json_media_type(&format!("{method} {uri} refusal"));
+        let detail = response.detail();
+        assert!(
+            detail.contains(expected),
+            "{method} {uri} refusal must name `{expected}`, got `{detail}`"
+        );
+        assert!(
+            detail.contains("not supported on this surface"),
+            "{method} {uri} refusal must name the boundary it sits on, got `{detail}`"
+        );
+    }
+
+    // A refusal is still the answer when the caller has no credential at all
+    // only in the sense that it is *not* a 2xx — authentication is checked
+    // first, which the unauthenticated-dialect test pins. Here the credentialed
+    // shape is the contract: the official clients send `Token` credentials and
+    // a body, and the refusal reads neither.
+    let unauthenticated = send(&app, "POST", "/v1/exports/", None, false).await;
+    assert_eq!(unauthenticated.status, StatusCode::UNAUTHORIZED);
 }
 
 /// Parameters this surface cannot honour are refused by name, never narrowed

@@ -118,12 +118,16 @@ fn the_materialized_authority_passes_the_context_selector_gate() {
     let prefixes = declared_prefixes();
 
     // Mutation control first: undeclared, the gate must fire on mem0's own
-    // parameters. Without this, the pass below could mean nothing.
+    // parameters. Without this, the pass below could mean nothing. Which
+    // violation surfaces first depends on path order — `/v1/memories/`'s
+    // `user_id` selector or the `/api/v1/` org-marker paths are both upstream
+    // ambient violations the declared prefixes exist to exempt.
     let error = validate_openapi_document_context_selectors(&document)
         .expect_err("an undeclared upstream parameter is a violation");
     assert!(
-        error.contains("/v1/memories/") && error.contains("user_id"),
-        "the undeclared failure must land on mem0's own query parameters: {error}"
+        (error.contains("/v1/memories/") && error.contains("user_id"))
+            || error.contains("/organizations/"),
+        "the undeclared failure must land on an upstream ambient violation: {error}"
     );
 
     validate_openapi_document_context_selectors_with_external_prefixes(

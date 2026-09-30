@@ -1434,3 +1434,105 @@ wire 上是**一个名叫 `filters` 的查询参数**。而我方 `Mem0DeleteAll
 
 > 本节按 §12.4 的方式留了**可复跑**的驱动：捕获桩 + 双客户端满字段驱动。
 > 与 §12.4 的采样器一样，它是**审计工具而非 CI 门禁**（`external/mem0` 被 gitignore）。
+
+## 14. 第七条腿（第六轮收口）：最后 9 个未路由方法 → 具名 501 + `/api/v1/` 桥接（2026-09-30 续七）
+
+本节把 §9.3 覆盖账里剩下的 **9 个官方客户端未路由方法**全部收口为**具名 501 拒绝**，
+并把 `/api/v1/` 桥接进 mem0 路由器。收口后采样器读数（真跑）：
+
+```text
+routes served (from paths.rs): 22        ← 10 实现 + 12 拒绝路径（/v1/ 3 条、/v2/ 5 条、/api/v1/ 3 条、/v1/ 实体 1 条）
+python      served=12 refused=16 unrouted=0
+typescript  served=13 refused=15 unrouted=0
+declared prefixes (from paths.rs): /v1/ /v2/ /v3/ /api/v1/
+refusal routes (from paths.rs): 12
+refused shapes reached by a client: 16
+outside every prefix (unbridged framing): 0      ← 改前 6
+→ account matches the recorded expectation (exit 0)；自测 37 条 pass
+```
+
+**双客户端 unrouted 归零、unbridged 归零**——官方 SDK 的每一个线上方法现在都落在契约内（served / named-refused）。
+
+### 14.1 裁定反转：`/api/v1/` 桥接（推翻 §12.5(c)）
+
+§12.5(c) 曾按裁定登记 `/api/v1/` 平台账号面为「不服务、不声明」：声明了就得在下面服务点什么。
+本轮**推翻**其未框化登记，理由是那条裁定留下的是一个**比差距更糟的失败形状**：
+
+1. **未框化 401 对客户端不可与认证失败区分。** 框架分类器对 Unknown 面回
+   `401` + `application/problem+json`（`"requests on unclassified API surfaces require explicit
+   public_path registration"`）——调用方**凭证是对的**（同会话 `ping` 是 200），这个 `401`
+   却把人引去查密钥。官方 Python 客户端只在前缀为 `application/json` 时才解 `detail`
+   （`mem0/client/utils.py`），于是收到的是**整段 JSON 原文**（§11.2 实测）。
+2. **与 `/v2/` 先例同构。** `/v2/` 声明的理由就是这条（§12.1），`/api/v1/` 没有任何一条不成立的理由。
+3. **「声明了就得服务」已经解决。** 拒绝路由**就是**被服务的东西：声明前缀下挂真实路径、每条带自己的理由，
+   `mem0_wire_context_selector_contract` 的「声明前缀必须携带真实路径」由拒绝条目满足（与 `/v2/` 同款）。
+
+代价与 `/v2/` 一致：权限/审计三元组复用 `memory.open.capabilities.read`（§12.2 末的同款裁定——
+不发明 API key 拿不到的权限；审计事件必须为真），mutating 动词挂 `OpenApiDefault` 限流档，GET 不挂档。
+
+### 14.2 九条收口（外加一条 TS 专属的既弃别名）
+
+上游 operationId（wire 权威 = `external/mem0/docs/openapi.json`）→ 本地拒绝语义，各写各的，拒绝原因不套模板：
+
+| 上游 operationId | 调用方（官方 SDK） | 路由 | 拒绝语义（一句话） |
+| --- | --- | --- | --- |
+| `exports_create` | Py `create_memory_export` / TS `createMemoryExport` | `POST /v1/exports/` | schema 驱动的**异步导出作业**：本面无导出子系统，回任何 id 都是永远不出数据的作业 |
+| `exports_list` | Py `get_memory_export` / TS `getMemoryExport` | `POST /v1/exports/get/` | 按 `memory_export_id` 取导出**快照**——本面从未创建过导出；filters 半映射到活列表，但把查询presented成快照是说谎，按假成功原则**整体拒绝** |
+| `summary_create` | Py `get_summary` | `POST /v1/summary/` | LLM 摘要生成：本面不生成、不存派生文本（与 `/v2/` profile 同界），回选中的记录原文会把**源记录presented成派生文本** |
+| `get_project_webhooks` | 双方 `getWebhooks` | `GET /api/v1/webhooks/projects/{project_id}/` | webhook 注册表是平台账号面配置；回空列表会把**本面不拥有的项目**报成「没有 webhook」 |
+| `create_webhook` | 双方 `createWebhook` | `POST /api/v1/webhooks/projects/{project_id}/` | 最危险的一条：收下注册 = 报告一个**永远不会触发的订阅**，调用方的通知管线静默不跑 |
+| `update_webhook` | 双方 `updateWebhook` | `PUT /api/v1/webhooks/{webhook_id}/` | 本面从未发过的 id 无物可更；200 会报告一场**无处生效的配置变更** |
+| `delete_webhook` | 双方 `deleteWebhook` | `DELETE /api/v1/webhooks/{webhook_id}/` | 成功 = 声称删除了一个从未存在的注册；404 则会把 id 空间误归属给本面 |
+| `get_project` | 双方 `getProject` | `GET /api/v1/orgs/organizations/{org_id}/projects/{project_id}/` | org/project 是平台账号面的管理对象；本面按 API key 租户scope一切，没有自己的 project 对象可回 |
+| `update_project` | 双方 `updateProject` | `PATCH /api/v1/orgs/organizations/{org_id}/projects/{project_id}/` | `custom_instructions`/`custom_categories` 属平台面提取配置（add 路径上同名字段本就 501）；收下 patch = 无处生效的变更 |
+
+**+1（诚实登记）**：TS 客户端的**既弃** `deleteUser` 构建的是 `DELETE /v1/entities/{entity_type}/{entity_id}/`
+（上游 `entities_delete_v1`，注释明说 deprecated in favor of `/v2/`）。它不在 9 条清单里，但不收口它
+TS 就剩 1 条 unrouted——**零 unrouted 的目标含它才成立**。它就是 `/v2/` 实体擦除的 v1 拼写，语义同一，
+按同一条拒绝理由具名（并指回 `/v2/` 拼写与 canonical 删除面）。Python 无对应方法（它的 `delete_users`
+走 `/v2/`，早已拒绝）。
+
+权限三元组（10 条全部一致，照 `/v2/` 惯例）：`memory.open.capabilities.read` /
+审计 `memory.open.capabilities.read` / resource `capabilities`；tier：POST/PUT/PATCH/DELETE =
+`OpenApiDefault`，GET 无档。
+
+### 14.3 `/api/v1/` 桥接的实现形状（最小改动）
+
+桥接是**一处声明、三处生效**（`paths::MEM0_PATH_PREFIXES` 加入 `/api/v1/`）：
+
+1. `is_mem0_compat_path` → credential bridge 把 `Authorization: Token` 改写到 `X-Api-Key`；
+2. `mem0_problem_document_bridge` → 失败体重写成客户端能解析的 `application/json`；
+3. `memory_open_api_prefixes` / `external_protocol_prefixes` → 框架把它归类 `open-api` + 悬停上下文选择器守卫
+   （顺带豁免了 `/api/v1/orgs/organizations/...` 路径里的 `/organizations/` ambient 标记——
+   `validate_openapi_routes_context_selectors_with_external_prefixes` 对声明前缀下的路由跳过该检查）。
+
+声明前缀下**未注册**的路径（如 `/api/v1/nothing/`）落 mem0 形状 404，与 `/v2/` 行为一致。
+
+### 14.4 契约与门禁同步
+
+1. **材料化权威**（`mem0Operation` × 10，全部 `refusal: true` → 无 2xx、错误集含 501、`x-sdkwork-wire-protocol: external`）；
+   路由清单 49 → **56** 条。`app-api` / `backend-api` 产物逐字节未变（幂等复核）。
+2. **`mem0_upstream_schema_reconciliation.mjs`**：新增 `REFUSED_OPERATIONS`（16 条 verb-edge × 上游路径，
+   逐条断言：上游仍声明该操作、本地同路径同动词、external 标记、**声明 501 且无任何 2xx**）+
+   `/api/v1/` 前缀已声明断言。3 → **20** tests，全绿。
+3. **采样器**：`ROUTE_VERBS` 补 7 个常量；`EXPECTED` 重录（双端 refused 全集、`unrouted: []`、
+   `unbridged: []`、prefixes 含 `/api/v1/`）；自测 30 → **37** 条（webhook/项目/实体 v1 拒绝分类用例、
+   `/api/v1/` 正例与 `/api/v2/` 反例）；结构不变量从「refusals == /v2/ 路由数」放宽为
+   「refusals ⊇ /v2/ 路由」（拒绝集本轮扩到 /v1/ 与 /api/v1/，`readRefusedPaths` 仍逐名解析防陈旧）。
+4. **`mem0_wire_flow.rs`**：新增 `mem0_wire_refuses_the_unowned_operations_by_name`——10 条
+   **官方客户端调用形状**（含 body）→ 逐条断言 501 + `application/json` + 具名 `detail`（且含
+   "not supported on this surface"）；`mem0_wire_reports_authentication_failures_in_its_own_dialect`
+   增加 `/api/v1/` 无凭证探针，钉住平台账号面的 401 现在是 mem0 框化的（§14.1 的行为前提）。
+
+### 14.5 本轮回归（实测）
+
+| 层面 | 结果 |
+| --- | --- |
+| 物化器（node） | exit 0；open-api 三产物更新（权威 OpenAPI + crate manifest + SDK 族副本 + 路由 manifest JSON）；`app-api`/`backend-api` 未动 |
+| 契约 node 门禁 | `mem0_upstream_schema_reconciliation` 20 ✔；`route_manifest_openapi_parity` 5 ✔；`openapi_phase1_contract` 1 ✔；`openapi_body_schema_parity` 5 ✔；`api_authority_identity` 3 ✔；`open_api_prefix_contract` 1 ✔；`openapi_query_param_parity` 3 ✔ |
+| `verify_openapi_operation_ids.ps1` | exit 0（3 份 spec） |
+| 采样器 | 主流程 exit 0（account matches）；自测 37 条 pass |
+| Rust 测试 | **本轮未跑**（工单禁 cargo；编排者验证点：`cargo test -p sdkwork-routes-memory-open-api`，重点 `mem0_wire_flow`、`paths.rs` 单测、`mem0_wire_context_selector_contract`） |
+
+⚠️ 基线注意：本节改动横跨 `paths.rs` / `handlers.rs` / `mod.rs` / 三份材料化产物与三个工具/测试文件，
+工作树中还有未提交的既有改动——提交时按文件分轮，不要 `git add -A`。

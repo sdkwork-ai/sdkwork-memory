@@ -30,14 +30,17 @@
 //! (501 with a reason) rather than answering with a narrower result that would
 //! be indistinguishable from success.
 //!
-//! Three prefixes carry the wire: `/v1/`, `/v3/`, and `/v2/`. The first two hold
-//! the operations this surface implements; `/v2/` holds the shapes the official
-//! clients call that it deliberately does not — entity-scope deletion and the
-//! whole profile/settings family — each answered `501` with its own reason.
-//! `/v2/` is declared rather than left out because a prefix that is not declared
-//! is answered by the framework's surface classifier *before* either bridge
-//! below runs, which turns a mem0 call into a `401` carrying a media type the
-//! clients cannot read.
+//! Four prefixes carry the wire: `/v1/`, `/v3/`, `/v2/`, and `/api/v1/`. The
+//! first two hold the operations this surface implements; `/v2/` and `/api/v1/`
+//! hold the shapes the official clients call that it deliberately does not —
+//! entity-scope deletion and the profile/settings family, the export-job and
+//! LLM-summary endpoints, and mem0's platform-account plane (webhooks,
+//! org/project administration) — each answered `501` with its own reason. The
+//! refusal prefixes are declared rather than left out because a prefix that is
+//! not declared is answered by the framework's surface classifier *before*
+//! either bridge below runs, which turns a mem0 call into a `401` carrying a
+//! media type the clients cannot read and a message that misdirects a
+//! correctly credentialed caller toward their key.
 
 pub mod dto;
 pub mod error;
@@ -171,11 +174,12 @@ fn is_problem_json(response: &Response) -> bool {
 /// here must not diverge from that manifest, which is what
 /// `open_router_mounts_every_open_openapi_operation_path` checks.
 ///
-/// The `/v2/` half of this router is refusal-only. Those operations exist so the
-/// declared `/v2/` prefix carries real paths, and so a caller reaching them gets
-/// a named `501` in the mem0 failure dialect instead of the framework's
-/// mis-framed `401`. They are registered here and nowhere else — the router is
-/// the only place that decides which paths this surface answers at all.
+/// The `/v2/`, `/v1/`-refusal, and `/api/v1/` halves of this router are
+/// refusal-only. Those operations exist so the declared prefixes carry real
+/// paths, and so a caller reaching them gets a named `501` in the mem0 failure
+/// dialect instead of the framework's mis-framed `401`. They are registered here
+/// and nowhere else — the router is the only place that decides which paths this
+/// surface answers at all.
 pub fn mem0_routes() -> Router {
     Router::new()
         .route(paths::MEM0_PING, get(handlers::ping))
@@ -218,6 +222,31 @@ pub fn mem0_routes() -> Router {
             paths::MEM0_V2_PROFILE_SETTINGS,
             get(handlers::refuse_v2_profile_settings_read)
                 .post(handlers::refuse_v2_profile_settings_update),
+        )
+        // `/v1/` refusals — the export/summary subsystems and the deprecated v1
+        // entity-erasure spelling the TypeScript client's `deleteUser` builds.
+        .route(
+            paths::MEM0_V1_ENTITIES,
+            delete(handlers::refuse_v1_entity_delete),
+        )
+        .route(paths::MEM0_EXPORTS, post(handlers::refuse_v1_export_create))
+        .route(
+            paths::MEM0_EXPORTS_GET,
+            post(handlers::refuse_v1_export_fetch),
+        )
+        .route(paths::MEM0_SUMMARY, post(handlers::refuse_v1_summary_create))
+        // `/api/v1/` — mem0's platform-account plane, refused by name.
+        .route(
+            paths::MEM0_PROJECT_WEBHOOKS,
+            get(handlers::refuse_project_webhooks_read).post(handlers::refuse_webhook_create),
+        )
+        .route(
+            paths::MEM0_WEBHOOK,
+            put(handlers::refuse_webhook_update).delete(handlers::refuse_webhook_delete),
+        )
+        .route(
+            paths::MEM0_PROJECT,
+            get(handlers::refuse_project_read).patch(handlers::refuse_project_update),
         )
 }
 

@@ -1240,26 +1240,27 @@ pub(crate) async fn batch_delete_memories(
 }
 
 // ---------------------------------------------------------------------------
-// `/v2/` refusals
+// Named refusals (`/v2/`, and the `/v1/` + `/api/v1/` sets further below)
 //
 // Each of these is a path the official clients build verbatim and this surface
 // does not implement. They are registered for two reasons, and both are load
 // bearing:
 //
 // * A declared prefix has to carry real paths
-//   (`mem0_wire_context_selector_contract`), or `/v2/` would be a declaration
-//   that exempts a path space nobody serves.
-// * A caller reaching them must get the mem0 failure dialect. Before `/v2/` was
-//   declared, these calls were answered by the framework's surface classifier
-//   *ahead of* both mem0 bridges: `401` with `application/problem+json`, which
-//   the Python client surfaces as raw text because `mem0/client/utils.py` only
-//   unwraps `detail` when the content type starts with `application/json`.
+//   (`mem0_wire_context_selector_contract`), or `/v2/` and `/api/v1/` would be
+//   declarations that exempt a path space nobody serves.
+// * A caller reaching them must get the mem0 failure dialect. Before those
+//   prefixes were declared, these calls were answered by the framework's
+//   surface classifier *ahead of* both mem0 bridges: `401` with
+//   `application/problem+json`, which the Python client surfaces as raw text
+//   because `mem0/client/utils.py` only unwraps `detail` when the content type
+//   starts with `application/json` — and which misdirects the caller toward
+//   their credential, which was never the problem.
 //
 // Every handler below takes no body and reads no parameter. That is deliberate,
 // not an omission: the answer does not depend on the request, and parsing it
 // would suggest a partial honour that does not exist.
 // ---------------------------------------------------------------------------
-
 /// `DELETE /v2/entities/{entity_type}/{entity_id}/`.
 ///
 /// The Python client's `delete_users` reaches this once per user scope. It is
@@ -1330,10 +1331,10 @@ pub(crate) async fn refuse_v2_profile_job_retrieve() -> Mem0Error {
 /// mem0's profile settings are **project-level** — which model writes a profile
 /// and when. This service is not the owner of a mem0 project's configuration:
 /// project and organisation administration is mem0's platform-account plane,
-/// which this surface does not serve (the same reason the `/api/v1/orgs/...` and
-/// `/api/v1/webhooks/...` calls the official clients make are not served here).
-/// A settings document derived from this service's own space scope would be a
-/// different object published under the same name.
+/// whose calls (`/api/v1/orgs/...`, `/api/v1/webhooks/...`) are refused by name
+/// further below for the same reason. A settings document derived from this
+/// service's own space scope would be a different object published under the
+/// same name.
 pub(crate) async fn refuse_v2_profile_settings_read() -> Mem0Error {
     Mem0Error::unsupported(
         "profile settings retrieval",
@@ -1354,6 +1355,202 @@ pub(crate) async fn refuse_v2_profile_settings_update() -> Mem0Error {
         "mem0's profile settings are project-level configuration owned by mem0's platform-account \
          plane, which this surface does not serve; accepting the write would report a \
          configuration change that took effect nowhere",
+    )
+}
+
+// ---------------------------------------------------------------------------
+// `/v1/` refusals — mem0 subsystems this surface does not carry: the
+// schema-driven export-job family and the LLM summary endpoint, plus the
+// deprecated v1 spelling of the `/v2/` entity-scope deletion (the TypeScript
+// client's deprecated `deleteUser` still builds it).
+// ---------------------------------------------------------------------------
+
+/// `POST /v1/exports/` (upstream `exports_create`).
+///
+/// Upstream creates an asynchronous export *job* from a caller-supplied schema
+/// and answers `201` with an export id. This service has no export-job
+/// subsystem: nothing would consume the schema, and any id returned would name
+/// a job that can never produce data. Answering with an empty export payload
+/// instead would report an export that did not happen — the caller would wire
+/// a data pipeline around a file that is never written.
+pub(crate) async fn refuse_v1_export_create() -> Mem0Error {
+    Mem0Error::unsupported(
+        "schema-driven export creation",
+        "mem0 queues an asynchronous export job from the submitted schema, and this service has \
+         no export subsystem — a job id returned here would never produce data. Records are \
+         readable directly on the compatibility listing (POST /v3/memories/) and on the \
+         canonical surface (/mem/v3/api/memory/memories)",
+    )
+}
+
+/// `POST /v1/exports/get/` (upstream `exports_list`).
+///
+/// Upstream answers either with the stored data of a created export
+/// (`memory_export_id`) or, when only `filters` are given, with a fresh
+/// filtered extract. The id half has no referent here — no export is ever
+/// created on this surface. The filters half *half*-maps onto the compatibility
+/// listing, but an extract presented as an export is not the same object: it
+/// would be read as a stable, addressable snapshot when it is actually a live
+/// query. A half-mapped answer is indistinguishable from success for the half
+/// that does not map, so the operation is refused as a whole.
+pub(crate) async fn refuse_v1_export_fetch() -> Mem0Error {
+    Mem0Error::unsupported(
+        "export retrieval",
+        "no export is ever created on this surface, so an export id has no stored data here; and \
+         answering the filters-only form with a live listing would present a query as an export \
+         snapshot. Read records directly instead: the compatibility listing (POST /v3/memories/) \
+         applies the same identity filters live",
+    )
+}
+
+/// `POST /v1/summary/` (upstream `summary_create`).
+///
+/// mem0 generates an LLM summary of the memories matching `filters`. This
+/// surface runs no derivation: it stores records, retrievals, and context
+/// packs, and neither generates nor persists a summarising text — the same
+/// boundary as the `/v2/` profile refusals. Returning selected record texts
+/// under a `summary` key would present source records as derived text, and
+/// nothing in the response would let a caller tell them apart.
+pub(crate) async fn refuse_v1_summary_create() -> Mem0Error {
+    Mem0Error::unsupported(
+        "memory summarization",
+        "mem0 derives an LLM summary of the memories matching the given filters, and this service \
+         neither generates nor stores derived text. The records a summary would be derived from \
+         are readable on the compatibility listing (POST /v3/memories/) and searchable on \
+         POST /v3/memories/search/",
+    )
+}
+
+/// `DELETE /v1/entities/{entity_type}/{entity_id}/` (upstream
+/// `entities_delete_v1`, deprecated).
+///
+/// The deprecated v1 spelling of the `/v2/` entity-scope deletion — upstream
+/// deprecates it in favour of the `/v2/` route, and the TypeScript client's
+/// deprecated `deleteUser` still builds exactly it. The semantics are the ones
+/// [`refuse_v2_entity_delete`] refuses: mem0 erases the *scope*, and this
+/// service has no entity-scope deletion at all. Registering the v1 shape keeps
+/// the deprecation from reading as an implementation; a `404` would instead
+/// tell the caller the route aged out, which is a different lie.
+pub(crate) async fn refuse_v1_entity_delete() -> Mem0Error {
+    Mem0Error::unsupported(
+        "entity deletion",
+        "mem0 deletes an entity scope together with the memories filed under it, and this service \
+         has no entity-scope deletion; this deprecated v1 spelling means the same erasure as \
+         DELETE /v2/entities/{entity_type}/{entity_id}/ and is refused for the same reason. \
+         Delete the scope's memories individually on the canonical surface \
+         (/mem/v3/api/memory/memories/{memoryId}) instead",
+    )
+}
+
+// ---------------------------------------------------------------------------
+// `/api/v1/` refusals — mem0's **platform-account plane**: webhook delivery
+// registration and org/project administration. This surface is the memory
+// compatibility wire, not the owner of a mem0 project's operational
+// configuration; everything here is scoped by the API key's tenant, and no
+// project, organisation, or webhook object exists on this side of the bridge.
+// The plane is declared (`paths::MEM0_PATH_PREFIXES`) so its calls are
+// mem0-framed and refused by name instead of mis-answered `401` by the
+// framework's surface classifier — a `401` that tells a correctly credentialed
+// caller to go check their key.
+// ---------------------------------------------------------------------------
+
+/// `GET /api/v1/webhooks/projects/{project_id}/` (upstream
+/// `get_project_webhooks`).
+///
+/// mem0's webhook registry is project-scoped event-delivery configuration owned
+/// by its platform-account plane. This service delivers no outbound webhooks,
+/// so its registry would always be empty — and an empty `200` is not the honest
+/// answer: it reports "no webhooks registered" for a project this surface does
+/// not own, indistinguishable from a real project that genuinely has none.
+pub(crate) async fn refuse_project_webhooks_read() -> Mem0Error {
+    Mem0Error::unsupported(
+        "project webhook listing",
+        "mem0's webhook registry is project-level configuration owned by its platform-account \
+         plane, and this service sends no outbound webhooks; an empty listing here would report \
+         a project this surface does not own as one that merely has no webhooks. Memory events \
+         are readable on the canonical surface (/mem/v3/api/memory/events)",
+    )
+}
+
+/// `POST /api/v1/webhooks/projects/{project_id}/` (upstream `create_webhook`).
+///
+/// The write half of the registry, and the refusal that matters most: a caller
+/// registers a webhook so their notification path can be wired around the
+/// subscription. Accepting the registration would report a subscription that
+/// would never fire — the caller's pipeline silently never runs, which is the
+/// most expensive kind of false success this surface could produce.
+pub(crate) async fn refuse_webhook_create() -> Mem0Error {
+    Mem0Error::unsupported(
+        "webhook creation",
+        "mem0 registers project-level HTTP callbacks on its platform-account plane, and this \
+         service delivers no outbound webhooks; accepting a registration would report a \
+         subscription that could never fire. Memory events are readable on the canonical surface \
+         (/mem/v3/api/memory/events)",
+    )
+}
+
+/// `PUT /api/v1/webhooks/{webhook_id}/` (upstream `update_webhook`).
+///
+/// A webhook id this service never issued has nothing to update, and a `200`
+/// carrying the "updated" object would report a configuration change that took
+/// effect nowhere — while a `404` would misattribute the id space to this
+/// service, reading as "that webhook was deleted" rather than "no webhook is
+/// ever registered here".
+pub(crate) async fn refuse_webhook_update() -> Mem0Error {
+    Mem0Error::unsupported(
+        "webhook update",
+        "no webhook is ever registered on this surface, so a webhook id has nothing to update \
+         here, and answering would report a configuration change that took effect nowhere",
+    )
+}
+
+/// `DELETE /api/v1/webhooks/{webhook_id}/` (upstream `delete_webhook`).
+///
+/// The delete half of the registry. A deletion reported as successful would
+/// claim removal of a registration this surface never held, and a `404` would
+/// read as "that webhook is gone" rather than "no webhook is ever created
+/// here" — the same misattribution the profile-job lookup refusal documents.
+pub(crate) async fn refuse_webhook_delete() -> Mem0Error {
+    Mem0Error::unsupported(
+        "webhook deletion",
+        "no webhook is ever registered on this surface, so a webhook id names nothing that could \
+         be deleted here, and a success would claim the removal of a registration that never \
+         existed",
+    )
+}
+
+/// `GET /api/v1/orgs/organizations/{org_id}/projects/{project_id}/` (upstream
+/// `get_project`).
+///
+/// Org/project administration is mem0's platform-account plane. This service
+/// scopes every request by the API key's tenant and has no organisation or
+/// project object of its own to return; a project document derived from the
+/// caller's compatibility space would be a different object published under
+/// the same name — the identical reasoning as the `/v2/` profile-settings
+/// refusal above.
+pub(crate) async fn refuse_project_read() -> Mem0Error {
+    Mem0Error::unsupported(
+        "project retrieval",
+        "mem0 projects are administration objects on its platform-account plane; this service \
+         scopes every request by the API key's tenant and holds no organisation or project \
+         object, so a project document here would be a different object under the same name",
+    )
+}
+
+/// `PATCH /api/v1/orgs/organizations/{org_id}/projects/{project_id}/` (upstream
+/// `update_project`).
+///
+/// The write half of the project document, and the same boundary as the
+/// `/v2/` profile-settings write: `custom_instructions` and `custom_categories`
+/// are extraction configuration owned by the platform plane — the same fields
+/// this surface already refuses per-request on the add path. Accepting the
+/// patch would report a configuration change that took effect nowhere.
+pub(crate) async fn refuse_project_update() -> Mem0Error {
+    Mem0Error::unsupported(
+        "project update",
+        "mem0 projects are administration objects on its platform-account plane; accepting a \
+         project patch (custom instructions, categories) would report a configuration change \
+         that took effect nowhere on this surface",
     )
 }
 

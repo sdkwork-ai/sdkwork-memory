@@ -105,6 +105,19 @@ A sixth pass synced the I6-I8 documentation that round 5 never wrote, diagnosed 
 - `service_repair_contract` provider-health fixtures: bindings need numeric snowflake-style uuids and distinct `provider_code` values (unique constraint + numeric admin-id parsing) — fixture corrected, 7/7 green.
 - `cross_tenant_isolation_matrix`: entity create/read belong to the App surface (no owned open surface) — A's create moved to `/app/v3/api/memory/entities`; B's open-surface read accepts the named 501 refusal as isolation-safe. 3/3 green.
 
+- `service_repair_contract` provider-health fixtures: bindings need numeric snowflake-style uuids and distinct `provider_code` values (unique constraint + numeric admin-id parsing) — fixture corrected, 7/7 green.
+- `cross_tenant_isolation_matrix`: entity create/read belong to the App surface (no owned open surface) — A's create moved to `/app/v3/api/memory/entities`; B's open-surface read accepts the named 501 refusal as isolation-safe. 3/3 green.
+
+## Round 7 (same day): mem0 compatibility surface closed to zero unrouted
+
+The official-client coverage audit closed with **python 12 served / 16 named-refused / 0 unrouted, typescript 13 / 15 / 0**, 12 refusal routes, four declared prefixes (`/v1/`, `/v2/`, `/v3/`, `/api/v1/`), unbridged framing 0 — and both official SDKs (mem0ai Python 2.2.0 from the repo venv, mem0ai JS from the isolated SDK root) pass their live-server E2E flows against the closed surface.
+
+| ID | Finding | Fix | Files | Status |
+| --- | --- | --- | --- | --- |
+| K1 | 9 official-client methods (exports ×2, summary, webhooks ×4, projects ×2) plus the whole `/api/v1/` management family were unrouted — naked mem0-dialect 404s or unbridged IAM 401s | all 9 routed as named 501 refusals with per-operation reasons (following the §12 "refuse, don't fake" rule: schema-driven exports, LLM summaries, webhook registries, and the org/project domain have no backing capability here); `/api/v1/` declared as a fourth bridge prefix so unlisted `/api/v1/*` paths land in the mem0 failure dialect instead of an unbridged 401 indistinguishable from auth failure | routes crate (paths/mod/handlers), materializer, coverage tool, reconciliation gate, REVIEW-20260928 §14 | landed — coverage tool re-recorded and green |
+| K2 | the framework's tenant-isolation path-resource guard 403'd mem0's `{orgId}` routes before the refusal handlers could answer (vendor org ids are not SDKWork organization ids) | `HttpRoute.external_wire_protocol` added (default `None`, builder `with_external_wire_protocol`); the tenant-isolation interceptor skips the path-resource guard for external-wire routes, and both context-selector validators derive exemptions from the same route declarations (no second default to drift) | ../sdkwork-web-framework contract/core, materializer emission | landed — all 29 mem0 routes carry the marker; framework suite unchanged except the intended exemption |
+| K3 | the mem0 context-selector mutation-control test pinned which upstream violation surfaces first; the new `/api/v1/` paths changed that order | assertion broadened to "the undeclared gate fires on an upstream ambient violation" (either surface), preserving the mutation-control intent | mem0_wire_context_selector_contract.rs | landed — 4/4 |
+
 ## Decisions
 
 - delete_all keeps its synchronous keyset-batched form: every batch already commits journal+outbox (audit-traceable per batch), unlike forget which wrote nothing until completion.
