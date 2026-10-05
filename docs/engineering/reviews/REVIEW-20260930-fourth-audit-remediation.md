@@ -118,6 +118,25 @@ The official-client coverage audit closed with **python 12 served / 16 named-ref
 | K2 | the framework's tenant-isolation path-resource guard 403'd mem0's `{orgId}` routes before the refusal handlers could answer (vendor org ids are not SDKWork organization ids) | `HttpRoute.external_wire_protocol` added (default `None`, builder `with_external_wire_protocol`); the tenant-isolation interceptor skips the path-resource guard for external-wire routes, and both context-selector validators derive exemptions from the same route declarations (no second default to drift) | ../sdkwork-web-framework contract/core, materializer emission | landed — all 29 mem0 routes carry the marker; framework suite unchanged except the intended exemption |
 | K3 | the mem0 context-selector mutation-control test pinned which upstream violation surfaces first; the new `/api/v1/` paths changed that order | assertion broadened to "the undeclared gate fires on an upstream ambient violation" (either surface), preserving the mutation-control intent | mem0_wire_context_selector_contract.rs | landed — 4/4 |
 
+## Round 7b (same day): first archived load/soak evidence + driver truthing
+
+| ID | Finding | Fix | Files | Status |
+| --- | --- | --- | --- | --- |
+| K4 | the perf:soak retrieval scenario sent no `Idempotency-Key` / `X-Content-SHA256` — `retrievals.create` is an idempotent SDKWork command, so every request 400'd; the batch scenario synthesized placeholder ids when no real pool was supplied | retrieval now sends a per-request key plus the body SHA-256 fingerprint; the archived run uses `SDKWORK_LOAD_MEM0_ID_POOL` with 48 real ids | scripts/load-soak.mjs | landed |
+| K5 | **first archived load/soak evidence** (a declared gap since round 4) | `load-soak-20261004T152436Z.json` + `.environment.md`: against the `mem0_platform_server` wire harness (in-process SQLite fixture, single process, 48 seeded records), retrieval 12,994 req / 0 errors / p99 50.7ms and mem0-batch 3,732 req / 0 errors / p99 182.6ms — both inside the 200ms budget; list-cursor skipped (harness serves no app-face credentials). README labels the run dev-harness scale and states deployment-scale evidence (PostgreSQL/multi-replica/Redis) remains outstanding | docs/engineering/evidence/* | landed — soak gate 16/16 |
+| K6 | environment repair: a parallel session's `a9cb675` sync copied the normative HTTP-envelope body into both AGENTS.md files (tripping the agent/workflow standard), and root `node_modules` was removed externally | both AGENTS.md files rewritten as routing blocks pointing at `API_SPEC.md` §4.5/§14–16 plus the two checker commands (no copied body, no duplicated heading); `pnpm install` restored dependencies; workspace registry re-synced | AGENTS.md, apps/sdkwork-memory-pc/AGENTS.md | landed — full `pnpm check` green |
+
+Note: rounds 4–7 ran in a repository shared with parallel sessions; commits `3451ad5` / `917bbe0` / `a9cb675` (Sep 30 – Oct 3) landed portions of this remediation (usage tracking, mem0 contracts, workspace sync) between rounds. The working tree at the end of this record carries only the mem0-closure, evidence, and compliance files listed above.
+
+## Round 8 (same day): sibling toolchain debt triage closed
+
+| ID | Finding | Fix | Files | Status |
+| --- | --- | --- | --- | --- |
+| K7 | the generator's rust-manifest test asserted the obsolete single-crate layout (`[workspace]` immediately followed by `[package]`) while the shipped template emits the standalone workspace-root shape the test's own name describes | assertion updated to the shipped contract (workspace tables, `[package]`, `rust-version.workspace = true` inheritance) | ../sdkwork-sdk-generator rust-generator.test.ts | landed — that test green |
+| K8 | framework `production_assembly` imported the two forbidden-memory-store types at module scope while only the test module references them (unused-import warning on every build) | import narrowed to the `#[cfg(test)]` module | ../sdkwork-web-framework production_assembly.rs | landed — warning gone, 13/13 module tests green |
+
+Remaining generator-suite reds are **attributed and owned elsewhere**: five OpenAPI 3.2 feature tests (additionalOperations / querystring — unimplemented features, TDD-style, owned by the generator feature workflow), one vitest-shim failure (`@vitest/expect` not linked through the sibling's broken pnpm install), and load-sensitive 5s spawn-timeout flakes in cli-inspect/materialize tests that vary run to run. Implementing the 3.2 features or repairing the sibling pnpm workspace is outside this remediation's scope and recorded here so the reds stay attributable.
+
 ## Decisions
 
 - delete_all keeps its synchronous keyset-batched form: every batch already commits journal+outbox (audit-traceable per batch), unlike forget which wrote nothing until completion.

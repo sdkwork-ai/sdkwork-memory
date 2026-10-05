@@ -41,9 +41,25 @@ async fn main() {
         .unwrap_or_else(|_| memory_dev_api_key("2001", "mem0-compat-key"));
 
     let store = sdkwork_memory_test_support::space_fixtures::new_seeded_in_memory_store().await;
+    let service = OpenMemoryService::new(store);
+    // Print the mem0 compatibility space for the fixture actor, so load
+    // drivers and curls can aim space-scoped SDKWork calls at the same space
+    // the mem0 wire writes into.
+    {
+        let context = sdkwork_memory_contract::MemoryOpenApiRequestContext::for_open_surface(
+            "mem0-platform-server",
+            100_001,
+            Some(2001),
+        );
+        let space_id = service
+            .mem0_space_id(&context)
+            .await
+            .unwrap_or_else(|error| panic!("mem0 space resolution failed: {error:?}"));
+        println!("MEM0_COMPAT_SPACE_ID {space_id}");
+    }
     let app = wrap_router_with_web_framework(
         DefaultWebRequestContextResolver::default(),
-        build_router_with_open_api(OpenMemoryService::new(store)),
+        build_router_with_open_api(service),
     );
 
     let listener = tokio::net::TcpListener::bind(&addr)

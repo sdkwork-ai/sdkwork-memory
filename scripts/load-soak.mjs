@@ -34,6 +34,7 @@
 import { performance } from "node:perf_hooks";
 import fs from "node:fs";
 import path from "node:path";
+import { createHash, randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 
 const SCENARIO_NAMES = ["retrieval", "list-cursor", "mem0-batch"];
@@ -372,7 +373,6 @@ async function runRetrievalScenario(config) {
     return `${words.join(" ")} #${Math.floor(random() * 1_000_000)}`;
   };
   const url = `${config.baseUrl}${RETRIEVALS_PATH}`;
-  const headers = { "content-type": "application/json", "x-api-key": config.openApiKey };
   const elapsedSecs = await runClosedLoop(config, async () => {
     const body = JSON.stringify({
       query: randomQuery(),
@@ -380,6 +380,14 @@ async function runRetrievalScenario(config) {
       topK: 8,
       contextBudgetTokens: 4096,
     });
+    // `retrievals.create` is an idempotent SDKWork command: each request
+    // carries its own key plus the body fingerprint the gateway verifies.
+    const headers = {
+      "content-type": "application/json",
+      "x-api-key": config.openApiKey,
+      "idempotency-key": randomUUID(),
+      "x-content-sha256": createHash("sha256").update(body).digest("hex"),
+    };
     return requestOnce(url, { method: "POST", headers, body }, config.requestTimeoutMs);
   }, stats);
   return finalizeScenario("retrieval", true, stats, elapsedSecs, config, reasons);

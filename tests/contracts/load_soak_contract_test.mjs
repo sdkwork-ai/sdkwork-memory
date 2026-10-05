@@ -288,10 +288,12 @@ test("CLI maps the gate verdict onto exit codes (0 pass, 1 SLO violation)", () =
   assert.match(source, /process\.exitCode = 2/, "usage/configuration errors must exit 2");
 });
 
-test("evidence README states the honest no-archived-runs status and the gates", () => {
+test("evidence README states the honest archiving status and the gates", () => {
   const readme = fs.readFileSync(evidenceReadmePath, "utf8");
-  // Honest status: the protocol must not pretend a run has been archived.
-  assert.match(readme, /尚无[^。\n]*已归档/, "README must state that no load/soak run is archived yet");
+  // Honest status: whatever IS archived must be labeled with its scale, and
+  // deployment-scale evidence must not be claimed by a dev-harness run.
+  assert.match(readme, /开发线级 harness，非部署级证据/, "README must label the archived run's scale honestly");
+  assert.match(readme, /部署级证据仍然缺失/, "README must state that deployment-scale evidence is still missing");
   // Result file naming with a UTC timestamp.
   assert.match(readme, /load-soak-<YYYYMMDDTHHMMSSZ>\.json/);
   // Admission gates: 5xx=0, p99 budget, cursor walk terminates, >=1 2xx.

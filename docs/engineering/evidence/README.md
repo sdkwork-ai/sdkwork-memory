@@ -14,9 +14,17 @@ evidence when its JSON plus environment description are archived here.
 
 ## Current status
 
-**尚无已归档压测。** 截至 2026-09-30，本目录中没有任何已归档的 load/soak 结果 JSON 或
-环境描述。本 README 只定义协议；不要把"存在本文件"读成"存在压测证据"。首个归档
-条目出现后，必须更新本节。
+**首个已归档条目（2026-10-04，开发线级 harness，非部署级证据）：**
+`load-soak-20261004T152436Z.json` + `load-soak-20261004T152436Z.environment.md`。
+对 `mem0_platform_server` 线级 harness（进程内 SQLite fixture、单进程、48 条种子记录）
+跑了 retrieval 与 mem0-batch 两个场景各 60 秒（8 并发）：retrieval 12,994 请求
+0 错误 p99 50.7ms；mem0-batch 3,732 请求 0 错误 p99 182.6ms —— 均在 200ms 预算内。
+list-cursor 场景未跑（该 harness 不提供 app 面凭据）。
+
+**部署级证据仍然缺失：** 上述结果证明的是"协议面与驱动在真实 HTTP 上按预算工作"，
+不是生产容量。99.9% 可用性与部署级 p99 目标的证据，仍需一次对真实部署形态
+（PostgreSQL、多副本、共享 Redis、生产规模数据）的有记录压测——按
+`docs/releases/README.md` 的发布门禁归档。
 
 ## How to run
 

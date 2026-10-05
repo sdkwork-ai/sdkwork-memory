@@ -1,0 +1,57 @@
+{
+  "schema": "sdkwork.load-soak.v1",
+  "generatedAtUtc": "2026-10-04T15:24:36.350Z",
+  "baseUrl": "http://127.0.0.1:18421",
+  "durationSecs": 60,
+  "concurrency": 8,
+  "p99BudgetMs": 200,
+  "scenarios": {
+    "retrieval": {
+      "enabled": true,
+      "total": 12994,
+      "ok2xx": 12994,
+      "err4xx": 0,
+      "err5xx": 0,
+      "networkErrors": 0,
+      "p50Ms": 35.9059999999954,
+      "p95Ms": 46.4629000000059,
+      "p99Ms": 50.70760000000155,
+      "maxMs": 66.72159999999712,
+      "rps": 216.538,
+      "elapsedSecs": 60.008,
+      "reasons": [],
+      "passed": true
+    },
+    "list-cursor": {
+      "enabled": false,
+      "passed": false,
+      "reasons": [
+        "not selected"
+      ]
+    },
+    "mem0-batch": {
+      "enabled": true,
+      "total": 3732,
+      "ok2xx": 3732,
+      "err4xx": 0,
+      "err5xx": 0,
+      "networkErrors": 0,
+      "p50Ms": 125.73129999999946,
+      "p95Ms": 164.17360000000917,
+      "p99Ms": 182.56170000000566,
+      "maxMs": 209.76650000001246,
+      "rps": 62.13,
+      "elapsedSecs": 60.068,
+      "batchSize": 50,
+      "reasons": [],
+      "passed": true
+    }
+  },
+  "passed": true,
+  "gate": {
+    "err5xxMustBeZero": true,
+    "p99BudgetMs": 200,
+    "cursorWalkMustExhaust": true,
+    "everyEnabledScenarioNeeds2xx": true
+  }
+}
