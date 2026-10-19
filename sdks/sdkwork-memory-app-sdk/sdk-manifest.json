@@ -112,6 +112,21 @@
       },
       "consumerPackageName": "@sdkwork/memory-app-sdk",
       "transportPackageName": "sdkwork-memory-app-sdk-generated-typescript"
+    },
+    {
+      "language": "rust",
+      "workspace": "sdkwork-memory-app-sdk-rust",
+      "generationState": "materialized",
+      "releaseState": "not_published",
+      "generatedPath": "sdkwork-memory-app-sdk-rust/generated/server-openapi",
+      "manifestPath": "sdkwork-memory-app-sdk-rust/generated/server-openapi/Cargo.toml",
+      "name": "sdkwork-memory-app-sdk-generated-rust",
+      "version": "0.1.0",
+      "description": "Generator-owned Rust transport SDK for sdkwork-memory-app-api.",
+      "consumerSurface": {
+        "primaryClient": "SdkworkAppClient",
+        "apiPrefix": "/app/v3/api"
+      }
     }
   ]
 }
