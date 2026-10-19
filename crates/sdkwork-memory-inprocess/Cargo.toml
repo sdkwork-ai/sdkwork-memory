@@ -1,0 +1,20 @@
+[package]
+name = "sdkwork-memory-inprocess"
+rust-version.workspace = true
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "In-process durable memory retrieval runtime for SDKWork modules"
+
+[lib]
+name = "sdkwork_memory_inprocess"
+
+[lints]
+workspace = true
+
+[dependencies]
+sdkwork-memory-contract.workspace = true
+sdkwork-intelligence-memory-service.workspace = true
+sdkwork-intelligence-memory-repository-sqlx.workspace = true
+tokio = { workspace = true, features = ["rt", "time"] }
+tracing.workspace = true

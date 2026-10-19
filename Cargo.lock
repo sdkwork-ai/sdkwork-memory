@@ -3357,6 +3357,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdkwork-memory-inprocess"
+version = "0.1.0"
+dependencies = [
+ "sdkwork-intelligence-memory-repository-sqlx",
+ "sdkwork-intelligence-memory-service",
+ "sdkwork-memory-contract",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "sdkwork-memory-integration-tests"
 version = "0.1.0"
 dependencies = [

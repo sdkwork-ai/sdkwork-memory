@@ -1,4 +1,4 @@
-﻿[workspace]
+[workspace]
 resolver = "2"
 members = [
   "crates/sdkwork-api-memory-assembly",
@@ -12,6 +12,7 @@ members = [
   "crates/sdkwork-memory-test-support",
   "crates/sdkwork-intelligence-memory-service",
   "crates/sdkwork-intelligence-memory-repository-sqlx",
+  "crates/sdkwork-memory-inprocess",
   "crates/sdkwork-routes-memory-open-api",
   "crates/sdkwork-routes-memory-app-api",
   "crates/sdkwork-routes-memory-backend-api",
@@ -80,6 +81,7 @@ sdkwork-memory-plugin-native-sql = { path = "plugins/sdkwork-memory-plugin-nativ
 sdkwork-memory-plugin-reference-profiles = { path = "plugins/sdkwork-memory-plugin-reference-profiles" }
 sdkwork-memory-plugin-search-first-vector = { path = "plugins/sdkwork-memory-plugin-search-first-vector" }
 sdkwork-intelligence-memory-service = { path = "crates/sdkwork-intelligence-memory-service" }
+sdkwork-memory-inprocess = { path = "crates/sdkwork-memory-inprocess" }
 sdkwork-intelligence-memory-repository-sqlx = { path = "crates/sdkwork-intelligence-memory-repository-sqlx" }
 sdkwork-routes-memory-open-api = { path = "crates/sdkwork-routes-memory-open-api" }
 sdkwork-routes-memory-support = { path = "crates/sdkwork-routes-memory-support" }
