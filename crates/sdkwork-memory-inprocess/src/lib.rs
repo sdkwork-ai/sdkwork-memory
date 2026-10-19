@@ -21,6 +21,7 @@ use sdkwork_memory_contract::dto::{
     ListMemoriesQuery, MemoryRecord, MemoryRetrievalRequest, MemoryRetrievalResult,
 };
 use sdkwork_memory_contract::ports::MemoryServiceResult;
+use sdkwork_memory_contract::space::{MemorySpace, MemorySpaceRequest};
 use sdkwork_memory_contract::MemoryAppRequestContext;
 
 /// Default retrieval depth for a turn-scoped memory query.
@@ -97,6 +98,41 @@ impl InProcessMemoryRuntime {
             .await
     }
 
+    /// Creates a personal memory space for the authenticated actor.
+    ///
+    /// Provisioning is exposed for hosts that co-deploy the memory capability
+    /// and need to create a space before the first turn.
+    pub async fn create_space(
+        &self,
+        tenant_id: u64,
+        actor_id: Option<u64>,
+        display_name: impl Into<String>,
+    ) -> MemoryServiceResult<MemorySpace> {
+        let context = MemoryAppRequestContext {
+            tenant_id,
+            actor_id,
+            organization_id: None,
+            session_id: None,
+        };
+        let owner_subject_id = actor_id
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| tenant_id.to_string());
+        self.service
+            .create_space(
+                context,
+                MemorySpaceRequest {
+                    organization_id: None,
+                    owner_subject_type: "user".to_string(),
+                    owner_subject_id,
+                    space_type: "personal".to_string(),
+                    display_name: display_name.into(),
+                    default_scope: Some("user".to_string()),
+                    metadata: None,
+                },
+            )
+            .await
+    }
+
     /// Lists one memory space through the same service surface as
     /// `memories.list`; kept for health checks and diagnostics.
     pub async fn list(
@@ -137,8 +173,7 @@ pub fn memory_database_configured() -> bool {
             .map(|value| !value.trim().is_empty())
             .unwrap_or(false)
     };
-    configured("SDKWORK_MEMORY_DATABASE_URL")
-        || configured("SDKWORK_DATABASE_URL")
+    configured("SDKWORK_DATABASE_URL")
         || (configured("SDKWORK_DATABASE_HOST") && configured("SDKWORK_DATABASE_NAME"))
 }
 
