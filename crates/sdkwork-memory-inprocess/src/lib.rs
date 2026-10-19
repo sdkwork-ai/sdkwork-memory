@@ -18,7 +18,8 @@ use sdkwork_intelligence_memory_repository_sqlx::{
 use sdkwork_intelligence_memory_service::OpenMemoryService;
 use sdkwork_memory_contract::app_ports::MemoryAppApi;
 use sdkwork_memory_contract::dto::{
-    ListMemoriesQuery, MemoryRecord, MemoryRetrievalRequest, MemoryRetrievalResult,
+    ListMemoriesQuery, MemoryRecord, MemoryRecordRequest, MemoryRetrievalRequest,
+    MemoryRetrievalResult, MemoryType,
 };
 use sdkwork_memory_contract::ports::MemoryServiceResult;
 use sdkwork_memory_contract::space::{MemorySpace, MemorySpaceRequest};
@@ -128,6 +129,47 @@ impl InProcessMemoryRuntime {
                     display_name: display_name.into(),
                     default_scope: Some("user".to_string()),
                     metadata: None,
+                },
+            )
+            .await
+    }
+
+    /// Writes one semantic memory for the authenticated actor.
+    ///
+    /// Provisioning/write helpers are exposed for hosts that co-deploy the
+    /// memory capability; the standalone service remains the owner of record.
+    pub async fn create_memory(
+        &self,
+        tenant_id: u64,
+        actor_id: Option<u64>,
+        space_id: u64,
+        canonical_text: impl Into<String>,
+    ) -> MemoryServiceResult<MemoryRecord> {
+        let context = MemoryAppRequestContext {
+            tenant_id,
+            actor_id,
+            organization_id: None,
+            session_id: None,
+        };
+        let canonical_text = canonical_text.into();
+        self.service
+            .create_memory(
+                context,
+                MemoryRecordRequest {
+                    space_id,
+                    user_id: actor_id,
+                    scope: "user".to_string(),
+                    memory_type: MemoryType::Semantic,
+                    subject: None,
+                    predicate: None,
+                    object_text: None,
+                    canonical_text: canonical_text.clone(),
+                    summary_text: None,
+                    language: Some("en".to_string()),
+                    sensitivity_level: Some("internal".to_string()),
+                    expires_at: None,
+                    metadata: None,
+                    tags: None,
                 },
             )
             .await
