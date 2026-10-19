@@ -12,6 +12,8 @@
 //! - the caller passes an explicit, already-authenticated actor scope. This crate
 //!   must never infer an actor from process identity.
 
+use std::sync::Arc;
+
 use sdkwork_intelligence_memory_repository_sqlx::{
     bootstrap_memory_data_plane_from_env, MemoryDataPlane,
 };
@@ -47,6 +49,35 @@ impl InProcessMemoryRuntime {
         }
         let data_plane = bootstrap_memory_data_plane_from_env().await?;
         Ok(Some(Self::from_data_plane(data_plane)))
+    }
+
+    /// Bootstraps the process-wide runtime, reusing it across modules.
+    ///
+    /// A co-deployed host (for example Knowledgebase plus Agents in one process)
+    /// must not open a second memory data plane: it would double the connection
+    /// budget and run lifecycle work twice. The first caller wins; later callers
+    /// share the same runtime.
+    pub async fn shared_from_env() -> Result<Option<Arc<Self>>, String> {
+        static SHARED: tokio::sync::OnceCell<Result<Arc<InProcessMemoryRuntime>, String>> =
+            tokio::sync::OnceCell::const_new();
+        if !memory_database_configured() {
+            return Ok(None);
+        }
+        let shared = SHARED
+            .get_or_init(|| async {
+                match Self::from_env().await {
+                    Ok(Some(runtime)) => Ok(Arc::new(runtime)),
+                    Ok(None) => {
+                        Err("memory database configuration changed during bootstrap".to_string())
+                    }
+                    Err(error) => Err(error),
+                }
+            })
+            .await;
+        match shared {
+            Ok(runtime) => Ok(Some(Arc::clone(runtime))),
+            Err(error) => Err(error.clone()),
+        }
     }
 
     /// Builds the runtime over an already-bootstrapped data plane.

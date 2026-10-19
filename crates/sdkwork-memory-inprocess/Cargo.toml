@@ -16,5 +16,5 @@ workspace = true
 sdkwork-memory-contract.workspace = true
 sdkwork-intelligence-memory-service.workspace = true
 sdkwork-intelligence-memory-repository-sqlx.workspace = true
-tokio = { workspace = true, features = ["rt", "time"] }
+tokio = { workspace = true, features = ["rt", "time", "sync"] }
 tracing.workspace = true

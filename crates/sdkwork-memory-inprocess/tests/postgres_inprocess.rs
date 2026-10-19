@@ -29,11 +29,7 @@ async fn postgres_inprocess_runtime_bootstraps_creates_space_and_retrieves() {
         .as_nanos();
     let actor_id = 700_000_000_u64 + (nonce % 100_000_000) as u64;
     let space = runtime
-        .create_space(
-            100_001,
-            Some(actor_id),
-            format!("in-process smoke {nonce}"),
-        )
+        .create_space(100_001, Some(actor_id), format!("in-process smoke {nonce}"))
         .await
         .expect("create memory space");
     let text = format!("Refund preference {nonce}: refunds are accepted within 30 days.");
