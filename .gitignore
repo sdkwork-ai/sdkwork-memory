@@ -112,3 +112,16 @@ external/
 # Added by repo-commit task; targeted rules only, compliant with check-gitignore-standard
 __pycache__/
 .venv/
+
+# ---- auto-audited: local artifacts that must never be committed ----
+*.key
+*.pem
+*.p12
+*.pfx
+*.keystore
+temp/
+*.tmp
+*.temp
+.cache/
+.turbo/
+.next/

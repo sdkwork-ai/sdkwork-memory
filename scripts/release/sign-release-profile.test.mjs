@@ -17,7 +17,7 @@ import {
 } from "./sign-release-profile.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const CONFIG_NAME = "sdkwork.workflow.json";
+const CONFIG_NAME = "agent.workflow.json";
 
 function signingEnv(privateKeyPem) {
   return { SDKWORK_RELEASE_SIGNING_PRIVATE_KEY: privateKeyPem };
@@ -192,7 +192,7 @@ test("refuses to sign without real key material", async () => {
 });
 
 test("honours SDKWORK_WORKFLOW_CLI and reports a usable error without it", () => {
-  const missing = resolve(repositoryRoot, "does-not-exist", "sdkwork-workflow.mjs");
+  const missing = resolve(repositoryRoot, "does-not-exist", "agent-workflow.mjs");
   assert.throws(
     () => resolveWorkflowCli({ env: { SDKWORK_WORKFLOW_CLI: missing }, root: repositoryRoot }),
     /SDKWORK_WORKFLOW_CLI does not exist/u,
@@ -202,5 +202,5 @@ test("honours SDKWORK_WORKFLOW_CLI and reports a usable error without it", () =>
     /cannot locate the SDKWork workflow CLI/u,
   );
   const cli = resolveWorkflowCli({ env: {}, root: repositoryRoot });
-  assert.match(cli, /sdkwork-workflow\.mjs$/u);
+  assert.match(cli, /agent-workflow\.mjs$/u);
 });

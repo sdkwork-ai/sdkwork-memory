@@ -10,7 +10,7 @@ Specs: `ARCHITECTURE_DECISION_SPEC.md`, `API_SPEC.md`, `SDK_SPEC.md`, `DATABASE_
 
 ## Authority
 
-This document describes the implemented architecture. Machine-readable authority remains in `specs/component.spec.json`, authority OpenAPI files, route manifests, database contracts, `agent.app.config.json`, and `sdkwork.workflow.json`. Dated `TECH-*` documents are archived design records unless this file links one as an active ADR.
+This document describes the implemented architecture. Machine-readable authority remains in `specs/component.spec.json`, authority OpenAPI files, route manifests, database contracts, `agent.app.config.json`, and `agent.workflow.json`. Dated `TECH-*` documents are archived design records unless this file links one as an active ADR.
 
 ## Historical Design Shards
 

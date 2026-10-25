@@ -240,7 +240,7 @@ function writeWorkflowEvidence({ env, paths, root, sourceCommit }) {
       cli,
       "evidence:create",
       "--config",
-      "sdkwork.workflow.json",
+      "agent.workflow.json",
       "--target-id",
       required(env.SDKWORK_PACKAGE_TARGET_ID, "SDKWORK_PACKAGE_TARGET_ID"),
       "--deployment-profile",

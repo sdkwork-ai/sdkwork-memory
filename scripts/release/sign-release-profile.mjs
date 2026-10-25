@@ -9,7 +9,7 @@
  * must each carry their own detached signature.
  *
  * This script keeps that obligation honest instead of cosmetic: it resolves the selected package
- * targets from the canonical `sdkwork.workflow.json` authority through the SDKWork workflow CLI
+ * targets from the canonical `agent.workflow.json` authority through the SDKWork workflow CLI
  * (the same authority the GitHub packaging matrix uses), then drives the shared
  * `signReleaseArtifact` producer for each target. Nothing about package ids, artifact paths, or
  * deployment profiles is re-derived here, so local signing cannot drift from CI packaging.
@@ -26,7 +26,7 @@ const modulePath = fileURLToPath(import.meta.url);
 const repositoryRoot = resolve(dirname(modulePath), "..", "..");
 
 export const SUPPORTED_DEPLOYMENT_PROFILES = Object.freeze(["standalone", "cloud"]);
-const CONFIG_RELATIVE_PATH = "sdkwork.workflow.json";
+const CONFIG_RELATIVE_PATH = "agent.workflow.json";
 
 function required(value, label) {
   const text = String(value ?? "").trim();
@@ -81,7 +81,7 @@ export function resolveWorkflowCli({ env = process.env, root = repositoryRoot } 
     }
     return declared;
   }
-  const sibling = resolve(root, "..", "sdkwork-github-workflow", "scripts", "sdkwork-workflow.mjs");
+  const sibling = resolve(root, "..", "sdkwork-github-workflow", "scripts", "agent-workflow.mjs");
   if (existsSync(sibling)) return sibling;
   throw new Error(
     "cannot locate the SDKWork workflow CLI; set SDKWORK_WORKFLOW_CLI or check out sdkwork-github-workflow beside this repository",
@@ -130,7 +130,7 @@ export function packageTargetsForProfile({
   const include = parsed?.matrix?.include;
   if (!Array.isArray(include) || include.length === 0) {
     throw new Error(
-      `sdkwork.workflow.json declares no package target for deployment profile "${deploymentProfile}"`,
+      `agent.workflow.json declares no package target for deployment profile "${deploymentProfile}"`,
     );
   }
   return include.map((item) => {

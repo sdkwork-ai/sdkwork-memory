@@ -486,7 +486,7 @@ Read \`agent.app.config.json\` only when the task touches Memory application beh
 - \`AGENTS.md\`: repository agent entrypoint and relative SDKWork spec index.
 - \`CLAUDE.md\`, \`GEMINI.md\`, \`CODEX.md\`: compatibility shims that point to \`AGENTS.md\` and must not duplicate rules.
 - \`agent.app.config.json\`: Memory application identity, runtime, release, and capability metadata.
-- \`sdkwork.workflow.json\`: GitHub packaging/release workflow manifest governed by \`GITHUB_WORKFLOW_SPEC.md\`.
+- \`agent.workflow.json\`: GitHub packaging/release workflow manifest governed by \`GITHUB_WORKFLOW_SPEC.md\`.
 - \`.github/workflows/package.yml\`: thin reusable workflow call only.
 - \`.sdkwork/\`: repository/application AI workspace metadata, local skills, local plugins, and manifests.
 - \`specs/\`: local application/component contracts and narrowing rules.
@@ -4748,7 +4748,7 @@ $requiredFiles = @(
     "sdks/_route-manifests/app-api/sdkwork-routes-memory-app-api.route-manifest.json",
     "sdks/_route-manifests/backend-api/sdkwork-routes-memory-backend-api.route-manifest.json",
     "package.json",
-    "sdkwork.workflow.json",
+    "agent.workflow.json",
     ".github/workflows/package.yml"
 )
 

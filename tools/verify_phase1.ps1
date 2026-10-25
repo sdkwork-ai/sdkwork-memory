@@ -88,7 +88,7 @@ $requiredFiles = @(
     "sdks/_route-manifests/app-api/sdkwork-routes-memory-app-api.route-manifest.json",
     "sdks/_route-manifests/backend-api/sdkwork-routes-memory-backend-api.route-manifest.json",
     "package.json",
-    "sdkwork.workflow.json",
+    "agent.workflow.json",
     ".github/workflows/package.yml"
 )
 

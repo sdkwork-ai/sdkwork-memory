@@ -35,7 +35,7 @@ Read `agent.app.config.json` only when the task touches Memory application behav
 - `AGENTS.md`: repository agent entrypoint and relative SDKWork spec index.
 - `CLAUDE.md`, `GEMINI.md`, `CODEX.md`: compatibility shims that point to `AGENTS.md` and must not duplicate rules.
 - `agent.app.config.json`: Memory application identity, runtime, release, and capability metadata.
-- `sdkwork.workflow.json`: GitHub packaging/release workflow manifest governed by `GITHUB_WORKFLOW_SPEC.md`.
+- `agent.workflow.json`: GitHub packaging/release workflow manifest governed by `GITHUB_WORKFLOW_SPEC.md`.
 - `.github/workflows/package.yml`: thin reusable workflow call only.
 - `.sdkwork/`: repository/application AI workspace metadata, local skills, local plugins, and manifests.
 - `specs/`: local application/component contracts and narrowing rules.

@@ -13,7 +13,7 @@ const failures = [];
 const warnings = [];
 
 const manifest = readJson("agent.app.config.json");
-const workflow = readJson("sdkwork.workflow.json");
+const workflow = readJson("agent.workflow.json");
 const dockerfile = readText("deployments/docker/Dockerfile");
 const deployment = readText("deployments/kubernetes/deployment.yaml");
 const migrationJob = readText("deployments/kubernetes/migration-job.yaml");

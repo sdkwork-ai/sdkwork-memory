@@ -14,7 +14,7 @@ Updated: 2026-07-21
 | Container | fixed standalone or fixed cloud | immutable OCI digest, image SBOM, attestation | previous digest and deployment descriptor |
 | Browser PC | fixed cloud | deterministic ZIP digest, SPDX SBOM, provenance, OIDC attestation | previous ZIP/host route and public runtime config |
 
-`sdkwork.workflow.json` is the workflow matrix authority. `agent.app.config.json` and `apps/sdkwork-memory-pc/agent.app.config.json` are the package projection authorities.
+`agent.workflow.json` is the workflow matrix authority. `agent.app.config.json` and `apps/sdkwork-memory-pc/agent.app.config.json` are the package projection authorities.
 
 The Linux x64 server archive is built only on the workflow's Linux x64 runner and fails closed on other host platforms. Both server and container release builds use the locked Cargo graph with the production `otel` feature enabled; `pnpm test:release-features` is the matching merge and release gate.
 

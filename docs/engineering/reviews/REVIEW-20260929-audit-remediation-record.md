@@ -35,7 +35,7 @@
 ## 文档/门禁
 
 - `docs/INDEX.yaml` 补登 3 份 REVIEW;`reviews/README.md` Records 补全。
-- `sdkwork.workflow.json` validate 阶段补 `pnpm check` + PC check(发布提交重跑契约/分页/信封门禁)。
+- `agent.workflow.json` validate 阶段补 `pnpm check` + PC check(发布提交重跑契约/分页/信封门禁)。
 - PRD(保留租约)、TECH_ARCHITECTURE(租约化 sweep、常时比较、key 强度、聚合桶、抽取预算、导出信号量、批量重水化)、database/README(修正 baseline-plus-migrations 语义描述)、`.env.example`(新变量)同步。
 
 ## 第二轮对齐复查追加(同日落盘)
