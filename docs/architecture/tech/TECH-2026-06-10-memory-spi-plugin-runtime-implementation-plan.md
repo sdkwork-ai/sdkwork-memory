@@ -29,7 +29,7 @@ The task checklist below is retained as an historical implementation record only
 ## Source Documents
 
 - Agent rules: `AGENTS.md`
-- App identity: `sdkwork.app.config.json`
+- App identity: `agent.app.config.json`
 - Component contract: `specs/component.spec.json`
 - Architecture design: `docs/architecture/tech/TECH-2026-06-10-memory-spi-plugin-architecture-design.md`
 - Memory design: `docs/architecture/tech/TECH-2026-06-10-ai-memory-architecture-design.md`

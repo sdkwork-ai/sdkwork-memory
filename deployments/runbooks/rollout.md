@@ -31,4 +31,4 @@
 - Confirm error responses use `application/problem+json` with numeric `code` and `traceId` (no `requestId`).
 - Confirm export job retrieve returns `exportRef` only, not inline payload.
 - For Drive exports, confirm `memory.export.drive_upload_completed` outbox events and `drive://nodes/{id}` references (not legacy local artifact staging).
-- Run `pnpm release:evidence` before tagging a release to refresh SBOM and container checksum in `sdkwork.app.config.json`.
+- Run `pnpm release:evidence` before tagging a release to refresh SBOM and container checksum in `agent.app.config.json`.

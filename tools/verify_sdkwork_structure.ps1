@@ -21,7 +21,7 @@ function Assert-PathAbsent {
 }
 
 Assert-PathExists "AGENTS.md" "Missing SDKWORK agent entrypoint"
-Assert-PathExists "sdkwork.app.config.json" "Missing application manifest"
+Assert-PathExists "agent.app.config.json" "Missing application manifest"
 Assert-PathExists ".sdkwork/README.md" "Missing SDKWORK workspace README"
 Assert-PathExists ".sdkwork/skills/README.md" "Missing SDKWORK skills README"
 Assert-PathExists ".sdkwork/plugins/README.md" "Missing SDKWORK plugins README"

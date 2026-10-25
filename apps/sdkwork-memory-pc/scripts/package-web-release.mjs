@@ -14,7 +14,7 @@ import { deflateRawSync } from "node:zlib";
 
 const appRoot = resolve(import.meta.dirname, "..");
 const workspaceRoot = resolve(appRoot, "..", "..");
-const manifestPath = join(appRoot, "sdkwork.app.config.json");
+const manifestPath = join(appRoot, "agent.app.config.json");
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 const version = manifest.release.currentVersion;
 const packageId = process.env.SDKWORK_PACKAGE_ID ?? manifest.publish.defaultPackageId;

@@ -479,13 +479,13 @@ Do not copy root standard text into this repository. If these relative paths do 
 
 ## Application Identity
 
-Read \`sdkwork.app.config.json\` only when the task touches Memory application behavior, runtime config, SDK wiring, release metadata, app-owned capabilities, packaging, or deployment. For unrelated documentation or tooling work, do not expand into the full app manifest unless evidence requires it.
+Read \`agent.app.config.json\` only when the task touches Memory application behavior, runtime config, SDK wiring, release metadata, app-owned capabilities, packaging, or deployment. For unrelated documentation or tooling work, do not expand into the full app manifest unless evidence requires it.
 
 ## Local Dictionary Structure
 
 - \`AGENTS.md\`: repository agent entrypoint and relative SDKWork spec index.
 - \`CLAUDE.md\`, \`GEMINI.md\`, \`CODEX.md\`: compatibility shims that point to \`AGENTS.md\` and must not duplicate rules.
-- \`sdkwork.app.config.json\`: Memory application identity, runtime, release, and capability metadata.
+- \`agent.app.config.json\`: Memory application identity, runtime, release, and capability metadata.
 - \`sdkwork.workflow.json\`: GitHub packaging/release workflow manifest governed by \`GITHUB_WORKFLOW_SPEC.md\`.
 - \`.github/workflows/package.yml\`: thin reusable workflow call only.
 - \`.sdkwork/\`: repository/application AI workspace metadata, local skills, local plugins, and manifests.
@@ -503,7 +503,7 @@ Read \`sdkwork.app.config.json\` only when the task touches Memory application b
 Use dynamic progressive loading:
 
 1. Read this \`AGENTS.md\` and any nearer component-level \`AGENTS.md\`.
-2. Read \`sdkwork.app.config.json\` only when app behavior, runtime config, SDK wiring, release, packaging, or app-owned capabilities are touched.
+2. Read \`agent.app.config.json\` only when app behavior, runtime config, SDK wiring, release, packaging, or app-owned capabilities are touched.
 3. Read local \`specs/README.md\` and \`specs/component.spec.json\` only when the task touches that local contract.
 4. Read local \`.sdkwork/README.md\`, \`.sdkwork/skills/\`, and \`.sdkwork/plugins/\` only when local agent extensions are relevant.
 5. Read \`../sdkwork-specs/README.md\`, then only the task-specific root specs.
@@ -597,7 +597,7 @@ Add local plugins only when this repository needs checked-in plugin metadata. Do
 }
 
 function writeAppManifest() {
-  const existingManifest = readJsonIfExists("sdkwork.app.config.json");
+  const existingManifest = readJsonIfExists("agent.app.config.json");
   // Materialization must never promote a candidate based only on a previously
   // observed checksum. Production publication is an explicit release action
   // after every gate in docs/releases/README.md has passed.
@@ -612,7 +612,7 @@ function writeAppManifest() {
   const defaultPackageId = packageIds[1];
   const manifest = {
     schemaVersion: 3,
-    kind: "sdkwork.app",
+    kind: "agent.app",
     app: {
       key: owner,
       name: "SDKWork Memory",
@@ -833,7 +833,7 @@ function writeAppManifest() {
     }
   };
 
-  writeJson("sdkwork.app.config.json", manifest);
+  writeJson("agent.app.config.json", manifest);
 }
 
 function writeRootSpecs() {
@@ -902,7 +902,7 @@ powershell -ExecutionPolicy Bypass -File tools/verify_phase1.ps1
       generated: false,
       status: "active",
       manifests: [
-        "sdkwork.app.config.json",
+        "agent.app.config.json",
         "AGENTS.md",
         "specs/component.spec.json",
         "sdks/sdkwork-memory-sdk/sdk-manifest.json",
@@ -4711,7 +4711,7 @@ $requiredFiles = @(
     ".sdkwork/README.md",
     ".sdkwork/skills/README.md",
     ".sdkwork/plugins/README.md",
-    "sdkwork.app.config.json",
+    "agent.app.config.json",
     "specs/README.md",
     "specs/component.spec.json",
     "${canonicalDesignDoc}",
@@ -4764,12 +4764,12 @@ foreach ($forbidden in @("sdks/sdkwork-memory-open-api", "sdks/sdkwork-memory-ap
     }
 }
 
-$appConfig = Read-JsonFile "sdkwork.app.config.json"
-if ($appConfig.schemaVersion -ne 3 -or $appConfig.kind -ne "sdkwork.app") {
-    throw "sdkwork.app.config.json must use SDKWork app manifest v3"
+$appConfig = Read-JsonFile "agent.app.config.json"
+if ($appConfig.schemaVersion -ne 3 -or $appConfig.kind -ne "agent.app") {
+    throw "agent.app.config.json must use SDKWork app manifest v3"
 }
 if ($appConfig.app.key -ne "sdkwork-memory") {
-    throw "sdkwork.app.config.json app.key must be sdkwork-memory"
+    throw "agent.app.config.json app.key must be sdkwork-memory"
 }
 
 $rootSpec = Read-JsonFile "specs/component.spec.json"

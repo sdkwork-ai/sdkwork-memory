@@ -23,12 +23,12 @@ Do not copy global spec bodies into this application root. If these relative pat
 
 ## Application Identity
 
-Read `sdkwork.app.config.json` when work touches the PC application's behavior, SDK wiring, release metadata, app-owned capabilities, packaging, or deployment. Read `etc/` for concrete browser runtime and deployment configuration; the application manifest is not runtime configuration authority.
+Read `agent.app.config.json` when work touches the PC application's behavior, SDK wiring, release metadata, app-owned capabilities, packaging, or deployment. Read `etc/` for concrete browser runtime and deployment configuration; the application manifest is not runtime configuration authority.
 
 ## Local Dictionary Structure
 
 - `AGENTS.md`: application agent entrypoint.
-- `sdkwork.app.config.json`: PC application identity, release, and capability metadata.
+- `agent.app.config.json`: PC application identity, release, and capability metadata.
 - `etc/`: deployable-root source configuration and browser runtime templates.
 - `specs/`: PC application contract and narrowing rules.
 - `packages/`: infrastructure, shell, Console capability, and Admin capability packages.
@@ -38,7 +38,7 @@ Read `sdkwork.app.config.json` when work touches the PC application's behavior, 
 
 ## Spec Resolution Order
 
-Use dynamic progressive loading: read this file and the local dictionary first, then `sdkwork.app.config.json` or local component specs only when the task touches them, then task-specific files from `../../../sdkwork-specs/README.md`, and only then implementation files. Language-specific specs are on-demand; do not load unrelated Rust, Java, native, or mobile standards for PC React work.
+Use dynamic progressive loading: read this file and the local dictionary first, then `agent.app.config.json` or local component specs only when the task touches them, then task-specific files from `../../../sdkwork-specs/README.md`, and only then implementation files. Language-specific specs are on-demand; do not load unrelated Rust, Java, native, or mobile standards for PC React work.
 
 ## Required Specs By Task Type
 

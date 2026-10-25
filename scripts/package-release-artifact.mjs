@@ -19,7 +19,7 @@ if (process.platform !== "linux" || process.arch !== "x64") {
 }
 const version =
   process.env.SDKWORK_PACKAGE_VERSION
-  ?? JSON.parse(readFileSync(join(root, "sdkwork.app.config.json"), "utf8")).release
+  ?? JSON.parse(readFileSync(join(root, "agent.app.config.json"), "utf8")).release
     ?.currentVersion
   ?? "0.1.0";
 const artifactRoot = join(root, "deployments", "artifacts", "release");

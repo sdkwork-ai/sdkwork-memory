@@ -329,7 +329,7 @@ updated_at: self.payload.created_at, // Use created_at as fallback
 | `src/graph/**`（4 文件） | `InMemoryGraph` / `GraphMemory` 仅被自身与自测引用；`Memory` 结构体（`manager.rs:28-36`）**没有 graph 字段**，全仓零消费者 |
 | `src/utils/filters.rs` | `FilterBuilder` 只被自身测试引用 |
 | `models.rs:32-33 / 83-87` | `hash` 字段计算后**从未用于去重**，是死字段 |
-| `src/python.rs` | pyo3 绑定；`sdkwork.app.config.json` 的 `runtime` 只声明 `API` + `CONTAINER_IMAGE`，属未声明的额外交付技术栈 |
+| `src/python.rs` | pyo3 绑定；`agent.app.config.json` 的 `runtime` 只声明 `API` + `CONTAINER_IMAGE`，属未声明的额外交付技术栈 |
 
 ---
 
@@ -572,7 +572,7 @@ rust-manifest-standard          PASS
 | 2 | 是否需要 `rusqlite` 之外的向量库适配（Qdrant / pgvector / Redis 三选几），以及它们是否应作为独立 plugin 还是同一 plugin 内多后端 —— 当前插件是**内存态向量索引 + 绑定 `EmbeddingModelPort`**，持久化向量库尚未接入 | 架构 |
 | 3 | `sdkwork-memory-retrieval` 已拥有"检索与上下文合成算法"，新插件边界需与其划清（避免第二处检索编排） | 架构 |
 | 4 | 仓库既有 15 条 `rust.lib-name-undeclared` 警告（`check-rust-crate-naming-standard`）是否随本次一并清理 | 维护者 |
-| 5 | `sdkwork.app.config.json` 未声明 Python 交付面，`src/python.rs` 是否保留 | 产品 |
+| 5 | `agent.app.config.json` 未声明 Python 交付面，`src/python.rs` 是否保留 | 产品 |
 | 6 | **`crates/sdkwork-memory-mem0/` 的 39 个已提交文件是否 `git rm`** —— 方案 A 已落地，其能力已被重写实现覆盖，原目录零引用、零消费者、零门禁依赖。**这是破坏性操作，须人工显式批准**；不批准则维持现状（已提交、不构建、无门禁覆盖） | 维护者 + 产品 |
 | 7 | **§1.3 的结构门禁是否上提到 `sdkwork-specs` 全局** —— 本仓已用本地实现（`tools/check-crate-inventory-standard.mjs`）堵住，但同类"无 manifest 目录"在其余 ~100 个 sdkwork 仓同样不可见，需全局化才根治 | 架构 + 维护者 |
 | 8 | **`_sdkwork:check` / `_sdkwork:verify` 的长 `&&` 串是否改为逐环上报的 runner**（§1.4）—— 否则任何一环缺文件都静默吃掉其后全部门禁，且失败原因只显示"某条命令不存在"而非"哪几条没跑" | 维护者 |

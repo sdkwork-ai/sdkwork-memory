@@ -39,7 +39,7 @@ const allModules: readonly MemoryPcModuleDefinition[] = [...memoryConsoleModules
 describe("Memory PC module permission manifest coverage", () => {
   it("grants every module permission in the app manifest access token scope", () => {
     const manifest = JSON.parse(
-      readFileSync(resolve(appRoot, "sdkwork.app.config.json"), "utf8"),
+      readFileSync(resolve(appRoot, "agent.app.config.json"), "utf8"),
     ) as MemoryPcAppManifest;
     const granted = new Set(manifest.backend?.accessTokenPermissionScope ?? []);
     expect(granted.size).toBeGreaterThan(0);

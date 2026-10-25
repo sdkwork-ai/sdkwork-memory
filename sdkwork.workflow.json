@@ -6,7 +6,7 @@
     "name": "SDKWork Memory",
     "repository": "sdkwork-ai/sdkwork-memory",
     "sourcePath": ".",
-    "configPath": "sdkwork.app.config.json"
+    "configPath": "agent.app.config.json"
   },
   "release": {
     "artifactPrefix": "sdkwork-memory",

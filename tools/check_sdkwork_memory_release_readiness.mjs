@@ -12,15 +12,15 @@ const strict = process.env.SDKWORK_RELEASE_VALIDATION === "strict";
 const failures = [];
 const warnings = [];
 
-const manifest = readJson("sdkwork.app.config.json");
+const manifest = readJson("agent.app.config.json");
 const workflow = readJson("sdkwork.workflow.json");
 const dockerfile = readText("deployments/docker/Dockerfile");
 const deployment = readText("deployments/kubernetes/deployment.yaml");
 const migrationJob = readText("deployments/kubernetes/migration-job.yaml");
 const processPoolValidation = validateProcessSharedDatabasePool(root);
 
-if (manifest?.schemaVersion !== 3 || manifest?.kind !== "sdkwork.app") {
-  fail("sdkwork.app.config.json must use schemaVersion 3 and kind sdkwork.app");
+if (manifest?.schemaVersion !== 3 || manifest?.kind !== "agent.app") {
+  fail("agent.app.config.json must use schemaVersion 3 and kind agent.app");
 }
 
 const publishStatus = manifest?.publish?.status ?? "UNKNOWN";

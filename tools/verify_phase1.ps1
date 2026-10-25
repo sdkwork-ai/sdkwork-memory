@@ -51,7 +51,7 @@ $requiredFiles = @(
     ".sdkwork/README.md",
     ".sdkwork/skills/README.md",
     ".sdkwork/plugins/README.md",
-    "sdkwork.app.config.json",
+    "agent.app.config.json",
     "specs/README.md",
     "specs/component.spec.json",
     "docs/architecture/tech/TECH-2026-06-10-ai-memory-architecture-design.md",
@@ -104,12 +104,12 @@ foreach ($forbidden in @("sdks/sdkwork-memory-open-api", "sdks/sdkwork-memory-ap
     }
 }
 
-$appConfig = Read-JsonFile "sdkwork.app.config.json"
-if ($appConfig.schemaVersion -ne 3 -or $appConfig.kind -ne "sdkwork.app") {
-    throw "sdkwork.app.config.json must use SDKWork app manifest v3"
+$appConfig = Read-JsonFile "agent.app.config.json"
+if ($appConfig.schemaVersion -ne 3 -or $appConfig.kind -ne "agent.app") {
+    throw "agent.app.config.json must use SDKWork app manifest v3"
 }
 if ($appConfig.app.key -ne "sdkwork-memory") {
-    throw "sdkwork.app.config.json app.key must be sdkwork-memory"
+    throw "agent.app.config.json app.key must be sdkwork-memory"
 }
 
 $rootSpec = Read-JsonFile "specs/component.spec.json"
