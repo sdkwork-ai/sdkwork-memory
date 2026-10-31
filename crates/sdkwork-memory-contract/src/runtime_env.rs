@@ -67,7 +67,7 @@ pub fn memory_environment_name() -> String {
 
 /// Environment names accepted by [`require_explicit_memory_environment`].
 const RECOGNIZED_ENVIRONMENTS: &[&str] = &[
-    "development", "dev", "production", "prod", "staging", "stage", "test",
+    "development", "dev", "test", "staging", "stage", "demo", "production", "prod",
 ];
 
 /// Refuses to run a server process with an unset or unrecognized

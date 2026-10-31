@@ -101,6 +101,10 @@ __pycache__/
 # docs/engineering/reviews/ for the alignment matrices produced against them.
 external/
 
+# Stale tsc emit left inside the commons package src/ (declared output is dist/)
+apps/sdkwork-memory-pc/packages/sdkwork-memory-pc-commons/src/**/*.js
+apps/sdkwork-memory-pc/packages/sdkwork-memory-pc-commons/src/**/*.d.ts
+
 # Compiler emit is ignored only where the file is emit BY DEFINITION. The broad
 # `**/src/**/*.js` / `**/src/**/*.d.ts` globs are gone: `.gitignore` cannot express "ignore
 # this only when a same-stem .ts sibling exists", so they also hid authored declarations
