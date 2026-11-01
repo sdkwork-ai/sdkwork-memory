@@ -45,7 +45,7 @@ fn ensure_pool_engine_is_declared(
         "memory database module declares engines {declared:?}, so it cannot run its lifecycle on a \
          {engine} pool: DATABASE_FRAMEWORK_SPEC section 344 requires an authoritative-server \
          module to declare exactly [\"postgres\"]. Point SDKWORK_DATABASE_URL at the workspace \
-         PostgreSQL profile (materialize .env.postgres from .env.postgres.example). The SQLite \
+         PostgreSQL profile (materialize config/host/postgres.env from config/host/postgres.env.example). The SQLite \
          dialect is not a module engine here — it is the client-local/test plane and is \
          materialized from tests/fixtures/database/sqlite by the native SQL store.",
         declared = manifest.engines,

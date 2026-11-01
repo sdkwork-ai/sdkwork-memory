@@ -211,7 +211,7 @@ EXIT=0
 
 | # | 问题 | 状态 |
 | --- | --- | --- |
-| P2-29 | 示例 env 固定弱口令（`.env.postgres.example`） | 未动 |
+| P2-29 | 示例 env 固定弱口令（`config/host/postgres.env.example`） | 未动 |
 | P2-30 | 图谱更新/删除只有 `tenant_id` 缺 `space_id` | 未动 |
 | P2-31 | 敏感记录先出库再判敏感度 | 未动 |
 | P2-32 | `elevated_tenant_access` 对 private/sensitive 无条件放行 | 未动 |

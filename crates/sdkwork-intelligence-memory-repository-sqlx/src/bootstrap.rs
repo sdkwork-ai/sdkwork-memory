@@ -72,7 +72,7 @@ pub fn reject_sqlite_server_role_engine(
         "authoritative-server Memory rejects the SQLite engine in deployment mode {deployment_mode:?}: \
          PostgreSQL is required for every server role (ENVIRONMENT_SPEC section 7.2). \
          Resolve the workspace PostgreSQL profile by setting SDKWORK_DATABASE_URL, or by \
-         materializing .env.postgres from .env.postgres.example at the application root. \
+         materializing config/host/postgres.env from config/host/postgres.env.example at the application root. \
          SQLite resolves only for an explicit test runner: set \
          SDKWORK_MEMORY_RUNTIME_TARGET=test-runner to declare one."
     ))

@@ -175,7 +175,7 @@ grep -rn "v1/memories|v3/memories|/v1/ping|mem0-compat|mem0_compat" \
 
 Rust 契约测试（路径、鉴权头、请求体、响应体逐字段对拍，零网络）+ **官方 SDK 真跑通**。
 
-⚠️ **本机约束（已实测）**：`netstat` 无 `:5432` 监听、无 `psql`/`pg_ctl`，`.env.postgres` 不存在 ⇒ **真 server 起不来**（standalone.development.env 明确要求 server 角色走 PostgreSQL）。因此 E2E 走：
+⚠️ **本机约束（已实测）**：`netstat` 无 `:5432` 监听、无 `psql`/`pg_ctl`，`config/host/postgres.env` 不存在 ⇒ **真 server 起不来**（standalone.development.env 明确要求 server 角色走 PostgreSQL）。因此 E2E 走：
 新增 `crates/sdkwork-memory-integration-tests/tests/mem0_compat_e2e.rs` —— 用既有 `new_seeded_in_memory_store()` 组装 router，`TcpListener` 绑 `127.0.0.1:0`，`axum::serve` 后台跑，把实际端口打到 stdout；shell 侧读端口后驱动官方 `mem0ai`（Python，`MemoryClient(host=...)`）打 add/search/get/get_all/update/delete/history。
 
 ```sh
