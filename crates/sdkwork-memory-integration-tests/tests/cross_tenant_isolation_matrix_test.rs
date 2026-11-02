@@ -67,8 +67,7 @@ fn tenant_access_token(tenant_id: i64, user_id: &str) -> String {
         "app_id": MEMORY_APP_ID,
         "environment": "dev",
         "deployment_mode": "saas",
-        "login_scope": "TENANT",
-        "permission_scope": ["memory.*"]
+        "login_scope": "TENANT"
     }))
 }
 
