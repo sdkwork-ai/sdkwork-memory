@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "sdkwork.database.seed",
-  "i18nVersion": "1.0.0",
+  "i18nVersion": "1.2.1",
   "defaultLocale": "zh-CN",
   "fallbackLocale": "zh-CN",
   "supportedLocales": [
@@ -19,16 +19,20 @@
   ],
   "localeSets": {
     "zh-CN": {
-      "version": "1.0.0",
+      "version": "1.2.1",
       "required": true,
-      "checksum": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "files": []
+      "checksum": "sha256:c15e1f634180c376d4039276933f0ecaaf02bc7a0e7ef5a437d81b73e7831adf",
+      "files": [
+        "locales/zh-CN/001_agent_catalog_display.sql"
+      ]
     },
     "en-US": {
-      "version": "1.0.0",
-      "required": false,
-      "checksum": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "files": []
+      "version": "1.2.1",
+      "required": true,
+      "checksum": "sha256:2df23600313b363fd0f216109b95385b4b9eaad13da3febfbaf46e9536c22d4b",
+      "files": [
+        "locales/en-US/001_agent_catalog_display.sql"
+      ]
     }
   },
   "profiles": {
@@ -42,10 +46,16 @@
     },
     "standard": {
       "common": [
-        "common/001_bootstrap.sql"
+        "common/001_bootstrap.sql",
+        "common/002_agent_catalog.sql"
       ],
       "locales": {
-        "zh-CN": []
+        "zh-CN": [
+          "001_agent_catalog_display.sql"
+        ],
+        "en-US": [
+          "001_agent_catalog_display.sql"
+        ]
       }
     }
   }

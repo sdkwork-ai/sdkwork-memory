@@ -20,10 +20,8 @@ rules:
   ignoreColumns:
     # P2-8: postgres TSVECTOR column maintained by trg_ai_record_search_document.
     # sqlite has no equivalent column (uses the ai_record_fts virtual table).
-    - table: ai_record
-      column: search_document
-      engines:
-        - postgres
+    # The drift-policy schema accepts column names as strings, not nested maps.
+    - search_document
   # Severity overrides for known divergences.
   # All previously planned tables (ai_entity, ai_edge, ai_policy) are now
   # implemented by migration 0007_memory_commercial_management, so no
