@@ -67,7 +67,31 @@
         "VITE_SDKWORK_DEPLOYMENT_PROFILE",
         "VITE_SDKWORK_PROFILE_ID",
         "VITE_SDKWORK_RUNTIME_TARGET"
-      ]
+      ],
+      "accessToken": {
+        "appId": "sdkwork-memory-pc",
+        "tenantId": "100001",
+        "organizationId": "0",
+        "permissionScope": [
+          "memory.spaces.read",
+          "memory.records.read",
+          "memory.candidates.read",
+          "memory.habits.read",
+          "memory.retrievals.write",
+          "memory.app.entities.read",
+          "memory.app.policies.write",
+          "memory.backend.spaces.read",
+          "memory.backend.records.read",
+          "memory.backend.candidates.read",
+          "memory.backend.indexes.read",
+          "memory.backend.providerBindings.read",
+          "memory.backend.evalRuns.read",
+          "memory.backend.auditLogs.read",
+          "memory.backend.commercialReadiness.read",
+          "memory.backend.entities.read",
+          "memory.backend.subjects.read"
+        ]
+      }
     }
   ]
 }
