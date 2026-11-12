@@ -1,6 +1,6 @@
 -- SDKWork official agent catalog: en-US memory-space display.
 
--- Catalog revision: 1.2.1.
+-- Catalog revision: 1.3.0.
 
 BEGIN;
 
@@ -583,5 +583,65 @@ UPDATE ai_subject SET
   display_name = 'Hotel Marketing and OTA Advisor',
   updated_at = '2026-11-03T00:00:00+08:00'
 WHERE id = 536000000000000058 AND tenant_id = 100001;
+
+UPDATE ai_space SET
+  display_name = 'Novel Writer Memory',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 534000000000000059 AND tenant_id = 100001;
+
+UPDATE ai_subject SET
+  display_name = 'Novel Writer',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 536000000000000059 AND tenant_id = 100001;
+
+UPDATE ai_space SET
+  display_name = 'Book Author Memory',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 534000000000000060 AND tenant_id = 100001;
+
+UPDATE ai_subject SET
+  display_name = 'Book Author',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 536000000000000060 AND tenant_id = 100001;
+
+UPDATE ai_space SET
+  display_name = 'News Reporter Memory',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 534000000000000061 AND tenant_id = 100001;
+
+UPDATE ai_subject SET
+  display_name = 'News Reporter',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 536000000000000061 AND tenant_id = 100001;
+
+UPDATE ai_space SET
+  display_name = 'Article Writer Memory',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 534000000000000062 AND tenant_id = 100001;
+
+UPDATE ai_subject SET
+  display_name = 'Article Writer',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 536000000000000062 AND tenant_id = 100001;
+
+UPDATE ai_space SET
+  display_name = 'Copywriter Memory',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 534000000000000063 AND tenant_id = 100001;
+
+UPDATE ai_subject SET
+  display_name = 'Copywriter',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 536000000000000063 AND tenant_id = 100001;
+
+UPDATE ai_space SET
+  display_name = 'Editor Memory',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 534000000000000064 AND tenant_id = 100001;
+
+UPDATE ai_subject SET
+  display_name = 'Editor',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 536000000000000064 AND tenant_id = 100001;
 
 COMMIT;

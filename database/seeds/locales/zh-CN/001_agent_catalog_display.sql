@@ -1,6 +1,6 @@
 -- SDKWork official agent catalog: zh-CN memory-space display.
 
--- Catalog revision: 1.2.1.
+-- Catalog revision: 1.3.0.
 
 BEGIN;
 
@@ -583,5 +583,65 @@ UPDATE ai_subject SET
   display_name = '酒店营销与 OTA 顾问',
   updated_at = '2026-11-03T00:00:00+08:00'
 WHERE id = 536000000000000058 AND tenant_id = 100001;
+
+UPDATE ai_space SET
+  display_name = '小说创作家记忆空间',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 534000000000000059 AND tenant_id = 100001;
+
+UPDATE ai_subject SET
+  display_name = '小说创作家',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 536000000000000059 AND tenant_id = 100001;
+
+UPDATE ai_space SET
+  display_name = '图书作者记忆空间',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 534000000000000060 AND tenant_id = 100001;
+
+UPDATE ai_subject SET
+  display_name = '图书作者',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 536000000000000060 AND tenant_id = 100001;
+
+UPDATE ai_space SET
+  display_name = '新闻记者记忆空间',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 534000000000000061 AND tenant_id = 100001;
+
+UPDATE ai_subject SET
+  display_name = '新闻记者',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 536000000000000061 AND tenant_id = 100001;
+
+UPDATE ai_space SET
+  display_name = '文章作者记忆空间',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 534000000000000062 AND tenant_id = 100001;
+
+UPDATE ai_subject SET
+  display_name = '文章作者',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 536000000000000062 AND tenant_id = 100001;
+
+UPDATE ai_space SET
+  display_name = '文案策划记忆空间',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 534000000000000063 AND tenant_id = 100001;
+
+UPDATE ai_subject SET
+  display_name = '文案策划',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 536000000000000063 AND tenant_id = 100001;
+
+UPDATE ai_space SET
+  display_name = '责任编辑记忆空间',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 534000000000000064 AND tenant_id = 100001;
+
+UPDATE ai_subject SET
+  display_name = '责任编辑',
+  updated_at = '2026-11-03T00:00:00+08:00'
+WHERE id = 536000000000000064 AND tenant_id = 100001;
 
 COMMIT;
