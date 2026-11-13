@@ -391,5 +391,34 @@
         "source": "openapi"
       }
     ]
+  },
+  "roles": {
+    "domainStandardRoles": [],
+    "roleExclusions": [],
+    "roleGrantExtensions": [
+      {
+        "roleCode": "app_user",
+        "patterns": [
+          "memory.app.entities.write",
+          "memory.app.policies.write",
+          "memory.candidates.write",
+          "memory.events.write",
+          "memory.exports.write",
+          "memory.feedback.write",
+          "memory.forget.write",
+          "memory.habits.write",
+          "memory.learning.write",
+          "memory.records.write",
+          "memory.retrievals.write",
+          "memory.spaces.write"
+        ]
+      },
+      {
+        "roleCode": "org_admin",
+        "patterns": [
+          "memory.*"
+        ]
+      }
+    ]
   }
 }
