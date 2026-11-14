@@ -206,6 +206,15 @@
         "source": "openapi"
       },
       {
+        "code": "memory.backend.usage.read",
+        "name": "Read memory backend usage metrics",
+        "resource": "usage",
+        "action": "read",
+        "status": "active",
+        "since": "1.0.0",
+        "replacementCode": null
+      },
+      {
         "code": "memory.candidates.read",
         "description": "Permission memory.candidates.read",
         "source": "openapi"

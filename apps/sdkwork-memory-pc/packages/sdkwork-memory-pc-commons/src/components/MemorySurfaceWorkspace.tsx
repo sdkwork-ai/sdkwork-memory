@@ -7,6 +7,13 @@ import { MemoryPermissionState } from "./MemoryPermissionState.tsx";
 import { MemorySurfaceShell } from "./MemorySurfaceShell.tsx";
 
 export interface MemorySurfaceWorkspaceProps {
+  /**
+   * URL prefix the hosting application mounts this surface under. Defaults to
+   * `/admin` (backend-admin) or `/console` (app-console) for the owning
+   * application; composing hosts remounting the surface at a different
+   * resource path (for example `/admin/memory`) supply their own base.
+   */
+  basePath?: string;
   modules: readonly MemoryPcModuleDefinition[];
   onSignOut?(): void;
   permissionScope: readonly string[];
@@ -17,7 +24,7 @@ export interface MemorySurfaceWorkspaceProps {
 
 export function MemorySurfaceWorkspace(props: MemorySurfaceWorkspaceProps) {
   const location = useLocation();
-  const basePath = props.surface === "backend-admin" ? "/admin" : "/console";
+  const basePath = props.basePath ?? (props.surface === "backend-admin" ? "/admin" : "/console");
   const activeRoute = location.pathname.slice(basePath.length).split("/").filter(Boolean)[0];
   const module = props.modules.find((candidate) => candidate.route === activeRoute);
   const first = props.modules[0];
