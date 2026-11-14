@@ -429,6 +429,38 @@ pub async fn assemble_app_api_contribution_from_env() -> Result<ApiAssembly, Str
     )
 }
 
+/// Memory **backend-api** surface route manifest for an embedding host
+/// (API_ASSEMBLY_SPEC §3) — the backend-admin counterpart of
+/// [`app_api_route_manifest`].
+pub fn backend_api_route_manifest() -> HttpRouteManifest {
+    sdkwork_routes_memory_backend_api::backend_route_manifest()
+}
+
+/// Assembles the **backend-api** Memory contribution for an embedding host
+/// (API_ASSEMBLY_SPEC §6.1, §6.2.1) — the backend-admin counterpart of
+/// [`assemble_app_api_contribution_from_env`].
+///
+/// The embedding host serves the Memory backend-admin surface under the
+/// canonical `/backend/v3/api/memory*` paths, so this factory publishes **only**
+/// that surface. The contribution is already framework-wrapped per surface: a
+/// host MUST NOT apply a second Web Framework layer on top of it. Background
+/// workers stay dependency-owned (the app-surface contribution spawns them; a
+/// backend-only host consumes a process where the app surface already runs).
+pub async fn assemble_backend_api_contribution_from_env() -> Result<ApiAssembly, String> {
+    let product = open_memory_service_from_env().await?;
+    let business_router = build_backend_router_with_product(product.clone());
+    let router = wrap_backend_router(business_router).await;
+
+    ApiAssemblyContribution::from_manifest(
+        "sdkwork-memory",
+        "SDKWork Memory Backend API",
+        router,
+        sdkwork_routes_memory_backend_api::backend_route_manifest(),
+        Vec::new(),
+        Arc::new(MemoryReadinessCheck::new(product)),
+    )
+}
+
 /// Assembles the complete Memory API contribution from `SDKWORK_DATABASE_*`
 /// environment (API_ASSEMBLY_SPEC §6.1).
 ///
