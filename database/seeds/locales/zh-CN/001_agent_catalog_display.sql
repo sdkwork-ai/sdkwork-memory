@@ -1,6 +1,6 @@
 -- SDKWork official agent catalog: zh-CN memory-space display.
 
--- Catalog revision: 1.3.0.
+-- Catalog revision: 1.5.0.
 
 BEGIN;
 
