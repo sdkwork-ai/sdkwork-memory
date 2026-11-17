@@ -51,7 +51,7 @@
     "release:sign:cloud": "node scripts/release/sign-release-profile.mjs --deployment-profile cloud",
     "release:evidence": "node scripts/release/workflow-supply-chain-evidence.mjs attest",
     "release:evidence:verify": "node scripts/release/workflow-supply-chain-evidence.mjs verify",
-    "release:package": "pnpm release:package:cloud",
+    "release:package": "pnpm run check:release-access-token:require-anchor && pnpm release:package:cloud",
     "release:readiness": "node tools/check_sdkwork_memory_release_readiness.mjs",
     "test:contract:database": "node ../sdkwork-specs/tools/check-database-framework-standard.mjs --root .",
     "test:postgres:contract": "node scripts/test-postgres-contract.mjs",
@@ -68,7 +68,7 @@
     "dev:cloud": "pnpm exec sdkwork-app dev --deployment-profile cloud",
     "release:package:standalone": "pnpm exec sdkwork-app release:package --deployment-profile standalone",
     "release:package:cloud": "pnpm exec sdkwork-app release:package --deployment-profile cloud",
-    "_sdkwork:release:package": "node scripts/package-release-artifact.mjs",
+    "_sdkwork:release:package": "pnpm run check:release-access-token:require-anchor && node scripts/package-release-artifact.mjs",
     "build:pc:dev": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture pc --environment dev",
     "build:pc:test": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture pc --environment test",
     "build:pc:staging": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture pc --environment staging",
@@ -82,7 +82,8 @@
     "build:pc:prod:cloud": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture pc --environment prod --deployment-profile cloud",
     "check:db-dialect-parity": "node tools/check-database-dialect-parity.mjs",
     "check:env-documentation": "node tools/check-env-documentation.mjs",
-    "perf:soak": "node scripts/load-soak.mjs"
+    "perf:soak": "node scripts/load-soak.mjs",
+    "check:release-access-token:require-anchor": "node ../sdkwork-specs/tools/check-release-access-token-env.mjs --root . --require-anchor"
   },
   "exports": {
     ".": {
