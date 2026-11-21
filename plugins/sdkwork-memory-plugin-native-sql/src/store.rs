@@ -113,41 +113,16 @@ pub(crate) fn sql_placeholders(count: usize) -> String {
 }
 
 /// Embedded PostgreSQL compatibility bootstrap, applied in order. The
-/// consolidated baseline carries the full snapshot DDL; the `0001`.. entries
-/// replay the post-GA `database/migrations/postgres/` deltas so an embedded
-/// PG initialization converges to the same schema as SQLite. The
+/// consolidated baseline carries the full snapshot DDL: the accumulated
+/// `database/migrations/postgres/` deltas were folded into it by
+/// reset-database-initialization-state.mjs, so an embedded PG initialization
+/// converges to the same schema as SQLite from this single entry. The
 /// initialization guard keys on this list's final entry, and the structural
 /// guard test asserts this list never trails the migrations directory.
-const POSTGRES_EMBEDDED_PHASE1_MIGRATIONS: &[(&str, &str)] = &[
-    (
-        "baseline",
-        include_str!("../../../database/ddl/baseline/postgres/0001_memory_baseline.sql"),
-    ),
-    (
-        "0001",
-        include_str!("../../../database/migrations/postgres/0001_organization_id_not_null.up.sql"),
-    ),
-    (
-        "0002",
-        include_str!(
-            "../../../database/migrations/postgres/0002_claim_order_and_keyset_indexes.up.sql"
-        ),
-    ),
-    (
-        "0003",
-        include_str!(
-            "../../../database/migrations/postgres/0003_hard_delete_cleanup_indexes.up.sql"
-        ),
-    ),
-    (
-        "0004",
-        include_str!("../../../database/migrations/postgres/0004_candidate_job_linkage.up.sql"),
-    ),
-    (
-        "0005",
-        include_str!("../../../database/migrations/postgres/0005_usage_daily.up.sql"),
-    ),
-];
+const POSTGRES_EMBEDDED_PHASE1_MIGRATIONS: &[(&str, &str)] = &[(
+    "baseline",
+    include_str!("../../../database/ddl/baseline/postgres/0001_memory_baseline.sql"),
+)];
 
 /// Embedded SQLite compatibility bootstrap, applied in order. Appending a migration
 /// here automatically advances the initialization guard, which derives its key from
@@ -7541,7 +7516,7 @@ mod embedded_migration_guard_tests {
         let (last_version, last_sql) = POSTGRES_EMBEDDED_PHASE1_MIGRATIONS
             .last()
             .expect("postgres embedded migration list is never empty");
-        assert_eq!(*last_version, "0005");
+        assert_eq!(*last_version, "baseline");
         assert!(!last_sql.is_empty());
     }
 
